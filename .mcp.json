@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "lenz": {
+      "type": "http",
+      "url": "https://lenz.io/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LENZ_API_KEY}"
+      }
+    }
+  }
+}
