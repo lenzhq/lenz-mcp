@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.lenz/fact-check",
-  "description": "Fact-check claims against independent sources. Fast verdict (assess) or deep multi-step investigation (verify), with bucketed confidence and links back to the public verification.",
-  "version": "0.1.0",
+  "description": "Fact-check claims against independent sources. Fast verdict (assess) or deep multi-step investigation (verify), ask grounded follow-ups, with bucketed confidence.",
+  "version": "1.0.0",
   "websiteUrl": "https://lenz.io",
   "repository": {
     "url": "https://github.com/lenzhq/lenz-mcp",
