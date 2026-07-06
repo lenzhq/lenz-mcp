@@ -140,6 +140,15 @@ deep `verify` checks. Call `check_usage` to see what's left, or see plans at
 [lenz.io](https://lenz.io). `verify` is the expensive path — reserve it for claims that
 warrant a sourced investigation.
 
+## Skills
+
+Prefer a guided workflow to calling the tools yourself? The
+[`lenz-fact-check`](skills/lenz-fact-check) skill turns "is this true?" into a
+structured pass — it extracts the checkable claims, `assess`es each, escalates
+high-stakes ones to a deep `verify`, and reports verdicts with confidence and
+sources (with the directional-not-absolute caveat built in). Point your agent at
+[`skills/lenz-fact-check/SKILL.md`](skills/lenz-fact-check/SKILL.md).
+
 ## Links
 
 - **Website:** [lenz.io](https://lenz.io)
