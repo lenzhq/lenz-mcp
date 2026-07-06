@@ -41,7 +41,7 @@ SMITHERY_ICON_URL="https://lenz.io/static/root/icon-512.png"
 SMITHERY_HOMEPAGE="https://lenz.io/mcp-server"
 SMITHERY_REPO_URL="https://github.com/lenzhq/lenz-mcp"
 SMITHERY_LICENSE="Apache-2.0"
-SMITHERY_DESCRIPTION="Fact-check factual claims against independent sources. assess gives a fast multi-model verdict (True → False) with bucketed confidence in ~5–10s; verify runs a deeper research → debate → panel investigation for high-stakes claims and returns sourced, pollable results. ask answers grounded follow-ups on a completed verification. Verdicts are directional, not absolute. Connect via OAuth or a free Lenz API key."
+SMITHERY_DESCRIPTION="Fact-check factual claims against independent sources. assess_claim gives a fast multi-model verdict (True → False) with bucketed confidence in ~5–10s; verify_claim runs a deeper research → debate → panel investigation for high-stakes claims and returns sourced, pollable results. ask_followup answers grounded follow-ups on a completed verification. Verdicts are directional, not absolute. Connect via OAuth or a free Lenz API key."
 
 # ── args ─────────────────────────────────────────────────────────────
 DO_REGISTRY=true

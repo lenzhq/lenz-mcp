@@ -2,7 +2,7 @@
 name: lenz-fact-check
 description: >-
   Fact-check factual claims against independent web sources using the Lenz MCP
-  server (the assess / verify tools). Use this whenever the user wants to know
+  server (the assess_claim / verify_claim tools). Use this whenever the user wants to know
   whether something is actually true, asks you to verify or sanity-check a
   factual statement, wants a paragraph / article / blog post / document / dataset
   checked for factual accuracy before publishing or relying on it, questions a
@@ -25,7 +25,7 @@ complements groundedness/faithfulness checkers, it does not replace them.
 ## Prerequisite: the Lenz MCP must be connected
 
 This skill drives the **Lenz MCP server** (`https://lenz.io/mcp`) and its tools:
-`assess`, `verify`, `get_verification`, `select`, `ask`, `check_usage`. If those
+`assess_claim`, `verify_claim`, `get_verification`, `select_claims`, `ask_followup`, `check_usage`. If those
 tools are not available, do **not** try to fact-check by other means — tell the
 user to connect Lenz first (OAuth for clients that support it, or a free API key),
 per https://github.com/lenzhq/lenz-mcp, then retry.
@@ -37,25 +37,25 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
    recommendations, and subjective statements; Lenz checks facts, not judgments.
    If there is no checkable factual claim, say so plainly and stop.
 
-2. **Assess each claim** with `assess` (fast, ~5–10s). It returns a verdict
+2. **Assess each claim** with `assess_claim` (fast, ~5–10s). It returns a verdict
    (True / Mostly True / Mixed / Mostly False / False) and a bucketed confidence
-   per claim. If `assess` reports the claim is **ambiguous** with candidate
+   per claim. If `assess_claim` reports the claim is **ambiguous** with candidate
    readings, pick the reading that matches the user's intent (or ask which they
    mean), then re-assess that reading.
 
-3. **Escalate to `verify` only when warranted.** `verify` is a deep, sourced,
+3. **Escalate to `verify_claim` only when warranted.** `verify_claim` is a deep, sourced,
    ~90s investigation that uses scarce quota — reserve it for claims that are
    consequential (health, safety, legal, financial, reputational), came back
-   **Mixed or low-confidence** from `assess`, or that the user explicitly wants
-   investigated. Do **not** spend `verify` on trivial or clearly-true claims.
-   `verify` returns a `task_id`; poll `get_verification(task_id)` until its status
+   **Mixed or low-confidence** from `assess_claim`, or that the user explicitly wants
+   investigated. Do **not** spend `verify_claim` on trivial or clearly-true claims.
+   `verify_claim` returns a `task_id`; poll `get_verification(task_id)` until its status
    is `completed`. If it returns `needs_input` (multiple claims or an ambiguity),
-   use `select` to choose which claim text(s) to run. To dig further into a
-   finished `verify`, use `ask` with its `verification_id`.
+   use `select_claims` to choose which claim text(s) to run. To dig further into a
+   finished `verify_claim`, use `ask_followup` with its `verification_id`.
 
 4. **Present the results.** Per claim: state the claim, the verdict, and the
    confidence in plain language. **Lead with the claims that are false or
-   uncertain** — that's what the user needs. For deep `verify` results, include the
+   uncertain** — that's what the user needs. For deep `verify_claim` results, include the
    executive summary and the top sources. When a result is public, include its
    Lenz link so the user can see the reasoning.
 
@@ -64,7 +64,7 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
 - **Directional, not absolute.** Confidence is bucketed (high / medium / low), not
   a calibrated probability. Never present a verdict as certain — surface the
   confidence, keep the caveat, and link back to Lenz.
-- **Protect `verify` quota.** Default to `assess`; escalate deliberately. If you're
+- **Protect `verify_claim` quota.** Default to `assess_claim`; escalate deliberately. If you're
   unsure how much deep-check quota is left, call `check_usage` first.
 - **Say when nothing is checkable.** If the input is all opinion / prediction /
   subjective, tell the user there's no factual claim to verify rather than forcing
@@ -77,7 +77,7 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
 > **User:** Double-check this before I publish: "The Great Wall of China is the
 > only man-made object visible from the Moon with the naked eye."
 >
-> → `assess("The Great Wall of China is visible from the Moon with the naked eye")`
+> → `assess_claim("The Great Wall of China is visible from the Moon with the naked eye")`
 > → **False** (high confidence).
 >
 > **You:** That's **False** (high confidence) — a persistent myth. The Wall is far

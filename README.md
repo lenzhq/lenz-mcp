@@ -41,12 +41,12 @@ was given — so it complements retrieval/groundedness checkers rather than repl
 
 | Tool | What it does |
 |------|--------------|
-| **`assess`** | Fast verdict (~5–10s) via a 3-model panel. The default for checking a claim. Returns one verdict per atomic claim (True / Mostly True / Mixed / Mostly False / False) plus bucketed confidence. |
-| **`verify`** | Deep, multi-step investigation (~90s: research → debate → panel review) for high-stakes claims. Returns a `task_id` immediately; poll it with `get_verification`. Uses scarce deep-check quota. |
-| **`get_verification`** | Retrieve or poll a `verify` result by `task_id`. Returns `processing`, `needs_input`, or `completed` (verdict, summary, top sources, and a link if the claim is public). |
-| **`select`** | Resolve a `needs_input` verification — when a `verify` turns up multiple claims or an ambiguity, pick which claim text(s) to run. |
-| **`ask`** | Ask a grounded follow-up about a completed `verify` (by its `verification_id`) — answered from the full research, debate, and panel review, not just the summary. Uses `ask` quota. |
-| **`check_usage`** | Remaining `assess` / `verify` quota and current plan for your key. |
+| **`assess_claim`** | Fast verdict (~5–10s) via a 3-model panel. The default for checking a claim. Returns one verdict per atomic claim (True / Mostly True / Mixed / Mostly False / False) plus bucketed confidence. |
+| **`verify_claim`** | Deep, multi-step investigation (~90s: research → debate → panel review) for high-stakes claims. Returns a `task_id` immediately; poll it with `get_verification`. Uses scarce deep-check quota. |
+| **`get_verification`** | Retrieve or poll a `verify_claim` result by `task_id`. Returns `processing`, `needs_input`, or `completed` (verdict, summary, top sources, and a link if the claim is public). |
+| **`select_claims`** | Resolve a `needs_input` verification — when a `verify_claim` turns up multiple claims or an ambiguity, pick which claim text(s) to run. |
+| **`ask_followup`** | Ask a grounded follow-up about a completed `verify_claim` (by its `verification_id`) — answered from the full research, debate, and panel review, not just the summary. Uses `ask_followup` quota. |
+| **`check_usage`** | Remaining `assess_claim` / `verify_claim` quota and current plan for your key. |
 
 > Verdicts are **directional, not absolute** — confidence is returned as bucketed
 > language with a caveat, not a raw score. Surface it, and the link back to Lenz, to
@@ -142,24 +142,24 @@ npx @modelcontextprotocol/inspector
 
 > **You:** Is it true that honey never spoils?
 >
-> The assistant calls `assess("Honey never spoils")` and gets back:
+> The assistant calls `assess_claim("Honey never spoils")` and gets back:
 > *Mostly True* — high confidence. Properly sealed honey can keep effectively
 > indefinitely thanks to its low moisture and acidity; the caveat is contamination or
-> added water. For a sourced deep-dive it can escalate with `verify`.
+> added water. For a sourced deep-dive it can escalate with `verify_claim`.
 
 ## Quota
 
-Free keys include a monthly allotment of fast `assess` checks and a smaller number of
-deep `verify` checks. Call `check_usage` to see what's left, or see plans at
-[lenz.io](https://lenz.io). `verify` is the expensive path — reserve it for claims that
+Free keys include a monthly allotment of fast `assess_claim` checks and a smaller number of
+deep `verify_claim` checks. Call `check_usage` to see what's left, or see plans at
+[lenz.io](https://lenz.io). `verify_claim` is the expensive path — reserve it for claims that
 warrant a sourced investigation.
 
 ## Skills
 
 Prefer a guided workflow to calling the tools yourself? The
 [`lenz-fact-check`](skills/lenz-fact-check) skill turns "is this true?" into a
-structured pass — it extracts the checkable claims, `assess`es each, escalates
-high-stakes ones to a deep `verify`, and reports verdicts with confidence and
+structured pass — it extracts the checkable claims, runs `assess_claim` on each, escalates
+high-stakes ones to a deep `verify_claim`, and reports verdicts with confidence and
 sources (with the directional-not-absolute caveat built in). Point your agent at
 [`skills/lenz-fact-check/SKILL.md`](skills/lenz-fact-check/SKILL.md).
 
