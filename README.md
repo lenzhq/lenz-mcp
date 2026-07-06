@@ -14,6 +14,14 @@
   <a href="https://lenz.io/developers">Developer docs</a>
 </p>
 
+<p align="center">
+  <a href="https://cursor.com/en/install-mcp?name=lenz&config=eyJ1cmwiOiJodHRwczovL2xlbnouaW8vbWNwIn0%3D"><img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add Lenz to Cursor" height="28"></a>
+  &nbsp;
+  <a href="https://vscode.dev/redirect/mcp/install?name=lenz&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Flenz.io%2Fmcp%22%7D"><img src="https://img.shields.io/badge/Install_in_VS_Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="Install Lenz in VS Code" height="28"></a>
+</p>
+
+<p align="center"><sub>One-click install (OAuth — no API key needed).</sub></p>
+
 ---
 
 [Lenz](https://lenz.io) is a fact-checking platform. It takes a factual claim, runs it
@@ -106,11 +114,17 @@ claude mcp add --transport http lenz https://lenz.io/mcp \
 
 ### Cursor
 
-Settings → **MCP** → **Add new MCP server** → type **HTTP**, URL `https://lenz.io/mcp`,
-and add a header `Authorization: Bearer <your-key>`. (Or drop the JSON above into
-`.cursor/mcp.json`.)
+**One click:** use the [**Add Lenz to Cursor**](https://cursor.com/en/install-mcp?name=lenz&config=eyJ1cmwiOiJodHRwczovL2xlbnouaW8vbWNwIn0%3D)
+button above — it adds the server and signs you in via OAuth (no key to paste).
+
+Manual: Settings → **MCP** → **Add new MCP server** → type **HTTP**, URL
+`https://lenz.io/mcp`, and add a header `Authorization: Bearer <your-key>`. (Or drop the
+JSON above into `.cursor/mcp.json`.)
 
 ### VS Code
+
+**One click:** use the [**Install in VS Code**](https://vscode.dev/redirect/mcp/install?name=lenz&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Flenz.io%2Fmcp%22%7D)
+button above (OAuth, no key). Manual, with a key:
 
 ```bash
 code --add-mcp '{"name":"lenz","type":"http","url":"https://lenz.io/mcp","headers":{"Authorization":"Bearer ${LENZ_API_KEY}"}}'
