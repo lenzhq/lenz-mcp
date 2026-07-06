@@ -17,8 +17,8 @@
 ---
 
 [Lenz](https://lenz.io) is a fact-checking platform. It takes a factual claim, runs it
-through a multi-model pipeline (research → debate → adjudication) against independent
-sources, and returns a verdict with calibrated confidence. This is the official
+through a multi-model pipeline (framing → research → debate → panel review → conclusion)
+against independent sources, and returns a verdict with a confidence level. This is the official
 **remote MCP server** — a hosted [Model Context Protocol](https://modelcontextprotocol.io)
 endpoint that exposes Lenz's fact-checking as tools your AI assistant can call.
 
@@ -34,10 +34,10 @@ was given — so it complements retrieval/groundedness checkers rather than repl
 | Tool | What it does |
 |------|--------------|
 | **`assess`** | Fast verdict (~5–10s) via a 3-model panel. The default for checking a claim. Returns one verdict per atomic claim (True / Mostly True / Mixed / Mostly False / False) plus bucketed confidence. |
-| **`verify`** | Deep, multi-step investigation (~90s, research → debate → adjudication) for high-stakes claims. Returns a `task_id` immediately; poll it with `get_verification`. Uses scarce deep-check quota. |
+| **`verify`** | Deep, multi-step investigation (~90s: research → debate → panel review) for high-stakes claims. Returns a `task_id` immediately; poll it with `get_verification`. Uses scarce deep-check quota. |
 | **`get_verification`** | Retrieve or poll a `verify` result by `task_id`. Returns `processing`, `needs_input`, or `completed` (verdict, summary, top sources, and a link if the claim is public). |
 | **`select`** | Resolve a `needs_input` verification — when a `verify` turns up multiple claims or an ambiguity, pick which claim text(s) to run. |
-| **`ask`** | Ask a grounded follow-up about a completed `verify` (by its `verification_id`) — answered from the full research, debate, and adjudication, not just the summary. Uses `ask` quota. |
+| **`ask`** | Ask a grounded follow-up about a completed `verify` (by its `verification_id`) — answered from the full research, debate, and panel review, not just the summary. Uses `ask` quota. |
 | **`check_usage`** | Remaining `assess` / `verify` quota and current plan for your key. |
 
 > Verdicts are **directional, not absolute** — confidence is returned as bucketed
