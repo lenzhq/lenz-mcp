@@ -26,7 +26,7 @@ It verifies claims **against the open web**, independent of whatever context you
 was given — so it complements retrieval/groundedness checkers rather than replacing them.
 
 - **Hosted, no install:** point your client at `https://lenz.io/mcp`. Nothing to run locally.
-- **Auth:** a free Lenz API key (`Authorization: Bearer lenz_…`).
+- **Auth:** **OAuth** (no key — for clients that support it) or a free Lenz **API key** (`Authorization: Bearer lenz_…`).
 - **Transport:** Streamable HTTP.
 
 ## Tools
@@ -45,6 +45,35 @@ was given — so it complements retrieval/groundedness checkers rather than repl
 > the user.
 
 ## Quickstart
+
+Two ways to connect, depending on your client:
+
+- **OAuth** — for clients that support it (e.g. Claude Desktop connectors). No key to
+  paste; you sign in to Lenz and authorize the connection.
+- **API key** — works with any MCP client via an `Authorization` header.
+
+### Connect with OAuth (no API key)
+
+If your client supports OAuth for MCP (such as Claude Desktop's custom connectors), add
+the server with just its URL and no headers:
+
+```json
+{
+  "mcpServers": {
+    "lenz": {
+      "type": "http",
+      "url": "https://lenz.io/mcp"
+    }
+  }
+}
+```
+
+The first time you use it, your client walks you through a one-time sign-in: you
+authenticate on Lenz's own screen and authorize the connection — no key is stored in your
+config. Your assistant then fact-checks on your behalf against your Lenz account's quota.
+You can revoke the connection at any time; see the [privacy policy](https://lenz.io/privacy).
+
+### Connect with an API key
 
 **1. Get a free API key** at [lenz.io/api-integration](https://lenz.io/api-integration)
 (format `lenz_…`).
