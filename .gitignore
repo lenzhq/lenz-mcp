@@ -1,1 +1,4 @@
 .DS_Store
+
+# Registry signing keys — never commit (kept at ~/lenz-mcp-registry.pem)
+*.pem
