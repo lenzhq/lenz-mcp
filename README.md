@@ -130,6 +130,16 @@ button above (OAuth, no key). Manual, with a key:
 code --add-mcp '{"name":"lenz","type":"http","url":"https://lenz.io/mcp","headers":{"Authorization":"Bearer ${LENZ_API_KEY}"}}'
 ```
 
+### ChatGPT
+
+ChatGPT connects to Lenz as a **custom connector** over OAuth — no API key.
+
+Settings → **Apps** → **Advanced settings** → turn **Developer mode** on →
+**Add app** → URL `https://lenz.io/mcp` → **Create**, then **Sign in with Lenz**
+to authorize.
+
+*(A one-click install from the ChatGPT app directory is coming.)*
+
 ### MCP Inspector (try the tools by hand)
 
 ```bash
