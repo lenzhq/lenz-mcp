@@ -56,14 +56,18 @@ was given — so it complements retrieval/groundedness checkers rather than repl
 
 Two ways to connect, depending on your client:
 
-- **OAuth** — for clients that support it (e.g. Claude Desktop connectors). No key to
+- **OAuth** — for clients that support it (e.g. Claude connectors). No key to
   paste; you sign in to Lenz and authorize the connection.
 - **API key** — works with any MCP client via an `Authorization` header.
 
 ### Connect with OAuth (no API key)
 
-If your client supports OAuth for MCP (such as Claude Desktop's custom connectors), add
-the server with just its URL and no headers:
+**Claude (web and desktop):** Lenz is listed in the Claude connectors directory —
+open **Settings → Connectors → Browse connectors**, find Lenz, and connect. One-time
+OAuth sign-in, nothing to configure.
+
+For any other client that supports OAuth for MCP, add the server with just its URL
+and no headers:
 
 ```json
 {
