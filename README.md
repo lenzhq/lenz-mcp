@@ -179,3 +179,7 @@ Questions or issues? [Open an issue](https://github.com/lenzhq/lenz-mcp/issues) 
 
 [Apache-2.0](LICENSE) © lenzhq. The Lenz name and logos (`assets/`) are
 trademarks of lenzhq and are not granted by the license — see [NOTICE](NOTICE).
+
+## Maintainer
+
+[@Pavel12431432](https://github.com/Pavel12431432)
