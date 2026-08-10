@@ -66,6 +66,16 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
   confidence, keep the caveat, and link back to Lenz.
 - **Protect `verify_claim` quota.** Default to `assess_claim`; escalate deliberately. If you're
   unsure how much deep-check quota is left, call `check_usage` first.
+- **When a call comes back `quota_exhausted`, stop and say so.** The balance is
+  spent — retrying, rephrasing the claim, or falling back to another Lenz tool
+  will not work, and silently dropping the check leaves the user believing the
+  claim was verified. Tell them plainly that the check did not run, why, and
+  give them the `manage_url` from the result so they can top up. Then either
+  answer without a Lenz verdict (saying that's what you're doing) or stop.
+- **`rate_limited` is different — that one does clear.** Report the
+  `retry_after_seconds` from the result rather than saying "try again shortly";
+  the daily `extract` cap can be hours away, and a vague "shortly" invites a
+  retry loop that can't succeed.
 - **Say when nothing is checkable.** If the input is all opinion / prediction /
   subjective, tell the user there's no factual claim to verify rather than forcing
   a verdict.

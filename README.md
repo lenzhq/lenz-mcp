@@ -165,8 +165,17 @@ npx @modelcontextprotocol/inspector
 
 Free keys include a monthly allotment of fast `assess_claim` checks and a smaller number of
 deep `verify_claim` checks. Call `check_usage` to see what's left, or see plans at
-[lenz.io](https://lenz.io). `verify_claim` is the expensive path — reserve it for claims that
-warrant a sourced investigation.
+[lenz.io/plans](https://lenz.io/plans). `verify_claim` is the expensive path — reserve it for
+claims that warrant a sourced investigation.
+
+**When you run out**, tools return `status: "quota_exhausted"` with a `message` and a
+`manage_url` pointing at the plans page. It is not retryable — the balance is spent
+until you top up or the monthly quota resets. An agent should say so plainly rather
+than retrying or quietly skipping the check.
+
+`status: "rate_limited"` is a different thing: a per-key rate limit (today, the daily
+`extract` cap). That one does clear on its own, and the result carries
+`retry_after_seconds` telling you when.
 
 ## Skills
 
