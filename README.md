@@ -173,7 +173,7 @@ claims that warrant a sourced investigation.
 until you top up or the monthly quota resets. An agent should say so plainly rather
 than retrying or quietly skipping the check.
 
-`status: "rate_limited"` is a different thing: a per-key rate limit (today, the daily
+`status: "rate_limited"` is a different thing: a rate limit (today, the per-account daily
 `extract` cap). That one does clear on its own, and the result carries
 `retry_after_seconds` telling you when.
 
