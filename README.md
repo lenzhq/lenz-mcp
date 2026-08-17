@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://lenz.io">Website</a> ·
-  <a href="https://lenz.io/api-integration">Get an API key</a> ·
+  <a href="https://lenz.io/api-credentials">Get an API key</a> ·
   <a href="https://lenz.io/developers">Developer docs</a>
 </p>
 
@@ -87,7 +87,7 @@ You can revoke the connection at any time; see the [privacy policy](https://lenz
 
 ### Connect with an API key
 
-**1. Get a free API key** at [lenz.io/api-integration](https://lenz.io/api-integration)
+**1. Get a free API key** at [lenz.io/api-credentials](https://lenz.io/api-credentials)
 (format `lenz_…`).
 
 **2. Add the server** to your client (examples below). Authenticate with
@@ -189,7 +189,7 @@ sources (with the directional-not-absolute caveat built in). Point your agent at
 ## Links
 
 - **Website:** [lenz.io](https://lenz.io)
-- **Get a key:** [lenz.io/api-integration](https://lenz.io/api-integration)
+- **Get a key:** [lenz.io/api-credentials](https://lenz.io/api-credentials)
 - **Developer docs:** [lenz.io/developers](https://lenz.io/developers)
 - **SDKs:** [Python](https://github.com/lenzhq/lenz-io-python) · [Node](https://github.com/lenzhq/lenz-io-node)
 
