@@ -3,7 +3,7 @@
   "name": "io.lenz/fact-check",
   "title": "Lenz Fact-Check",
   "description": "Fact-check claims against independent sources — fast verdict or deep multi-step investigation.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "websiteUrl": "https://lenz.io",
   "icons": [
     {

@@ -42,11 +42,11 @@ was given — so it complements retrieval/groundedness checkers rather than repl
 | Tool | What it does |
 |------|--------------|
 | **`assess_claim`** | Fast verdict (~5–10s) via a 3-model panel. The default for checking a claim. Returns one verdict per atomic claim (True / Mostly True / Mixed / Mostly False / False) plus bucketed confidence. |
-| **`verify_claim`** | Deep, multi-step investigation (~90s: research → debate → panel review) for high-stakes claims. Returns a `task_id` immediately; poll it with `get_verification`. Uses scarce deep-check quota. |
+| **`verify_claim`** | Deep, multi-step investigation (~90s: research → debate → panel review) for high-stakes claims. Returns a `task_id` immediately; poll it with `get_verification`. Costs an order of magnitude more credits than `assess_claim` — reserve it. |
 | **`get_verification`** | Retrieve or poll a `verify_claim` result by `task_id`. Returns `processing`, `needs_input`, or `completed` (verdict, summary, top sources, and a link if the claim is public). |
 | **`select_claims`** | Resolve a `needs_input` verification — when a `verify_claim` turns up multiple claims or an ambiguity, pick which claim text(s) to run. |
-| **`ask_followup`** | Ask a grounded follow-up about a completed `verify_claim` (by its `verification_id`) — answered from the full research, debate, and panel review, not just the summary. Uses `ask_followup` quota. |
-| **`check_usage`** | Remaining `assess_claim` / `verify_claim` quota and current plan for your key. |
+| **`ask_followup`** | Ask a grounded follow-up about a completed `verify_claim` (by its `verification_id`) — answered from the full research, debate, and panel review, not just the summary. Costs credits at the cheap rate, same as `assess_claim`. |
+| **`check_usage`** | Your remaining credits, the per-tool price list (`costs`), and your current plan. |
 
 > Verdicts are **directional, not absolute** — confidence is returned as bucketed
 > language with a caveat, not a raw score. Surface it, and the link back to Lenz, to
@@ -82,7 +82,7 @@ and no headers:
 
 The first time you use it, your client walks you through a one-time sign-in: you
 authenticate on Lenz's own screen and authorize the connection — no key is stored in your
-config. Your assistant then fact-checks on your behalf against your Lenz account's quota.
+config. Your assistant then fact-checks on your behalf against your Lenz account's credits.
 You can revoke the connection at any time; see the [privacy policy](https://lenz.io/privacy).
 
 ### Connect with an API key
@@ -161,21 +161,31 @@ npx @modelcontextprotocol/inspector
 > indefinitely thanks to its low moisture and acidity; the caveat is contamination or
 > added water. For a sourced deep-dive it can escalate with `verify_claim`.
 
-## Quota
+## Credits
 
-Free keys include a monthly allotment of fast `assess_claim` checks and a smaller number of
-deep `verify_claim` checks. Call `check_usage` to see what's left, or see plans at
-[lenz.io/plans](https://lenz.io/plans). `verify_claim` is the expensive path — reserve it for
-claims that warrant a sourced investigation.
+Every tool call draws on **one pool of credits** on your Lenz account. There is no
+separate budget per tool: spending on `assess_claim` reduces what is left for
+`verify_claim`, and vice versa. `check_usage` returns the balance
+(`credits_remaining`) alongside `costs`, the live price list — read the weight from
+there rather than assuming one.
+
+`verify_claim` is the expensive path by an order of magnitude; `assess_claim` and
+`ask_followup` are the cheap ones. `check_usage` also reports `assess_remaining` and
+`verify_remaining`, which are the SAME balance projected into each tool's own unit —
+"how many of these could I still make" — not separate allowances.
+
+Free keys include a monthly allowance that resets each period; grants and top-ups add
+non-expiring bonus credits on top, spent only once the allowance is gone. See plans at
+[lenz.io/plans](https://lenz.io/plans).
 
 **When you run out**, tools return `status: "quota_exhausted"` with a `message` and a
 `manage_url` pointing at the plans page. It is not retryable — the balance is spent
-until you top up or the monthly quota resets. An agent should say so plainly rather
+until you top up or the monthly allowance resets. An agent should say so plainly rather
 than retrying or quietly skipping the check.
 
 `status: "rate_limited"` is a different thing: a rate limit (today, the per-account daily
-`extract` cap). That one does clear on its own, and the result carries
-`retry_after_seconds` telling you when.
+`extract` cap, which costs no credits at all). That one does clear on its own, and the
+result carries `retry_after_seconds` telling you when.
 
 ## Skills
 
