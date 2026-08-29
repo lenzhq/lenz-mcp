@@ -44,7 +44,8 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
    mean), then re-assess that reading.
 
 3. **Escalate to `verify_claim` only when warranted.** `verify_claim` is a deep, sourced,
-   ~90s investigation that uses scarce quota — reserve it for claims that are
+   ~90s investigation that costs an order of magnitude more credits than
+   `assess_claim` — reserve it for claims that are
    consequential (health, safety, legal, financial, reputational), came back
    **Mixed or low-confidence** from `assess_claim`, or that the user explicitly wants
    investigated. Do **not** spend `verify_claim` on trivial or clearly-true claims.
@@ -64,9 +65,11 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
 - **Directional, not absolute.** Confidence is bucketed (high / medium / low), not
   a calibrated probability. Never present a verdict as certain — surface the
   confidence, keep the caveat, and link back to Lenz.
-- **Protect `verify_claim` quota.** Default to `assess_claim`; escalate deliberately. If you're
-  unsure how much deep-check quota is left, call `check_usage` first.
-- **When a call comes back `quota_exhausted`, stop and say so.** The balance is
+- **Spend `verify_claim` deliberately.** One credit pool funds every tool, and
+  `verify_claim` is by far the most expensive draw on it — every deep check is
+  fast checks you no longer have. Default to `assess_claim`. If you're unsure
+  what is left, call `check_usage` first and read `costs` for the weights.
+- **When a call comes back `quota_exhausted`, stop and say so.** The credit balance is
   spent — retrying, rephrasing the claim, or falling back to another Lenz tool
   will not work, and silently dropping the check leaves the user believing the
   claim was verified. Tell them plainly that the check did not run, why, and
