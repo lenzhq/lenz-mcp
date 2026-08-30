@@ -42,11 +42,11 @@ was given — so it complements retrieval/groundedness checkers rather than repl
 | Tool | What it does |
 |------|--------------|
 | **`assess_claim`** | Fast verdict (~5–10s) via a 3-model panel. The default for checking a claim. Returns one verdict per atomic claim (True / Mostly True / Mixed / Mostly False / False) plus bucketed confidence. |
-| **`verify_claim`** | Deep, multi-step investigation (~90s: research → debate → panel review) for high-stakes claims. Returns a `task_id` immediately; poll it with `get_verification`. Costs an order of magnitude more credits than `assess_claim` — reserve it. |
-| **`get_verification`** | Retrieve or poll a `verify_claim` result by `task_id`. Returns `processing`, `needs_input`, or `completed` (verdict, summary, top sources, and a link if the claim is public). |
+| **`verify_claim`** | Deep, multi-step investigation (~90s: research → debate → panel review) for high-stakes claims. Returns a `task_id` immediately; poll it with `get_verification`. Costs an order of magnitude more credits than `assess_claim` — reserve it. Pass `depth: "low"` for a shallower, faster research pass (fewer sources, same models) at half the credits. |
+| **`get_verification`** | Retrieve or poll a `verify_claim` result by `task_id`. Returns `processing`, `needs_input`, or `completed` (verdict, summary, top sources, and the `depth` the verdict was produced at). |
 | **`select_claims`** | Resolve a `needs_input` verification — when a `verify_claim` turns up multiple claims or an ambiguity, pick which claim text(s) to run. |
 | **`ask_followup`** | Ask a grounded follow-up about a completed `verify_claim` (by its `verification_id`) — answered from the full research, debate, and panel review, not just the summary. Costs credits at the cheap rate, same as `assess_claim`. |
-| **`check_usage`** | Your remaining credits, the per-tool price list (`costs`), and your current plan. |
+| **`check_usage`** | Your remaining credits, the per-tool price list (`costs`, plus `cost_options` for prices that depend on a parameter such as `depth`), and your current plan. |
 
 > Verdicts are **directional, not absolute** — confidence is returned as bucketed
 > language with a caveat, not a raw score. Surface it, and the link back to Lenz, to
@@ -170,9 +170,17 @@ separate budget per tool: spending on `assess_claim` reduces what is left for
 there rather than assuming one.
 
 `verify_claim` is the expensive path by an order of magnitude; `assess_claim` and
-`ask_followup` are the cheap ones. `check_usage` also reports `assess_remaining` and
-`verify_remaining`, which are the SAME balance projected into each tool's own unit —
-"how many of these could I still make" — not separate allowances.
+`ask_followup` are the cheap ones. `verify_claim` also takes an optional `depth`:
+`"low"` runs a shallower research pass — fewer sources, faster, the same models — for
+half the credits of the default `"standard"`. That price sits under
+`cost_options.verify.depth.low` on `check_usage`. You are charged for the depth you
+**request**; the `depth` on the completed result is the depth the verdict was
+**produced** at, so a `"low"` request answered from an existing deeper check reads
+`"standard"` — the echo describes the evidence, the charge follows the request.
+
+`check_usage` also reports `assess_remaining` and `verify_remaining`, which are the
+SAME balance projected into each tool's own unit — "how many of these could I still
+make" — not separate allowances.
 
 Free keys include a monthly allowance that resets each period; grants and top-ups add
 non-expiring bonus credits on top, spent only once the allowance is gone. See plans at

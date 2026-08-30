@@ -49,6 +49,10 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
    consequential (health, safety, legal, financial, reputational), came back
    **Mixed or low-confidence** from `assess_claim`, or that the user explicitly wants
    investigated. Do **not** spend `verify_claim` on trivial or clearly-true claims.
+   When you do escalate but the user wants speed or is short on credits, pass
+   `depth: "low"` — a shallower research pass (fewer sources, faster, the same
+   models) at half the credits. Keep the default `standard` depth for
+   consequential claims, where breadth of evidence is the point.
    `verify_claim` returns a `task_id`; poll `get_verification(task_id)` until its status
    is `completed`. If it returns `needs_input` (multiple claims or an ambiguity),
    use `select_claims` to choose which claim text(s) to run. To dig further into a
@@ -69,6 +73,8 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
   `verify_claim` is by far the most expensive draw on it — every deep check is
   fast checks you no longer have. Default to `assess_claim`. If you're unsure
   what is left, call `check_usage` first and read `costs` for the weights.
+  `depth: "low"` halves the cost of a deep check you would run anyway; it is
+  not a reason to run more of them.
 - **When a call comes back `quota_exhausted`, stop and say so.** The credit balance is
   spent — retrying, rephrasing the claim, or falling back to another Lenz tool
   will not work, and silently dropping the check leaves the user believing the
