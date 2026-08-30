@@ -37,7 +37,7 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
    recommendations, and subjective statements; Lenz checks facts, not judgments.
    If there is no checkable factual claim, say so plainly and stop.
 
-2. **Assess each claim** with `assess_claim` (fast, ~5–10s). It returns a verdict
+2. **Assess each claim** with `assess_claim` (fast, ~10s). It returns a verdict
    (True / Mostly True / Mixed / Mostly False / False) and a bucketed confidence
    per claim. If `assess_claim` reports the claim is **ambiguous** with candidate
    readings, pick the reading that matches the user's intent (or ask which they
