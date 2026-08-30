@@ -41,7 +41,7 @@ was given — so it complements retrieval/groundedness checkers rather than repl
 
 | Tool | What it does |
 |------|--------------|
-| **`assess_claim`** | Fast verdict (~5–10s) via a 3-model panel. The default for checking a claim. Returns one verdict per atomic claim (True / Mostly True / Mixed / Mostly False / False) plus bucketed confidence. |
+| **`assess_claim`** | Fast verdict (~10s) via a 3-model panel. The default for checking a claim. Returns one verdict per atomic claim (True / Mostly True / Mixed / Mostly False / False) plus bucketed confidence. |
 | **`verify_claim`** | Deep, multi-step investigation (~90s: research → debate → panel review) for high-stakes claims. Returns a `task_id` immediately; poll it with `get_verification`. Costs an order of magnitude more credits than `assess_claim` — reserve it. Pass `depth: "low"` for a shallower, faster research pass (fewer sources, same models) at half the credits. |
 | **`get_verification`** | Retrieve or poll a `verify_claim` result by `task_id`. Returns `processing`, `needs_input`, or `completed` (verdict, summary, top sources, and the `depth` the verdict was produced at). |
 | **`select_claims`** | Resolve a `needs_input` verification — when a `verify_claim` turns up multiple claims or an ambiguity, pick which claim text(s) to run. |
