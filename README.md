@@ -62,9 +62,11 @@ Two ways to connect, depending on your client:
 
 ### Connect with OAuth (no API key)
 
-**Claude (web and desktop):** Lenz is listed in the Claude connectors directory —
-open **Settings → Connectors → Browse connectors**, find Lenz, and connect. One-time
-OAuth sign-in, nothing to configure.
+**Claude (web, desktop and mobile):** Lenz is an official Claude connector.
+Open the [Lenz connector page](https://claude.ai/directory/connectors/lenz) and
+click **Connect to Claude**, or in the app: **Settings → Extensions → Browse
+extensions**, search for Lenz and click **+**. Either way it is a one-time
+OAuth sign-in with nothing to configure, and one account covers all three.
 
 For any other client that supports OAuth for MCP, add the server with just its URL
 and no headers:
@@ -136,13 +138,25 @@ code --add-mcp '{"name":"lenz","type":"http","url":"https://lenz.io/mcp","header
 
 ### ChatGPT
 
-ChatGPT connects to Lenz as a **custom connector** over OAuth — no API key.
+At this time, ChatGPT connects to Lenz as a custom app through OpenAI's
+**Developer mode** — over OAuth, so there is no API key to paste. It is set up
+on chatgpt.com; the ChatGPT desktop and mobile apps cannot create one.
 
-Settings → **Apps** → **Advanced settings** → turn **Developer mode** on →
-**Add app** → URL `https://lenz.io/mcp` → **Create**, then **Sign in with Lenz**
-to authorize.
+**On a personal account (Plus or Pro).** **Settings → Plugins** → turn on
+**Developer mode** at the bottom → **Plugins → Browse plugins** → **+** next to
+Search → name it Lenz, URL `https://lenz.io/mcp`, Authentication **OAuth** →
+tick **I understand and want to continue** → **Create** → **Sign in with
+Lenz** → **Try in Chat**.
 
-*(A one-click install from the ChatGPT app directory is coming.)*
+**In a Business, Enterprise or Edu workspace.** An owner or admin publishes it
+once: **Workspace settings → Apps → + Create**, confirm **Enable developer
+mode**, fill in the same form with **OAuth**, then **Drafts → Publish**, set
+who can use it, and **Publish** again. Each member then goes to **Settings →
+Plugins → Lenz → Connect** and signs in.
+
+A custom app is off by default in every new chat: **+** and tick Lenz. Naming
+Lenz in the question is what makes ChatGPT reach for it rather than answer from
+memory.
 
 ### MCP Inspector (try the tools by hand)
 
