@@ -197,7 +197,7 @@ SAME balance projected into each tool's own unit — "how many of these could I 
 make" — not separate allowances.
 
 Free keys include a monthly allowance that resets each period; grants and top-ups add
-non-expiring bonus credits on top, spent only once the allowance is gone. See plans at
+non-expiring extra credits on top, spent only once the allowance is gone. See plans at
 [lenz.io/plans](https://lenz.io/plans).
 
 **When you run out**, tools return `status: "quota_exhausted"` with a `message` and a
