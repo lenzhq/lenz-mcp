@@ -15,6 +15,8 @@
 </p>
 
 <p align="center">
+  <a href="https://claude.ai/directory/connectors/lenz"><img src="https://img.shields.io/badge/Add_to_Claude-D97757?style=for-the-badge&logo=claude&logoColor=white" alt="Add Lenz to Claude" height="28"></a>
+  &nbsp;
   <a href="https://cursor.com/en/install-mcp?name=lenz&config=eyJ1cmwiOiJodHRwczovL2xlbnouaW8vbWNwIn0%3D"><img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add Lenz to Cursor" height="28"></a>
   &nbsp;
   <a href="https://vscode.dev/redirect/mcp/install?name=lenz&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Flenz.io%2Fmcp%22%7D"><img src="https://img.shields.io/badge/Install_in_VS_Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="Install Lenz in VS Code" height="28"></a>
