@@ -41,16 +41,20 @@ was given — so it complements retrieval/groundedness checkers rather than repl
 
 | Tool | What it does |
 |------|--------------|
-| **`assess_claim`** | Fast verdict (~10s) via a 3-model panel. The default for checking a claim. Returns one verdict per atomic claim (True / Mostly True / Mixed / Mostly False / False) plus bucketed confidence. |
-| **`verify_claim`** | Deep, multi-step investigation (~90s: research → debate → panel review) for high-stakes claims. Returns a `task_id` immediately; poll it with `get_verification`. Costs an order of magnitude more credits than `assess_claim` — reserve it. Pass `depth: "low"` for a shallower, faster research pass (fewer sources, same models) at half the credits. |
-| **`get_verification`** | Retrieve or poll a `verify_claim` result by `task_id`. Returns `processing`, `needs_input`, or `completed` (verdict, summary, top sources, and the `depth` the verdict was produced at). |
-| **`select_claims`** | Resolve a `needs_input` verification — when a `verify_claim` turns up multiple claims or an ambiguity, pick which claim text(s) to run. |
-| **`ask_followup`** | Ask a grounded follow-up about a completed `verify_claim` (by its `verification_id`) — answered from the full research, debate, and panel review, not just the summary. Costs credits at the cheap rate, same as `assess_claim`. |
-| **`check_usage`** | Your remaining credits, the per-tool price list (`costs`, plus `cost_options` for prices that depend on a parameter such as `depth`), and your current plan. |
+| **`assess_claim`** | The quick check, and the default first step for one claim or a whole text. A 3-model panel returns one row per claim: a verdict (True / Mostly True / Mixed / Mostly False / False), a bucketed confidence and, when available, a short `rationale` (the reasoning of a reviewer who agrees with the verdict) and a `dissent` (the reasoning of the reviewer farthest from it). Both are reviewers' notes, not checked sources. A low-confidence row carries `recommend_verify: true` and a `next_step` sentence. About 15-20 seconds through an assistant; no sources shown. Pass one text, or up to 20 claims in `claims`. |
+| **`verify_claim`** | The deep check: framing → research → debate → panel review → conclusion, for ONE claim. Returns a verdict, a 1-10 score, the key finding, a summary, warnings, and the top sources with the quote each one rests on, plus the total source count. It waits for the check and returns the result in the same call when it finishes in time (about a minute to a minute and a half is typical); otherwise it returns a `task_id` for `get_verification`. A completed deep check replaces any earlier quick verdict on the same claim. Costs ten times an `assess_claim` row, so assistants offer it and run it on the user's yes, or when the user asks for sources. `depth: "low"` researches fewer sources, with the same models, for half the credits. |
+| **`get_verification`** | Wait for a running `verify_claim` by `task_id`, or fetch a completed result by its 8-character `verification_id`. Returns `processing`, `needs_input`, `failed` or `completed`. |
+| **`select_claims`** | Resolve a `needs_input` verification: when a text holds several claims, choose which claim text(s) to run. |
+| **`ask_followup`** | Ask a grounded follow-up about a completed `verify_claim` (by its `verification_id`), answered from the full research, debate and panel review, not just the summary. Costs the same as one `assess_claim` row. |
+| **`list_verifications`** | The account's most recent completed deep checks, newest first. Use it to get back a result that finished after the conversation moved on. Read-only and free; quick checks are not stored. |
+| **`check_usage`** | Remaining credits, the per-tool price list (`costs`, plus `cost_options` for prices that depend on a parameter such as `depth`), and the current plan. Never a prerequisite for a check. |
 
-> Verdicts are **directional, not absolute** — confidence is returned as bucketed
-> language with a caveat, not a raw score. Surface it, and the link back to Lenz, to
-> the user.
+**Prompts.** Clients that surface MCP prompts (Claude shows them under **+**) get two: **Check this text with Lenz** and **Check your last answer with Lenz**. Each takes the text to check and starts a quick check.
+
+> Verdicts are **directional, not absolute**: confidence is returned as bucketed
+> language with a caveat, not a calibrated probability. A quick verdict is a first read;
+> when a deep check disagrees with it, the deep check is the one to rely on, because it
+> shows its sources and its reasoning.
 
 ## Quickstart
 
@@ -168,12 +172,13 @@ npx @modelcontextprotocol/inspector
 
 ## Example
 
-> **You:** Is it true that honey never spoils?
+> **You:** Check with Lenz whether indeed 90% of startups fail within their first year.
 >
-> The assistant calls `assess_claim("Honey never spoils")` and gets back:
-> *Mostly True* — high confidence. Properly sealed honey can keep effectively
-> indefinitely thanks to its low moisture and acidity; the caveat is contamination or
-> added water. For a sourced deep-dive it can escalate with `verify_claim`.
+> The assistant calls `assess_claim` and gets back *False*, high confidence, with the
+> reviewers' reasoning: most new businesses survive their first year, and official
+> figures put first-year closures at about one in five. It presents that as a first
+> read and offers a deep check. On your yes it calls `verify_claim` and returns the
+> verdict with its score, the key finding, the warnings and the sources behind it.
 
 ## Credits
 
@@ -185,7 +190,7 @@ there rather than assuming one.
 
 `verify_claim` is the expensive path by an order of magnitude; `assess_claim` and
 `ask_followup` are the cheap ones. `verify_claim` also takes an optional `depth`:
-`"low"` runs a shallower research pass — fewer sources, faster, the same models — for
+`"low"` runs a shallower research pass (fewer sources, the same models, only slightly quicker) for
 half the credits of the default `"standard"`. That price sits under
 `cost_options.verify.depth.low` on `check_usage`. You are charged for the depth you
 **request**; the `depth` on the completed result is the depth the verdict was
