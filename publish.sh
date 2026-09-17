@@ -37,11 +37,11 @@ REGISTRY_DOMAIN="lenz.io"
 # smithery
 SMITHERY_NAME="lenz/fact-check"                 # <namespace>/<server>
 SMITHERY_DISPLAY_NAME="Lenz Fact-Check"
-SMITHERY_ICON_URL="https://lenz.io/static/root/icon-512.png"
+SMITHERY_ICON_URL="https://lenz.io/lenz-wordmark-512.png"
 SMITHERY_HOMEPAGE="https://lenz.io/mcp-server"
 SMITHERY_REPO_URL="https://github.com/lenzhq/lenz-mcp"
 SMITHERY_LICENSE="Apache-2.0"
-SMITHERY_DESCRIPTION="Fact-check factual claims against independent sources. assess_claim gives a fast multi-model verdict (True → False) with bucketed confidence in ~5–10s; verify_claim runs a deeper research → debate → panel investigation for high-stakes claims and returns sourced, pollable results. ask_followup answers grounded follow-ups on a completed verification. Verdicts are directional, not absolute. Connect via OAuth or a free Lenz API key."
+SMITHERY_DESCRIPTION="Check the factual claims in a draft or an answer against independent sources. assess_claim is the quick check: a multi-model verdict (True → False) for each claim, with a bucketed confidence and the reviewers' reasoning. verify_claim is the deep check: research → debate → panel review, returning a score, the key finding, warnings and the sources with the quote behind each. ask_followup answers grounded follow-ups on a completed check, and list_verifications returns recent deep checks. Verdicts are directional, not absolute. Connect via OAuth or a free Lenz API key."
 
 # ── args ─────────────────────────────────────────────────────────────
 DO_REGISTRY=true
