@@ -18,7 +18,7 @@ description: >-
 
 Fact-check factual claims against **independent web sources** using Lenz's hosted
 MCP tools. Lenz runs a claim through a multi-model pipeline (research → debate →
-adjudication) and returns a verdict with bucketed confidence. It checks claims
+panel review) and returns a verdict with bucketed confidence. It checks claims
 against the open web, independent of whatever context the model was given — so it
 complements groundedness/faithfulness checkers, it does not replace them.
 
@@ -33,17 +33,21 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
 
 ## Workflow
 
-1. **Extract the atomic claims.** Break the input into discrete, individually
-   checkable factual statements — one assertion each. Skip opinions, predictions,
-   recommendations, and subjective statements; Lenz checks facts, not judgments.
-   If there is no checkable factual claim, say so plainly and stop.
+1. **Decide whether there is anything to check.** Lenz checks facts, not judgments:
+   skip opinions, predictions, recommendations and subjective statements. If the input
+   holds no checkable factual claim, say so plainly and stop. Do NOT split, reword or
+   tidy the text yourself: Lenz reads it and finds the claims, and a rewritten claim
+   (a resolved pronoun, a dropped "analysts say", an added figure) is no longer the
+   claim the user made.
 
-2. **Screen with `assess_claim`** (the quick check, about 15-20 seconds). Pass the
-   claims as a list in `claims` (up to 20, one call) rather than one call each. Each
-   row returns a verdict (True / Mostly True / Mixed / Mostly False / False), a
-   bucketed confidence and, when available, a `rationale` and a `dissent`: reviewers'
-   notes, not checked sources. A vague claim is assessed on its most likely reading,
-   which the row's `claim` shows. Present every quick verdict as a first read.
+2. **Screen with `assess_claim`** (the quick check, about 15-20 seconds). Pass a
+   pasted text, a draft or an answer in `claim`, whole and unedited: every claim Lenz
+   finds in it gets its own row, up to 20. Use `claims` (a list, up to 20, one call)
+   only when the user listed the claims separately themselves. Each row returns a
+   verdict (True / Mostly True / Mixed / Mostly False / False), a bucketed confidence
+   and, when available, a `rationale` and a `dissent`: reviewers' notes, not checked
+   sources. A vague claim is assessed on its most likely reading, which the row's
+   `claim` shows. Present every quick verdict as a first read.
 
 3. **Offer `verify_claim`; do not start it unasked.** It is the deep check: sourced,
    about a minute to a minute and a half, ten times the credits of a quick-check row.
@@ -54,8 +58,10 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
    most the one or two that matter. Run it on the user's yes, or directly when they
    asked for sources, a deep check or a verification. `depth: "low"` researches fewer
    sources for half the credits; keep the default `standard` where breadth of evidence
-   is the point. `verify_claim` waits and usually returns the result in the same call;
-   if it returns a `task_id`, say the check is still running and call
+   is the point. `verify_claim` waits for the check as long as the client allows. In Claude and
+   the ChatGPT app the result usually comes back in the same call; in clients with a
+   shorter tool-call limit (Claude Code, Cursor, VS Code) expect `status: submitted`
+   with a `task_id`: say the check is still running and call
    `get_verification(task_id)` until it is `completed`. If it returns `needs_input`
    (several claims in one text), show the list and use `select_claims`. A completed deep
    check replaces the quick verdict on the same claim: if it changed, say so plainly and
@@ -84,17 +90,17 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
   spent — retrying, rephrasing the claim, or falling back to another Lenz tool
   will not work, and silently dropping the check leaves the user believing the
   claim was verified. Tell them plainly that the check did not run, why, and
-  give them the `manage_url` from the result so they can top up. Then either
+  give them the `manage_url` from the result, when there is one, so they can top up. Then either
   answer without a Lenz verdict (saying that's what you're doing) or stop.
 - **`rate_limited` is different — that one does clear.** Report the
   `retry_after_seconds` from the result rather than saying "try again shortly";
-  the daily `extract` cap can be hours away, and a vague "shortly" invites a
-  retry loop that can't succeed.
+  the wait can be long, and a vague "shortly" invites a retry loop that can't
+  succeed.
 - **Say when nothing is checkable.** If the input is all opinion / prediction /
   subjective, tell the user there's no factual claim to verify rather than forcing
   a verdict.
-- **Multiple claims:** check each and give a per-claim verdict; don't collapse a
-  mixed set into one blanket "true" or "false."
+- **Multiple claims:** give a per-claim verdict from the rows Lenz returns; don't
+  collapse a mixed set into one blanket "true" or "false."
 
 ## Example
 
