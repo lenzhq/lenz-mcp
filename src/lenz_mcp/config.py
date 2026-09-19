@@ -237,18 +237,11 @@ WORKOS_AUTHKIT_DOMAIN: str = os.environ.get('WORKOS_AUTHKIT_DOMAIN', '')
 OAUTH_ENABLED: bool = bool(_env_flag('MCP_OAUTH_ENABLED') and WORKOS_AUTHKIT_DOMAIN)
 OAUTH_ISSUER: str = f'https://{WORKOS_AUTHKIT_DOMAIN}' if WORKOS_AUTHKIT_DOMAIN else ''
 
-# The key the OAuth bridge signs its per-call act-as-user JWT with
-# (src/lenz_mcp/bridge.py): the FIRST entry of MCP_SERVICE_SIGNING_KEYS, the list
-# the API verifies against (a rotation lists the new key first). Shared with
-# the API only; empty means the bridge refuses.
-SERVICE_SIGNING_KEY: str = next(iter(_env_list('MCP_SERVICE_SIGNING_KEYS')), '')
-
-# ── The token exchange (src/lenz_mcp/exchange.py) — dark behind LENZ_OAUTH_EXCHANGE ─
-# On (with OAuth on), an OAuth tool call exchanges the user's verified token at
-# the API's token endpoint for a scoped API access token, instead of signing
-# the bridge assertion above. Off, nothing below is read.
-OAUTH_EXCHANGE: bool = _env_flag('LENZ_OAUTH_EXCHANGE')
-# This service's own OAuth client at the API (HTTP Basic on the exchange).
+# ── The token exchange (src/lenz_mcp/exchange.py) ────────────────────
+# With OAuth on, a tool call gets its API credential by exchanging the user's
+# verified token at the API's token endpoint (RFC 8693), authenticating as this
+# service's own OAuth client. There is no other way to serve an OAuth caller:
+# without these, every OAuth tool call answers that the service is unavailable.
 OAUTH_CLIENT_ID: str = _env('LENZ_OAUTH_CLIENT_ID')
 OAUTH_CLIENT_SECRET: str = _env('LENZ_OAUTH_CLIENT_SECRET')
 # Where the exchange is made. The API's token endpoint sits under its versioned

@@ -16,7 +16,6 @@ from dataclasses import dataclass, field
 from urllib.parse import parse_qs
 
 import httpx
-import jwt
 import pytest
 from mcp.server.auth.provider import AccessToken
 
@@ -148,12 +147,10 @@ def lenz(monkeypatch):
     monkeypatch.setattr(config, 'API_BASE_URL', API)
     monkeypatch.setattr(config, 'API_CREDENTIALS_URL', f'{ORIGIN}/api-credentials')
     monkeypatch.setattr(config, 'OAUTH_ENABLED', True)
-    monkeypatch.setattr(config, 'OAUTH_EXCHANGE', True)
     monkeypatch.setattr(config, 'OAUTH_CLIENT_ID', CLIENT_ID)
     monkeypatch.setattr(config, 'OAUTH_CLIENT_SECRET', CLIENT_SECRET)
     monkeypatch.setattr(config, 'TOKEN_ENDPOINT', TOKEN_ENDPOINT)
     monkeypatch.setattr(config, 'API_RESOURCE', API)
-    monkeypatch.setattr(config, 'SERVICE_SIGNING_KEY', 'bridge-signing-key-' + 'k' * 32)
 
     # One fake clock for the wait, the cache and the API.
     monkeypatch.setattr(exchange, '_now', lambda: fake.now)
@@ -617,77 +614,7 @@ def test_the_subject_token_is_never_logged(lenz, caplog):
     assert CLIENT_SECRET not in text
 
 
-# ── flag off: exactly today's behaviour ──────────────────────────────
-
-
-@pytest.fixture
-def flag_off(lenz, monkeypatch):
-    monkeypatch.setattr(config, 'OAUTH_EXCHANGE', False)
-
-    def _never(*_args, **_kwargs):
-        raise AssertionError('the exchange must not run with LENZ_OAUTH_EXCHANGE off')
-
-    monkeypatch.setattr(exchange, 'token_for', _never)
-    monkeypatch.setattr(exchange, 'exchange', _never)
-    monkeypatch.setattr(exchange, 'CallCredential', _never)
-    return lenz
-
-
-def test_flag_off_signs_the_bridge_assertion_as_before(flag_off):
-    lenz = flag_off
-    lenz.reject_all_tokens = True  # the fake API knows no bridge assertion: a 401
-
-    out = _run(server.check_usage(_ctx()))
-
-    assert out == server._auth_required()
-    assert lenz.exchange_count() == 0
-    assert len(lenz.api_calls) == 1, 'a 401 on the bridge path is never retried'
-    method, path, authorization = lenz.api_calls[0]
-    assert (method, path) == ('GET', '/me/usage')
-    claims = jwt.decode(
-        authorization.removeprefix('Bearer '),
-        config.SERVICE_SIGNING_KEY,
-        algorithms=['HS256'],
-        audience='lenz-api',
-        issuer='lenz-mcp',
-    )
-    assert claims['sub'] == '42'
-    assert claims['exp'] - claims['iat'] == 60
-
-
-def test_flag_off_authorization_is_the_same_string_type_as_before(flag_off):
-    async def _in_a_tool():
-        return server._authorization(_ctx())
-
-    authorization = _run(_in_a_tool())
-    assert isinstance(authorization, str)
-    assert authorization.startswith('Bearer ')
-
-
-def test_flag_off_mints_per_poll_as_before(flag_off, monkeypatch):
-    """Today's bridge re-signs on every poll; flag off keeps exactly that."""
-    lenz = flag_off
-    minted: list[int] = []
-    from lenz_mcp import bridge
-
-    real = bridge.mint_service_assertion
-
-    def _counting(user_id):
-        minted.append(user_id)
-        return real(user_id)
-
-    monkeypatch.setattr(bridge, 'mint_service_assertion', _counting)
-    lenz.run_done_at = lenz.now + 10
-    lenz.reject_all_tokens = False
-    # The fake API accepts any bridge assertion for this test.
-    monkeypatch.setattr(lenz, '_accepts', lambda authorization: True)
-
-    out = _run(server.verify_claim('the claim', _ctx()))
-
-    assert out['status'] == 'completed'
-    # One for the auth gate, one for the submit, one per poll: exactly as before.
-    assert len(minted) == 2 + _status_polls(lenz)
-    assert lenz.exchange_count() == 0
+# ── the API-key door is untouched ────────────────────────────────────
 
 
 def test_an_api_key_caller_never_exchanges(lenz, monkeypatch):

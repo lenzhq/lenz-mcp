@@ -75,8 +75,8 @@ class Credential(Protocol):
     async def renew(self) -> str | None: ...
 
 
-# What a tool forwards: the caller's header verbatim, the bridge's assertion,
-# a per-call exchanged credential, or nothing.
+# What a tool forwards: the caller's header verbatim, a per-call exchanged
+# credential, or nothing.
 Authorization = str | Credential | None
 
 

@@ -18,10 +18,9 @@ every request's bearer token through ``DualModeTokenVerifier``:
 
 The verified token's ``sub`` is the numeric Lenz user id, set when Lenz
 completes the authorization, so the zero-DB server resolves the user with no
-lookup. Tool calls then mint a
-short-lived service assertion for that user or, with ``LENZ_OAUTH_EXCHANGE``
-on, exchange the verified token for a scoped API token (see
-``server._authorization`` and ``exchange``).
+lookup. Tool calls then exchange the verified token for a short-lived API
+token scoped to the tool in hand (see ``server._authorization`` and
+``exchange``).
 """
 
 from __future__ import annotations
@@ -392,8 +391,8 @@ class DualModeTokenVerifier(TokenVerifier):
 
         sub = claims.get('sub')
         if not isinstance(sub, str) or not SUBJECT_PATTERN.fullmatch(sub):
-            # The subject is the numeric Lenz user id; anything else can't
-            # be bridged to a user.
+            # The subject is the numeric Lenz user id; anything else names no
+            # user we can exchange a token for.
             logger.warning('mcp_oauth_non_numeric_sub')
             return None
 
