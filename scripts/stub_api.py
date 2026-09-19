@@ -1,8 +1,9 @@
 """A stub of the public API's /me/usage for the connector's container test.
 
 Standard library only. Answers /api/v1/me/usage for one key and 401s every
-other; everything else is 404. The same shape the smoke's own tests stub, so
-the deploy smoke's `check_usage` call has something real to reach.
+other; everything else is 404, so the smoke's `check_usage` call has something
+real to reach. The smoke's own tests (tests/test_smoke.py) serve the same
+handler in-process.
 
     python3 scripts/stub_api.py PORT KEY
 """
@@ -14,8 +15,8 @@ import json
 import sys
 
 
-def main() -> None:
-    port, key = int(sys.argv[1]), sys.argv[2]
+def handler_for(key: str) -> type[http.server.BaseHTTPRequestHandler]:
+    """A request handler that accepts `key` and no other."""
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):  # noqa: N802
@@ -37,7 +38,12 @@ def main() -> None:
         def log_message(self, *_args):
             pass
 
-    http.server.ThreadingHTTPServer(('0.0.0.0', port), Handler).serve_forever()  # noqa: S104
+    return Handler
+
+
+def main() -> None:
+    port, key = int(sys.argv[1]), sys.argv[2]
+    http.server.ThreadingHTTPServer(('0.0.0.0', port), handler_for(key)).serve_forever()  # noqa: S104
 
 
 if __name__ == '__main__':
