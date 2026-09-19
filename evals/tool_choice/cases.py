@@ -219,7 +219,9 @@ CASES: tuple[Case, ...] = (
         forbid=('assess_claim', 'verify_claim'),
         expected_output=(
             'A list whose newest entry is the Viking helmets check with its verdict and score; then '
-            'the remaining credits. Nothing is charged, and no plan, price or upgrade link appears.'
+            "the remaining credits. Nothing is charged. ChatGPT may name the account's plan and credit "
+            'costs, but makes no offer to buy or upgrade, quotes no price in money and gives no plans '
+            'or pricing link.'
         ),
         why='Two housekeeping tools in one turn, and neither charges.',
     ),
