@@ -23,9 +23,12 @@
 #              LENZ_MCP_REGISTRY_KEY (default $HOME/.config/lenz-mcp/registry.pem;
 #              keep it OUT of this repo)
 #   smithery:  a prior `npx @smithery/cli mcp publish` login for the re-scan,
-#              and SMITHERY_API_KEY exported for the metadata sync (dashboard →
-#              API keys). Either half is skipped (with a warning) if its
-#              credential is absent — never fatal.
+#              and an API key for the metadata sync: SMITHERY_API_KEY, or else
+#              the key the Smithery CLI stored at login. The re-scan warns and
+#              carries on if it fails; the metadata sync fails the run when it
+#              has no key or the API refuses it, so a publish that left the
+#              listing's title, description or icon stale is never reported as
+#              a success.
 set -euo pipefail
 
 # ── config ───────────────────────────────────────────────────────────
@@ -91,10 +94,13 @@ publish_smithery() {
     echo "         interactively to log in, then re-run. Skipping re-scan." >&2
   fi
 
-  # (b) sync listing metadata via the registry PATCH API. Needs SMITHERY_API_KEY.
-  if [[ -z "${SMITHERY_API_KEY:-}" ]]; then
-    echo "   note: SMITHERY_API_KEY not set — skipping metadata sync (title/desc/icon)." >&2
-    return
+  # (b) sync listing metadata via the registry PATCH API.
+  local api_key
+  api_key="$(smithery_api_key)"
+  if [[ -z "$api_key" ]]; then
+    echo "error: no Smithery API key: set SMITHERY_API_KEY, or log in with the" >&2
+    echo "       Smithery CLI. The listing's title, description and icon were NOT synced." >&2
+    exit 1
   fi
   echo "==> [smithery] syncing listing metadata"
   local body
@@ -118,15 +124,34 @@ publish_smithery() {
   local code
   code="$(curl -s -o /dev/stderr -w '%{http_code}' \
     -X PATCH "https://api.smithery.ai/servers/${encoded_name}" \
-    -H "Authorization: Bearer ${SMITHERY_API_KEY}" \
+    -H "Authorization: Bearer ${api_key}" \
     -H "Content-Type: application/json" \
     -d "$body")"
   echo
   if [[ "$code" == 2* ]]; then
     echo "   metadata synced (HTTP $code)"
   else
-    echo "   warn: metadata PATCH returned HTTP $code" >&2
+    echo "error: the metadata sync returned HTTP $code; the listing was NOT updated." >&2
+    exit 1
   fi
+}
+
+# The API key for the metadata sync: SMITHERY_API_KEY if set, else the key the
+# Smithery CLI stored when you logged in (macOS and Linux locations). Prints
+# nothing when there is none.
+smithery_api_key() {
+  if [[ -n "${SMITHERY_API_KEY:-}" ]]; then
+    printf '%s' "$SMITHERY_API_KEY"
+    return
+  fi
+  local f
+  for f in "$HOME/Library/Application Support/smithery/settings.json" \
+           "${XDG_CONFIG_HOME:-$HOME/.config}/smithery/settings.json"; do
+    if [[ -f "$f" ]]; then
+      python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("apiKey") or "", end="")' "$f" 2>/dev/null && return 0
+    fi
+  done
+  return 0
 }
 
 # ── run ──────────────────────────────────────────────────────────────
