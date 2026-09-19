@@ -192,7 +192,7 @@ a.lz-link { display: inline-block; }
 
 .lz-source-meta { margin-top: 2px; }
 .lz-quote { margin-top: 6px; font-size: 15px; line-height: 1.6; text-indent: -0.4em; }
-.lz-rows > li { display: grid; grid-template-columns: 2ch 1fr; gap: 0 10px; }
+.lz-rows > li { display: grid; grid-template-columns: 2ch minmax(0, 1fr); gap: 0 10px; }
 /* A row is one line: the claim, and its verdict in a right-hand column so the
    verdicts scan down one edge. The meta (not sure, reviewers split, sources) sits
    under the claim only when there is one. The rule between rows is the whole gap:
@@ -208,12 +208,14 @@ a.lz-link { display: inline-block; }
 }
 .lz-row-head:hover .row-claim { text-decoration: underline; text-underline-offset: 3px; }
 .lz-row-head .row-claim { grid-column: 1; }
-.lz-row-head .row-line { grid-column: 2; grid-row: 1; text-align: right; white-space: nowrap; }
+/* The known labels fit on one line; an unknown long one wraps inside a bounded
+   column rather than push the row past the frame's edge. */
+.lz-row-head .row-line { grid-column: 2; grid-row: 1; text-align: right; max-width: 16em; }
 .lz-row-head .row-meta { grid-column: 1; }
 /* A narrow frame has no room for a second column: the verdict goes under the claim. */
 @media (max-width: 419px) {
   .lz-row-head { grid-template-columns: minmax(0, 1fr); }
-  .lz-row-head .row-line { grid-column: 1; grid-row: auto; text-align: left; white-space: normal; }
+  .lz-row-head .row-line { grid-column: 1; grid-row: auto; text-align: left; max-width: none; }
 }
 .lz-row-head .row-verdict.dimmed { color: var(--lz-meta); }
 .lz-row-head .row-score { font-family: var(--lz-mono); font-size: 13px; font-variant-numeric: tabular-nums; margin-left: 6px; }
