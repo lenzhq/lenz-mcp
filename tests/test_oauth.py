@@ -546,6 +546,92 @@ def test_api_key_caller_forwards_raw_header(monkeypatch):
     assert server._authorization(_ctx(auth='Bearer lenz_abc')) == 'Bearer lenz_abc'
 
 
+# ── what a caller is told when their credential is refused ───────────
+
+
+def _oauth_access_token(user='42'):
+    return AccessToken(
+        token='workos-token',
+        client_id='oauth-host',
+        scopes=[],
+        expires_at=None,
+        subject=user,
+        claims={'auth_mode': oauth.AUTH_MODE_OAUTH, 'sub': user},
+    )
+
+
+def _signed_in(monkeypatch, access_token=None):
+    monkeypatch.setattr(
+        'mcp.server.auth.middleware.auth_context.get_access_token',
+        lambda: access_token if access_token is not None else _oauth_access_token(),
+    )
+
+
+API_KEY_AUTH_REQUIRED = (
+    'No Lenz API key was provided. Create a free key at '
+    'https://lenz.io/api-credentials and set it as the Authorization bearer '
+    'token in your MCP client configuration.'
+)
+
+
+def test_an_api_key_caller_keeps_the_words_it_has_today(monkeypatch):
+    """Byte for byte: an API-key caller's advice is the advice that works for them."""
+    monkeypatch.setattr(config, 'API_CREDENTIALS_URL', 'https://lenz.io/api-credentials')
+    monkeypatch.setattr(config, 'OAUTH_ENABLED', False)
+    assert server._auth_required() == {'status': 'auth_required', 'message': API_KEY_AUTH_REQUIRED}
+
+
+def test_an_api_key_caller_under_oauth_keeps_the_same_words(monkeypatch):
+    monkeypatch.setattr(config, 'API_CREDENTIALS_URL', 'https://lenz.io/api-credentials')
+    _signed_in(
+        monkeypatch,
+        AccessToken(
+            token='lenz_abc',
+            client_id='lenz-api-key',
+            scopes=[],
+            expires_at=None,
+            claims={'auth_mode': oauth.AUTH_MODE_API_KEY},
+        ),
+    )
+    assert server._auth_required()['message'] == API_KEY_AUTH_REQUIRED
+
+
+def test_a_signed_in_caller_is_told_to_reconnect(monkeypatch):
+    """Someone who signed in has no API key to make: sending them to key
+    creation is advice they cannot act on."""
+    _signed_in(monkeypatch)
+    out = server._auth_required()
+
+    assert out['status'] == 'auth_required'
+    assert 'reconnect' in out['message'].lower()
+    assert 'API key' not in out['message']
+    assert config.API_CREDENTIALS_URL not in out['message']
+    assert 'http' not in out['message']
+
+
+def test_a_refused_credential_mid_call_tells_a_signed_in_caller_to_reconnect(monkeypatch):
+    """The API's own 401 lands on the same copy, which is where a caller whose
+    sign-in expired actually meets it."""
+    from lenz_mcp import client as api_client
+
+    _signed_in(monkeypatch)
+    monkeypatch.setattr(config, 'SERVICE_SIGNING_KEY', 'a-signing-key-' + 'k' * 32)
+
+    async def _unauthorized(*_args, **_kwargs):
+        return api_client.ApiResponse(status=401, data={'detail': 'Unauthorized'})
+
+    monkeypatch.setattr(api_client, 'me_usage', _unauthorized)
+    out = _run(server.check_usage(_ctx()))
+
+    assert out['status'] == 'auth_required'
+    assert 'reconnect' in out['message'].lower()
+
+
+def test_the_reconnect_copy_names_no_tool_and_no_key(monkeypatch):
+    for word in ('verify_claim', 'assess_claim', 'get_verification', 'api-credentials', 'API key'):
+        assert word not in server.OAUTH_REAUTH_MESSAGE
+
+
 def test_flag_off_never_touches_auth_context(monkeypatch):
     monkeypatch.setattr(config, 'OAUTH_ENABLED', False)
 
