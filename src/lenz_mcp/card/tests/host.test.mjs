@@ -1604,3 +1604,25 @@ test('a full-bleed frame wider than the card spans it: no stray right edge in la
   assert.equal(Math.round(s.box.width), s.viewport, 'the card fills the frame');
   assert.equal(s.overflow, 0);
 });
+
+// A row's verdict sits in its own column beside the claim. The verdict is a label
+// the server writes, but the card does not get to assume its length: an unknown
+// long one must wrap inside the card, never push the row past the frame's edge.
+for (const width of [440, 480, 735]) {
+  test(`${width} px: a long verdict wraps in its column, and the row stays inside the frame`, async () => {
+    const { page, errors } = await harness.page({ width: width + 40 });
+    const list = JSON.parse(JSON.stringify(FIXTURES.quick['list-2'].toolResult));
+    list.claims[0].verdict = 'Unable to determine whether the available evidence supports or contradicts this claim';
+    await page.evaluate((c) => window.startCard('long', c), config({ toolResult: list, width }));
+    const frame = await readyFrame(page, 'long');
+    await frame.locator('.lz-row-head').first().waitFor();
+    const s = await frameStyle(frame);
+    assert.equal(s.overflow, 0, `the card scrolls sideways by ${s.overflow}px`);
+    const card = s.box;
+    const heads = await frame.locator('.lz-row-head').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().right));
+    for (const right of heads) assert.ok(right <= card.right + 0.5, `a row ends at ${right}, past the card's ${card.right}`);
+    // A known label still reads on one line beside its claim.
+    assert.equal(await lineCount(frame.locator('.lz-row-head .row-line').nth(1)), 1);
+    assert.deepEqual(errors, []);
+  });
+}
