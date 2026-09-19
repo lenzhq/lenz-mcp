@@ -1,0 +1,115 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lenz-mcp"
+dynamic = ["version"]
+description = "The Lenz MCP server: check the factual claims in a text from Claude, ChatGPT and other MCP clients."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+# Below 3.13: tool descriptions come from docstrings, and 3.13 strips their
+# indentation at compile time, which changes the text every model reads.
+requires-python = ">=3.11,<3.13"
+# Filled in by the export from the connector's own requirements list.
+dependencies = [
+    "httpx",
+    "mcp>=2.2.0,<2.3",
+    "mcp-types",
+    "pydantic",
+    "pyjwt[crypto]",
+    "sentry-sdk",
+    "starlette",
+    "uvicorn[standard]",
+]
+
+[project.urls]
+Homepage = "https://lenz.io"
+Source = "https://github.com/lenzhq/lenz-mcp"
+
+[dependency-groups]
+dev = [
+    "cryptography",
+    "mypy",
+    "pytest",
+    "ruff",
+]
+# The tool-choice eval makes paid calls to model vendors; it is run by hand.
+eval = [
+    "anthropic",
+    "openai",
+    "python-dotenv",
+]
+
+# The version comes from the build: LENZ_MCP_VERSION (a release tag such as
+# 2.0.0), read by src/lenz_mcp/_build_version.py; unset is a development
+# version. A development checkout is not installed as a package (see
+# [tool.uv]); tests import the source directly.
+[tool.hatch.version]
+source = "code"
+path = "src/lenz_mcp/_build_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lenz_mcp"]
+# The wheel carries the server and the built card (dist/), not the card's
+# sources, tests or fixtures.
+exclude = [
+    "src/lenz_mcp/testing.py",
+    "src/lenz_mcp/card/src",
+    "src/lenz_mcp/card/tests",
+    "src/lenz_mcp/card/fixtures",
+    "src/lenz_mcp/card/dist-dev",
+    "src/lenz_mcp/card/node_modules",
+    "src/lenz_mcp/card/*.json",
+    "src/lenz_mcp/card/*.mjs",
+    "src/lenz_mcp/card/.gitignore",
+]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "src/lenz_mcp/card/node_modules",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+python_files = ["test_*.py"]
+addopts = "-p no:cacheprovider"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["src/lenz_mcp/card/node_modules"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "S"]
+ignore = [
+    "E501",  # line length is the formatter's
+    "S110",  # try-except-pass is a deliberate fallback where it appears
+    "S310",  # URL opens use configured endpoints, not user input
+    "S311",  # random is used for non-security purposes only
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501", "E402", "S101", "S105", "S106"]
+"src/lenz_mcp/testing.py" = ["S101"]
+"scripts/*" = ["E402", "S", "B023"]
+"evals/*" = ["S"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["lenz_mcp", "evals"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/lenz_mcp"]
+exclude = ["src/lenz_mcp/card/"]
+ignore_missing_imports = true
+# The SDK's models take camelCase field aliases (readOnlyHint, openWorldHint).
+plugins = ["pydantic.mypy"]

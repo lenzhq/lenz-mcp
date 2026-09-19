@@ -234,6 +234,29 @@ claims that matter, and reports verdicts with their confidence, and sources wher
 check ran (with the directional-not-absolute caveat built in). Point your agent at
 [`skills/lenz-fact-check/SKILL.md`](skills/lenz-fact-check/SKILL.md).
 
+## Running the server yourself
+
+The hosted endpoint is all most clients need. The server's source is in this
+repository if you want to run your own copy or contribute.
+
+**Requirements:** Python 3.11 or 3.12, and [uv](https://docs.astral.sh/uv/).
+Python 3.13 is not supported yet: it changes how the tool descriptions the
+models read are formatted, so it waits for a release that checks the wording
+on it.
+
+```bash
+uv sync --group dev
+uv run pytest
+docker build --build-arg LENZ_MCP_VERSION=dev -t lenz-mcp .
+```
+
+A copy you run yourself authenticates with your own Lenz API key, sent as
+`Authorization: Bearer lenz_…`. OAuth sign-in works only on the hosted endpoint,
+`https://lenz.io/mcp`.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the tests, the result card and the
+pull-request rules.
+
 ## Links
 
 - **Website:** [lenz.io](https://lenz.io)
@@ -253,4 +276,4 @@ trademarks of lenzhq and are not granted by the license — see [NOTICE](NOTICE)
 
 ## Maintainer
 
-[@Pavel12431432](https://github.com/Pavel12431432)
+[@paveljor](https://github.com/paveljor)

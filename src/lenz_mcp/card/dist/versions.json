@@ -1,0 +1,10 @@
+{
+  "ui://lenz/card-v2": {
+    "file": "card-v2.html",
+    "sha256": "28e4d795e9f398acfd3bebec0ab7cdf67a28349f37dfbc7feb3dfbe975aaa00e"
+  },
+  "ui://lenz/card-v3": {
+    "file": "card-v3.html",
+    "sha256": "e32005f43dd5d4ebebcaaf89027bb9ae8019f20b481839757cc2cb8b1c821a65"
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "prompts/get:check_last_answer:empty": {
+    "code": -32602,
+    "has_message": true,
+    "has_result": false,
+    "http": 200,
+    "is_error_result": null
+  },
+  "prompts/get:check_last_answer:omitted": {
+    "code": -32602,
+    "has_message": true,
+    "has_result": false,
+    "http": 200,
+    "is_error_result": null
+  },
+  "prompts/get:check_last_answer:whitespace": {
+    "code": -32602,
+    "has_message": true,
+    "has_result": false,
+    "http": 200,
+    "is_error_result": null
+  },
+  "prompts/get:check_text:empty": {
+    "code": -32602,
+    "has_message": true,
+    "has_result": false,
+    "http": 200,
+    "is_error_result": null
+  },
+  "prompts/get:check_text:omitted": {
+    "code": -32602,
+    "has_message": true,
+    "has_result": false,
+    "http": 200,
+    "is_error_result": null
+  },
+  "prompts/get:check_text:whitespace": {
+    "code": -32602,
+    "has_message": true,
+    "has_result": false,
+    "http": 200,
+    "is_error_result": null
+  },
+  "resources/read:unknown": {
+    "code": -32602,
+    "has_message": true,
+    "has_result": false,
+    "http": 200,
+    "is_error_result": null
+  },
+  "tools/call:unknown_tool": {
+    "code": null,
+    "has_message": false,
+    "has_result": true,
+    "http": 200,
+    "is_error_result": true
+  },
+  "tools/call:wrong_argument_type": {
+    "code": null,
+    "has_message": false,
+    "has_result": true,
+    "http": 200,
+    "is_error_result": true
+  },
+  "unknown_method": {
+    "code": -32601,
+    "has_message": true,
+    "has_result": false,
+    "http": 200,
+    "is_error_result": null
+  }
+}

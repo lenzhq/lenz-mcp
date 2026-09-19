@@ -1,0 +1,94 @@
+name: release
+
+# A tag v* on a commit of main becomes a GitHub release, once that exact commit
+# passed ci-ok and the tag is a release version (vMAJOR.MINOR.PATCH). The
+# release builds the wheel and re-runs the container test on the tagged commit
+# with the tag as the version, and fails if either reads anything else. It
+# builds no deployable image and holds no cloud credential: deployments are
+# built from the tagged commit elsewhere.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # A published release always carries a real version: the package would
+      # otherwise build as 0.0.0.dev0 and the server report `dev`.
+      - name: The tag is a release version
+        run: |
+          if ! [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || ! [[ "${GITHUB_REF_NAME}" =~ [1-9] ]]; then
+            echo "::error::${GITHUB_REF_NAME} is not a release version (vMAJOR.MINOR.PATCH, not all zero)."
+            exit 1
+          fi
+      - name: The tag points at a commit on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "::error::${GITHUB_REF_NAME} points at ${GITHUB_SHA}, which is not on main."
+            exit 1
+          fi
+      - name: ci-ok passed for that commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?check_name=ci-ok" \
+            --jq '[.check_runs[] | select(.app.slug == "github-actions")] | sort_by(.completed_at) | last | .conclusion')"
+          if [ "${conclusion}" != "success" ]; then
+            echo "::error::ci-ok has not passed for ${GITHUB_SHA} (got '${conclusion}')."
+            exit 1
+          fi
+
+  wheel:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: The wheel builds at the tag's version
+        run: |
+          LENZ_MCP_VERSION="${GITHUB_REF_NAME}" uv build --wheel --out-dir dist
+          uv venv /tmp/wheel-venv
+          uv pip install --python /tmp/wheel-venv dist/*.whl
+          /tmp/wheel-venv/bin/python - "${GITHUB_REF_NAME#v}" <<'PY'
+          import sys
+          from importlib import metadata
+
+          built = metadata.version('lenz-mcp')
+          if built != sys.argv[1] or 'dev' in built:
+              sys.exit(f'the wheel reads version {built!r}, not the tag {sys.argv[1]!r}')
+          print(f'wheel version {built}')
+          PY
+
+  container:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The container test, on the tagged commit, at the tag's version
+        run: LENZ_MCP_VERSION="${GITHUB_REF_NAME}" bash scripts/container_test.sh HEAD
+
+  release:
+    needs: [verify, wheel, container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --verify-tag --generate-notes

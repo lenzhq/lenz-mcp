@@ -1,4 +1,20 @@
 .DS_Store
 
-# Registry signing keys — never commit (kept at ~/lenz-mcp-registry.pem)
+# Registry signing keys: never commit (publish.sh reads LENZ_MCP_REGISTRY_KEY)
 *.pem
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+/dist/
+*.egg-info/
+
+# The card's dependencies and render output
+node_modules/
+render-out/
+
+# Eval runs make paid calls; their results stay with whoever ran them
+evals/tool_choice/results_*.json

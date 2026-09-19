@@ -19,8 +19,9 @@
 #   ./publish.sh --skip-registry # smithery only
 #
 # Requires:
-#   registry:  mcp-publisher (brew install mcp-publisher) + the Ed25519 key
-#              (default ~/lenz-mcp-registry.pem — keep OUT of this repo)
+#   registry:  mcp-publisher (brew install mcp-publisher) + the Ed25519 key, at
+#              LENZ_MCP_REGISTRY_KEY (default $HOME/.config/lenz-mcp/registry.pem;
+#              keep it OUT of this repo)
 #   smithery:  a prior `npx @smithery/cli mcp publish` login for the re-scan,
 #              and SMITHERY_API_KEY exported for the metadata sync (dashboard →
 #              API keys). Either half is skipped (with a warning) if its
@@ -31,7 +32,7 @@ set -euo pipefail
 SERVER_URL="https://lenz.io/mcp"
 
 # registry
-REGISTRY_KEY="${LENZ_MCP_REGISTRY_KEY:-$HOME/lenz-mcp-registry.pem}"
+REGISTRY_KEY="${LENZ_MCP_REGISTRY_KEY:-${XDG_CONFIG_HOME:-$HOME/.config}/lenz-mcp/registry.pem}"
 REGISTRY_DOMAIN="lenz.io"
 
 # smithery

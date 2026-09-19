@@ -1,0 +1,198 @@
+{
+  "two-claims": {
+    "captured_at": "synthetic",
+    "endpoint": "POST /api/v1/assess",
+    "status": 200,
+    "body": {
+      "error": null,
+      "claims": [
+        {
+          "hint": null,
+          "claim": "The lakeside path is about nineteen kilometres long and fully signposted.",
+          "dissent": null,
+          "verdict": "Mostly True",
+          "language": "en",
+          "rationale": "The lakeside path is about nineteen kilometres long and fully signposted. The deepest point measured in the last survey was forty-one metres. Boating is limited to non-motorised craft under a district rule adopted in 1999. Lake Orvell covers about eleven square kilometres and is fed by four streams. Summer algae blooms have become shorter since runoff controls were added upstream.",
+          "confidence": "medium",
+          "error_code": null,
+          "candidate_claims": [],
+          "verification_url": null,
+          "identified_claims": []
+        },
+        {
+          "hint": null,
+          "claim": "The upper floor hosts a small archive of Brennock newspapers.",
+          "dissent": null,
+          "verdict": "Mostly True",
+          "language": "en",
+          "rationale": "The children’s collection holds a set of illustrated town histories. Its reading room was extended in 1977 with a gift from a local printing firm. The Kestrel Street library opened in 1934 in a converted grain store. The upper floor hosts a small archive of Brennock newspapers. The library lends tools as well as books under a scheme started in 2016. A volunteer group catalogues donated photographs every Saturday. Visitor numbers rose after the building gained step-free access in 2012. Opening hours were cut to four days a week during repairs in 2020.",
+          "confidence": "medium",
+          "error_code": null,
+          "candidate_claims": [],
+          "verification_url": null,
+          "identified_claims": []
+        }
+      ]
+    }
+  },
+  "five-claims": {
+    "captured_at": "synthetic",
+    "endpoint": "POST /api/v1/assess",
+    "status": 200,
+    "body": {
+      "error": null,
+      "claims": [
+        {
+          "hint": null,
+          "claim": "Visitor numbers rose after the building gained step-free access in 2012.",
+          "dissent": null,
+          "verdict": "True",
+          "language": "en",
+          "rationale": "The Kestrel Street library opened in 1934 in a converted grain store. Opening hours were cut to four days a week during repairs in 2020. The upper floor hosts a small archive of Brennock newspapers. A volunteer group catalogues donated photographs every Saturday.",
+          "confidence": "high",
+          "error_code": null,
+          "candidate_claims": [],
+          "verification_url": null,
+          "identified_claims": []
+        },
+        {
+          "hint": null,
+          "claim": "The bridge carries about four hundred walkers on a typical summer weekend.",
+          "dissent": null,
+          "verdict": "True",
+          "language": "en",
+          "rationale": "Annual inspections report no structural faults in the main trusses. The county heritage register lists it as the oldest timber bridge still open to walkers. A plaque at the east end records the names of the carpenters who built it. Its deck was replaced in 1968 and again in 2004, while the original trusses remain. Local records describe a flood in 1936 that damaged the approaches but not the span. A 2019 survey found the timber had been treated with a preservative every decade. The Marrow Creek footbridge was completed in 1911 by the county works office.",
+          "confidence": "high",
+          "error_code": null,
+          "candidate_claims": [],
+          "verification_url": null,
+          "identified_claims": []
+        },
+        {
+          "hint": null,
+          "claim": "The Harlow Valley orchard cooperative was founded by twelve growers in 1952.",
+          "dissent": null,
+          "verdict": "True",
+          "language": "en",
+          "rationale": "Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. The cooperative runs a cider press that any member may book for a day. A cold spell in 2021 cut the apple harvest by roughly a third. Apple varieties grown by members include several found nowhere else in the region. The cooperative publishes its annual yields in a report to members each spring. It now counts about ninety member farms across three valleys.",
+          "confidence": "high",
+          "error_code": null,
+          "candidate_claims": [],
+          "verification_url": null,
+          "identified_claims": []
+        },
+        {
+          "hint": null,
+          "claim": "The lake freezes over in most winters, usually for six to eight weeks.",
+          "dissent": null,
+          "verdict": "True",
+          "language": "en",
+          "rationale": "The lake freezes over in most winters, usually for six to eight weeks. A reintroduced population of native trout has grown steadily since 2010. Boating is limited to non-motorised craft under a district rule adopted in 1999. The deepest point measured in the last survey was forty-one metres. Water quality monitoring has run at three fixed points since 1987. The lakeside path is about nineteen kilometres long and fully signposted. Summer algae blooms have become shorter since runoff controls were added upstream. Lake Orvell covers about eleven square kilometres and is fed by four streams. The lake freezes over in most winters, usually for six to eight weeks.",
+          "confidence": "high",
+          "error_code": null,
+          "candidate_claims": [],
+          "verification_url": null,
+          "identified_claims": []
+        },
+        {
+          "hint": null,
+          "claim": "The children’s collection holds a set of illustrated town histories.",
+          "dissent": null,
+          "verdict": "Mostly False",
+          "language": "en",
+          "rationale": "Visitor numbers rose after the building gained step-free access in 2012. Its reading room was extended in 1977 with a gift from a local printing firm. The Kestrel Street library opened in 1934 in a converted grain store. A volunteer group catalogues donated photographs every Saturday. Opening hours were cut to four days a week during repairs in 2020. The library lends tools as well as books under a scheme started in 2016. The upper floor hosts a small archive of Brennock newspapers. The children’s collection holds a set of illustrated town histories. Visitor numbers rose after the building gained step-free access in 2012. Its reading room was extended in 1977 with a gift from a local printing firm.",
+          "confidence": "low",
+          "error_code": null,
+          "candidate_claims": [],
+          "verification_url": null,
+          "identified_claims": []
+        }
+      ]
+    }
+  },
+  "one-claim": {
+    "captured_at": "synthetic",
+    "endpoint": "POST /api/v1/assess",
+    "status": 200,
+    "body": {
+      "error": null,
+      "claims": [
+        {
+          "hint": null,
+          "claim": "It now counts about ninety member farms across three valleys.",
+          "dissent": null,
+          "verdict": "True",
+          "language": "en",
+          "rationale": "It now counts about ninety member farms across three valleys. Members vote on new plantings at a meeting held every November. The cooperative runs a cider press that any member may book for a day. Apple varieties grown by members include several found nowhere else in the region. The cooperative publishes its annual yields in a report to members each spring. A cold spell in 2021 cut the apple harvest by roughly a third. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Its bylaws require members to set aside a share of each harvest for the local school. It now counts about ninety member farms across three valleys. Members vote on new plantings at a meeting held every November.",
+          "confidence": "high",
+          "error_code": null,
+          "candidate_claims": [],
+          "verification_url": null,
+          "identified_claims": []
+        }
+      ]
+    }
+  },
+  "four-claims": {
+    "captured_at": "synthetic",
+    "endpoint": "POST /api/v1/assess",
+    "status": 200,
+    "body": {
+      "error": null,
+      "claims": [
+        {
+          "hint": null,
+          "claim": "Opening hours were cut to four days a week during repairs in 2020.",
+          "dissent": null,
+          "verdict": "False",
+          "language": "en",
+          "rationale": "The Kestrel Street library opened in 1934 in a converted grain store. Opening hours were cut to four days a week during repairs in 2020. The upper floor hosts a small archive of Brennock newspapers. The library lends tools as well as books under a scheme started in 2016. Its reading room was extended in 1977 with a gift from a local printing firm. A volunteer group catalogues donated photographs every Saturday. Visitor numbers rose after the building gained step-free access in 2012. The children’s collection holds a set of illustrated town histories. The Kestrel Street library opened in 1934 in a converted grain store. Opening hours were cut to four days a week during repairs in 2020.",
+          "confidence": "high",
+          "error_code": null,
+          "candidate_claims": [],
+          "verification_url": null,
+          "identified_claims": []
+        },
+        {
+          "hint": null,
+          "claim": "Annual inspections report no structural faults in the main trusses.",
+          "dissent": null,
+          "verdict": "True",
+          "language": "en",
+          "rationale": "A plaque at the east end records the names of the carpenters who built it. A 2019 survey found the timber had been treated with a preservative every decade. The bridge carries about four hundred walkers on a typical summer weekend. The Marrow Creek footbridge was completed in 1911 by the county works office. Local records describe a flood in 1936 that damaged the approaches but not the span. Its deck was replaced in 1968 and again in 2004, while the original trusses remain. The county heritage register lists it as the oldest timber bridge still open to walkers. Annual inspections report no structural faults in the main trusses. A plaque at the east end records the names of the carpenters who built it.",
+          "confidence": "high",
+          "error_code": null,
+          "candidate_claims": [],
+          "verification_url": null,
+          "identified_claims": []
+        },
+        {
+          "hint": null,
+          "claim": "Members vote on new plantings at a meeting held every November.",
+          "dissent": "One reviewer disagreed: It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
+          "verdict": "Mostly True",
+          "language": "en",
+          "rationale": "The Harlow Valley orchard cooperative was founded by twelve growers in 1952. A cold spell in 2021 cut the apple harvest by roughly a third. The cooperative runs a cider press that any member may book for a day. Apple varieties grown by members include several found nowhere else in the region. It now counts about ninety member farms across three valleys. Its bylaws require members to set aside a share of each harvest for the local school.",
+          "confidence": "low",
+          "error_code": null,
+          "candidate_claims": [],
+          "verification_url": null,
+          "identified_claims": []
+        },
+        {
+          "hint": null,
+          "claim": "Boating is limited to non-motorised craft under a district rule adopted in 1999.",
+          "dissent": null,
+          "verdict": "Mostly True",
+          "language": "en",
+          "rationale": "Boating is limited to non-motorised craft under a district rule adopted in 1999. The lake freezes over in most winters, usually for six to eight weeks. Lake Orvell covers about eleven square kilometres and is fed by four streams. The lakeside path is about nineteen kilometres long and fully signposted. The deepest point measured in the last survey was forty-one metres. A reintroduced population of native trout has grown steadily since 2010. Water quality monitoring has run at three fixed points since 1987. Summer algae blooms have become shorter since runoff controls were added upstream. Boating is limited to non-motorised craft under a district rule adopted in 1999.",
+          "confidence": "medium",
+          "error_code": null,
+          "candidate_claims": [],
+          "verification_url": null,
+          "identified_claims": []
+        }
+      ]
+    }
+  }
+}

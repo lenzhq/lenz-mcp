@@ -1,0 +1,664 @@
+{
+  "many-sources": {
+    "captured_at": "synthetic",
+    "endpoint": "GET /api/v1/verifications/7c3e9a41",
+    "status": 200,
+    "body": {
+      "verification_id": "7c3e9a41",
+      "claim": "Annual inspections report no structural faults in the main trusses.",
+      "visibility": "public",
+      "depth": "standard",
+      "domain": "Health",
+      "entities": [
+        {
+          "name": "Marrow Creek Footbridge",
+          "qid": null
+        }
+      ],
+      "presumed_intent": "Check what is recorded about the Marrow Creek footbridge.",
+      "verdict": "True",
+      "confidence": "high",
+      "lenz_score": 10,
+      "key_finding": "Annual inspections report no structural faults in the main trusses.",
+      "executive_summary": "Its deck was replaced in 1968 and again in 2004, while the original trusses remain. A 2019 survey found the timber had been treated with a preservative every decade. The county heritage register lists it as the oldest timber bridge still open to walkers. A plaque at the east end records the names of the carpenters who built it.",
+      "warnings": [
+        "Annual inspections report no structural faults in the main trusses.",
+        "Its deck was replaced in 1968 and again in 2004, while the original trusses remain.",
+        "The county heritage register lists it as the oldest timber bridge still open to walkers."
+      ],
+      "created_at": "2026-08-10T10:00:00+00:00",
+      "modified_at": null,
+      "sources": [
+        {
+          "source_name": "news.example.org",
+          "title": "The Marrow Creek footbridge: news note 1",
+          "url": "https://news.example.org/marrow-creek-footbridge/1",
+          "snippet": "The bridge carries about four hundred walkers on a typical summer weekend. The Marrow Creek footbridge was completed in 1911 by the county works office. The county heritage register lists it as the oldest timber bridge still open to walkers.",
+          "date": "2023-06-20"
+        },
+        {
+          "source_name": "studies.example.com",
+          "title": "The Marrow Creek footbridge: news note 2",
+          "url": "https://studies.example.com/marrow-creek-footbridge/2",
+          "snippet": "The Marrow Creek footbridge was completed in 1911 by the county works office. Annual inspections report no structural faults in the main trusses.",
+          "date": "2024-12-28"
+        },
+        {
+          "source_name": "guides.example.net",
+          "title": "The Marrow Creek footbridge: records note 3",
+          "url": "https://guides.example.net/marrow-creek-footbridge/3",
+          "snippet": "The county heritage register lists it as the oldest timber bridge still open to walkers. The bridge carries about four hundred walkers on a typical summer weekend. A plaque at the east end records the names of the carpenters who built it. The Marrow Creek footbridge was completed in 1911 by the county works office. A 2019 survey found the timber had been treated with a preservative every decade.",
+          "date": "2013-12-13"
+        },
+        {
+          "source_name": "news.example.net",
+          "title": "The Marrow Creek footbridge: archive note 4",
+          "url": "https://news.example.net/marrow-creek-footbridge/4",
+          "snippet": "The county heritage register lists it as the oldest timber bridge still open to walkers. The bridge carries about four hundred walkers on a typical summer weekend. Annual inspections report no structural faults in the main trusses. Local records describe a flood in 1936 that damaged the approaches but not the span. A plaque at the east end records the names of the carpenters who built it. A 2019 survey found the timber had been treated with a preservative every decade. The Marrow Creek footbridge was completed in 1911 by the county works office.",
+          "date": "2017-02-02"
+        },
+        {
+          "source_name": "guides.example.com",
+          "title": "The Marrow Creek footbridge: news note 5",
+          "url": "https://guides.example.com/marrow-creek-footbridge/5",
+          "snippet": "A 2019 survey found the timber had been treated with a preservative every decade. Its deck was replaced in 1968 and again in 2004, while the original trusses remain.",
+          "date": "2020-11-23"
+        },
+        {
+          "source_name": "notes.example.com",
+          "title": "The Marrow Creek footbridge: guides note 6",
+          "url": "https://notes.example.com/marrow-creek-footbridge/6",
+          "snippet": "A plaque at the east end records the names of the carpenters who built it. The bridge carries about four hundred walkers on a typical summer weekend. Annual inspections report no structural faults in the main trusses.",
+          "date": "2025-09-05"
+        },
+        {
+          "source_name": "library.example.net",
+          "title": "The Marrow Creek footbridge: archive note 7",
+          "url": "https://library.example.net/marrow-creek-footbridge/7",
+          "snippet": "A plaque at the east end records the names of the carpenters who built it. Annual inspections report no structural faults in the main trusses.",
+          "date": "2023-10-25"
+        },
+        {
+          "source_name": "news.example.net",
+          "title": "The Marrow Creek footbridge: records note 8",
+          "url": "https://news.example.net/marrow-creek-footbridge/8",
+          "snippet": "A plaque at the east end records the names of the carpenters who built it. A 2019 survey found the timber had been treated with a preservative every decade. The bridge carries about four hundred walkers on a typical summer weekend. Annual inspections report no structural faults in the main trusses.",
+          "date": "2021-12-08"
+        },
+        {
+          "source_name": "records.example.org",
+          "title": "The Marrow Creek footbridge: library note 9",
+          "url": "https://records.example.org/marrow-creek-footbridge/9",
+          "snippet": "Annual inspections report no structural faults in the main trusses. The Marrow Creek footbridge was completed in 1911 by the county works office. Its deck was replaced in 1968 and again in 2004, while the original trusses remain.",
+          "date": "2007-06-25"
+        },
+        {
+          "source_name": "reports.example.org",
+          "title": "The Marrow Creek footbridge: archive note 10",
+          "url": "https://reports.example.org/marrow-creek-footbridge/10",
+          "snippet": "The bridge carries about four hundred walkers on a typical summer weekend. Local records describe a flood in 1936 that damaged the approaches but not the span. Annual inspections report no structural faults in the main trusses. A plaque at the east end records the names of the carpenters who built it. The county heritage register lists it as the oldest timber bridge still open to walkers.",
+          "date": "2024-12-18"
+        },
+        {
+          "source_name": "records.example.org",
+          "title": "The Marrow Creek footbridge: reports note 11",
+          "url": "https://records.example.org/marrow-creek-footbridge/11",
+          "snippet": "A 2019 survey found the timber had been treated with a preservative every decade. A plaque at the east end records the names of the carpenters who built it.",
+          "date": "2026-01-01"
+        },
+        {
+          "source_name": "news.example.org",
+          "title": "The Marrow Creek footbridge: archive note 12",
+          "url": "https://news.example.org/marrow-creek-footbridge/12",
+          "snippet": "Its deck was replaced in 1968 and again in 2004, while the original trusses remain. A plaque at the east end records the names of the carpenters who built it. Annual inspections report no structural faults in the main trusses. The county heritage register lists it as the oldest timber bridge still open to walkers.",
+          "date": "2020-12-01"
+        },
+        {
+          "source_name": "guides.example.com",
+          "title": "The Marrow Creek footbridge: news note 13",
+          "url": "https://guides.example.com/marrow-creek-footbridge/13",
+          "snippet": "Annual inspections report no structural faults in the main trusses. The bridge carries about four hundred walkers on a typical summer weekend.",
+          "date": "2026-01-01"
+        },
+        {
+          "source_name": "guides.example.net",
+          "title": "The Marrow Creek footbridge: reports note 14",
+          "url": "https://guides.example.net/marrow-creek-footbridge/14",
+          "snippet": "Its deck was replaced in 1968 and again in 2004, while the original trusses remain. Annual inspections report no structural faults in the main trusses. The county heritage register lists it as the oldest timber bridge still open to walkers.",
+          "date": "2022-01-04"
+        },
+        {
+          "source_name": "guides.example.net",
+          "title": "The Marrow Creek footbridge: archive note 15",
+          "url": "https://guides.example.net/marrow-creek-footbridge/15",
+          "snippet": "A plaque at the east end records the names of the carpenters who built it.",
+          "date": ""
+        },
+        {
+          "source_name": "guides.example.net",
+          "title": "The Marrow Creek footbridge: library note 16",
+          "url": "https://guides.example.net/marrow-creek-footbridge/16",
+          "snippet": "Annual inspections report no structural faults in the main trusses. Its deck was replaced in 1968 and again in 2004, while the original trusses remain. A 2019 survey found the timber had been treated with a preservative every decade.",
+          "date": ""
+        },
+        {
+          "source_name": "studies.example.net",
+          "title": "The Marrow Creek footbridge: notes note 17",
+          "url": "https://studies.example.net/marrow-creek-footbridge/17",
+          "snippet": "Local records describe a flood in 1936 that damaged the approaches but not the span. Annual inspections report no structural faults in the main trusses.",
+          "date": ""
+        },
+        {
+          "source_name": "reports.example.com",
+          "title": "The Marrow Creek footbridge: news note 18",
+          "url": "https://reports.example.com/marrow-creek-footbridge/18",
+          "snippet": "The bridge carries about four hundred walkers on a typical summer weekend. A plaque at the east end records the names of the carpenters who built it. Local records describe a flood in 1936 that damaged the approaches but not the span.",
+          "date": ""
+        },
+        {
+          "source_name": "news.example.com",
+          "title": "The Marrow Creek footbridge: archive note 19",
+          "url": "https://news.example.com/marrow-creek-footbridge/19",
+          "snippet": "A 2019 survey found the timber had been treated with a preservative every decade. Annual inspections report no structural faults in the main trusses. Its deck was replaced in 1968 and again in 2004, while the original trusses remain.",
+          "date": ""
+        },
+        {
+          "source_name": "notes.example.org",
+          "title": "The Marrow Creek footbridge: studies note 20",
+          "url": "https://notes.example.org/marrow-creek-footbridge/20",
+          "snippet": "The bridge carries about four hundred walkers on a typical summer weekend. The county heritage register lists it as the oldest timber bridge still open to walkers. A plaque at the east end records the names of the carpenters who built it.",
+          "date": "2026-04-23"
+        },
+        {
+          "source_name": "records.example.com",
+          "title": "The Marrow Creek footbridge: archive note 21",
+          "url": "https://records.example.com/marrow-creek-footbridge/21",
+          "snippet": "Local records describe a flood in 1936 that damaged the approaches but not the span. The county heritage register lists it as the oldest timber bridge still open to walkers. A 2019 survey found the timber had been treated with a preservative every decade. Its deck was replaced in 1968 and again in 2004, while the original trusses remain.",
+          "date": "2026-04-12"
+        },
+        {
+          "source_name": "records.example.com",
+          "title": "The Marrow Creek footbridge: notes note 22",
+          "url": "https://records.example.com/marrow-creek-footbridge/22",
+          "snippet": "Local records describe a flood in 1936 that damaged the approaches but not the span. Annual inspections report no structural faults in the main trusses. Its deck was replaced in 1968 and again in 2004, while the original trusses remain. The Marrow Creek footbridge was completed in 1911 by the county works office.",
+          "date": "2026-06-03"
+        },
+        {
+          "source_name": "studies.example.com",
+          "title": "The Marrow Creek footbridge: archive note 23",
+          "url": "https://studies.example.com/marrow-creek-footbridge/23",
+          "snippet": "The county heritage register lists it as the oldest timber bridge still open to walkers. The bridge carries about four hundred walkers on a typical summer weekend.",
+          "date": ""
+        },
+        {
+          "source_name": "news.example.com",
+          "title": "The Marrow Creek footbridge: archive note 24",
+          "url": "https://news.example.com/marrow-creek-footbridge/24",
+          "snippet": "A 2019 survey found the timber had been treated with a preservative every decade. The county heritage register lists it as the oldest timber bridge still open to walkers. Local records describe a flood in 1936 that damaged the approaches but not the span. Annual inspections report no structural faults in the main trusses.",
+          "date": "2018-06-19"
+        },
+        {
+          "source_name": "news.example.org",
+          "title": "The Marrow Creek footbridge: archive note 25",
+          "url": "https://news.example.org/marrow-creek-footbridge/25",
+          "snippet": "A 2019 survey found the timber had been treated with a preservative every decade. Annual inspections report no structural faults in the main trusses. Its deck was replaced in 1968 and again in 2004, while the original trusses remain.",
+          "date": "2026-03-11"
+        },
+        {
+          "source_name": "reports.example.net",
+          "title": "The Marrow Creek footbridge: library note 26",
+          "url": "https://reports.example.net/marrow-creek-footbridge/26",
+          "snippet": "The county heritage register lists it as the oldest timber bridge still open to walkers. Annual inspections report no structural faults in the main trusses. A plaque at the east end records the names of the carpenters who built it.",
+          "date": ""
+        },
+        {
+          "source_name": "archive.example.net",
+          "title": "The Marrow Creek footbridge: guides note 27",
+          "url": "https://archive.example.net/marrow-creek-footbridge/27",
+          "snippet": "The bridge carries about four hundred walkers on a typical summer weekend. A plaque at the east end records the names of the carpenters who built it. Its deck was replaced in 1968 and again in 2004, while the original trusses remain.",
+          "date": ""
+        },
+        {
+          "source_name": "news.example.com",
+          "title": "The Marrow Creek footbridge: archive note 28",
+          "url": "https://news.example.com/marrow-creek-footbridge/28",
+          "snippet": "The county heritage register lists it as the oldest timber bridge still open to walkers. Its deck was replaced in 1968 and again in 2004, while the original trusses remain. A plaque at the east end records the names of the carpenters who built it.",
+          "date": ""
+        }
+      ],
+      "language": "en",
+      "coverage": null
+    }
+  },
+  "thirty-three-sources": {
+    "captured_at": "synthetic",
+    "endpoint": "GET /api/v1/verifications/4b8d2f60",
+    "status": 200,
+    "body": {
+      "verification_id": "4b8d2f60",
+      "claim": "It now counts about ninety member farms across three valleys.",
+      "visibility": "public",
+      "depth": "standard",
+      "domain": "Health",
+      "entities": [
+        {
+          "name": "Harlow Valley Orchard Cooperative",
+          "qid": null
+        },
+        {
+          "name": "Harlow Valley",
+          "qid": null
+        },
+        {
+          "name": "Local records office",
+          "qid": null
+        }
+      ],
+      "presumed_intent": "Check what is recorded about the Harlow Valley orchard cooperative.",
+      "verdict": "False",
+      "confidence": "high",
+      "lenz_score": 2,
+      "key_finding": "Its bylaws require members to set aside a share of each harvest for the local school.",
+      "executive_summary": "Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. Its bylaws require members to set aside a share of each harvest for the local school. The cooperative publishes its annual yields in a report to members each spring. It now counts about ninety member farms across three valleys. The Harlow Valley orchard cooperative was founded by twelve growers in 1952.",
+      "warnings": [
+        "The Harlow Valley orchard cooperative was founded by twelve growers in 1952.",
+        "The cooperative runs a cider press that any member may book for a day. Apple varieties grown by members include several found nowhere else in the region.",
+        "The Harlow Valley orchard cooperative was founded by twelve growers in 1952."
+      ],
+      "created_at": "2026-08-11T10:00:00+00:00",
+      "modified_at": null,
+      "sources": [
+        {
+          "source_name": "records.example.com",
+          "title": "The Harlow Valley orchard cooperative: guides note 1",
+          "url": "https://records.example.com/harlow-valley-orchard-cooperative/1",
+          "snippet": "The cooperative publishes its annual yields in a report to members each spring. The cooperative runs a cider press that any member may book for a day. Its bylaws require members to set aside a share of each harvest for the local school.",
+          "date": "2026-08-04"
+        },
+        {
+          "source_name": "records.example.net",
+          "title": "The Harlow Valley orchard cooperative: reports note 2",
+          "url": "https://records.example.net/harlow-valley-orchard-cooperative/2",
+          "snippet": "Its bylaws require members to set aside a share of each harvest for the local school. The cooperative runs a cider press that any member may book for a day. Apple varieties grown by members include several found nowhere else in the region. A cold spell in 2021 cut the apple harvest by roughly a third.",
+          "date": "1998-12-01"
+        },
+        {
+          "source_name": "library.example.net",
+          "title": "The Harlow Valley orchard cooperative: records note 3",
+          "url": "https://library.example.net/harlow-valley-orchard-cooperative/3",
+          "snippet": "A cold spell in 2021 cut the apple harvest by roughly a third. Apple varieties grown by members include several found nowhere else in the region. Members vote on new plantings at a meeting held every November. It now counts about ninety member farms across three valleys.",
+          "date": "2019-04-08"
+        },
+        {
+          "source_name": "reports.example.net",
+          "title": "The Harlow Valley orchard cooperative: studies note 4",
+          "url": "https://reports.example.net/harlow-valley-orchard-cooperative/4",
+          "snippet": "Apple varieties grown by members include several found nowhere else in the region. The cooperative publishes its annual yields in a report to members each spring. Members vote on new plantings at a meeting held every November.",
+          "date": "2024-08-14"
+        },
+        {
+          "source_name": "reports.example.com",
+          "title": "The Harlow Valley orchard cooperative: reports note 5",
+          "url": "https://reports.example.com/harlow-valley-orchard-cooperative/5",
+          "snippet": "Members vote on new plantings at a meeting held every November. The cooperative runs a cider press that any member may book for a day. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Its bylaws require members to set aside a share of each harvest for the local school. Apple varieties grown by members include several found nowhere else in the region. The cooperative publishes its annual yields in a report to members each spring.",
+          "date": "2015-05-06"
+        },
+        {
+          "source_name": "records.example.com",
+          "title": "The Harlow Valley orchard cooperative: guides note 6",
+          "url": "https://records.example.com/harlow-valley-orchard-cooperative/6",
+          "snippet": "A cold spell in 2021 cut the apple harvest by roughly a third. Its bylaws require members to set aside a share of each harvest for the local school. Members vote on new plantings at a meeting held every November. The cooperative runs a cider press that any member may book for a day. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. It now counts about ninety member farms across three valleys.",
+          "date": ""
+        },
+        {
+          "source_name": "archive.example.net",
+          "title": "The Harlow Valley orchard cooperative: studies note 7",
+          "url": "https://archive.example.net/harlow-valley-orchard-cooperative/7",
+          "snippet": "The cooperative publishes its annual yields in a report to members each spring. It now counts about ninety member farms across three valleys. The Harlow Valley orchard cooperative was founded by twelve growers in 1952.",
+          "date": "2017-04-27"
+        },
+        {
+          "source_name": "records.example.net",
+          "title": "The Harlow Valley orchard cooperative: guides note 8",
+          "url": "https://records.example.net/harlow-valley-orchard-cooperative/8",
+          "snippet": "The cooperative runs a cider press that any member may book for a day. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Its bylaws require members to set aside a share of each harvest for the local school. Apple varieties grown by members include several found nowhere else in the region. A cold spell in 2021 cut the apple harvest by roughly a third. It now counts about ninety member farms across three valleys. The cooperative publishes its annual yields in a report to members each spring.",
+          "date": "2013-10-16"
+        },
+        {
+          "source_name": "reports.example.net",
+          "title": "The Harlow Valley orchard cooperative: reports note 9",
+          "url": "https://reports.example.net/harlow-valley-orchard-cooperative/9",
+          "snippet": "A cold spell in 2021 cut the apple harvest by roughly a third. The Harlow Valley orchard cooperative was founded by twelve growers in 1952.",
+          "date": "2006-06-08"
+        },
+        {
+          "source_name": "news.example.net",
+          "title": "The Harlow Valley orchard cooperative: news note 10",
+          "url": "https://news.example.net/harlow-valley-orchard-cooperative/10",
+          "snippet": "The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. Its bylaws require members to set aside a share of each harvest for the local school. The cooperative publishes its annual yields in a report to members each spring. Members vote on new plantings at a meeting held every November. It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. The cooperative runs a cider press that any member may book for a day. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. Its bylaws require members to set aside a share of each harvest for the local school. The cooperative publishes its annual yields in a report to members each spring. Members vote on new plantings at a meeting held every November. It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. The cooperative runs a cider press that any member may book for a day.",
+          "date": "2021-10-16"
+        },
+        {
+          "source_name": "reports.example.com",
+          "title": "The Harlow Valley orchard cooperative: library note 11",
+          "url": "https://reports.example.com/harlow-valley-orchard-cooperative/11",
+          "snippet": "Members vote on new plantings at a meeting held every November. A cold spell in 2021 cut the apple harvest by roughly a third. It now counts about ninety member farms across three valleys.",
+          "date": "2024-07-26"
+        },
+        {
+          "source_name": "news.example.net",
+          "title": "The Harlow Valley orchard cooperative: studies note 12",
+          "url": "https://news.example.net/harlow-valley-orchard-cooperative/12",
+          "snippet": "Apple varieties grown by members include several found nowhere else in the region. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Members vote on new plantings at a meeting held every November. A cold spell in 2021 cut the apple harvest by roughly a third. Its bylaws require members to set aside a share of each harvest for the local school. The cooperative runs a cider press that any member may book for a day.",
+          "date": "2006-08-16"
+        },
+        {
+          "source_name": "archive.example.net",
+          "title": "The Harlow Valley orchard cooperative: news note 13",
+          "url": "https://archive.example.net/harlow-valley-orchard-cooperative/13",
+          "snippet": "The cooperative runs a cider press that any member may book for a day. A cold spell in 2021 cut the apple harvest by roughly a third. Its bylaws require members to set aside a share of each harvest for the local school. Apple varieties grown by members include several found nowhere else in the region. It now counts about ninety member farms across three valleys. The cooperative publishes its annual yields in a report to members each spring. Members vote on new plantings at a meeting held every November.",
+          "date": "2023-07-10"
+        },
+        {
+          "source_name": "studies.example.net",
+          "title": "The Harlow Valley orchard cooperative: studies note 14",
+          "url": "https://studies.example.net/harlow-valley-orchard-cooperative/14",
+          "snippet": "A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. It now counts about ninety member farms across three valleys. The cooperative runs a cider press that any member may book for a day. Apple varieties grown by members include several found nowhere else in the region. The cooperative publishes its annual yields in a report to members each spring. Its bylaws require members to set aside a share of each harvest for the local school.",
+          "date": "2022-06-27"
+        },
+        {
+          "source_name": "archive.example.com",
+          "title": "The Harlow Valley orchard cooperative: studies note 15",
+          "url": "https://archive.example.com/harlow-valley-orchard-cooperative/15",
+          "snippet": "Its bylaws require members to set aside a share of each harvest for the local school. The Harlow Valley orchard cooperative was founded by twelve growers in 1952.",
+          "date": "2022-11-01"
+        },
+        {
+          "source_name": "notes.example.net",
+          "title": "The Harlow Valley orchard cooperative: library note 16",
+          "url": "https://notes.example.net/harlow-valley-orchard-cooperative/16",
+          "snippet": "It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third.",
+          "date": "2013-03-13"
+        },
+        {
+          "source_name": "news.example.net",
+          "title": "The Harlow Valley orchard cooperative: guides note 17",
+          "url": "https://news.example.net/harlow-valley-orchard-cooperative/17",
+          "snippet": "Its bylaws require members to set aside a share of each harvest for the local school. Members vote on new plantings at a meeting held every November. It now counts about ninety member farms across three valleys. The cooperative publishes its annual yields in a report to members each spring. Apple varieties grown by members include several found nowhere else in the region.",
+          "date": "2020-07-23"
+        },
+        {
+          "source_name": "archive.example.net",
+          "title": "The Harlow Valley orchard cooperative: guides note 18",
+          "url": "https://archive.example.net/harlow-valley-orchard-cooperative/18",
+          "snippet": "Members vote on new plantings at a meeting held every November. It now counts about ninety member farms across three valleys. Its bylaws require members to set aside a share of each harvest for the local school.",
+          "date": "2022-12-20"
+        },
+        {
+          "source_name": "archive.example.net",
+          "title": "The Harlow Valley orchard cooperative: archive note 19",
+          "url": "https://archive.example.net/harlow-valley-orchard-cooperative/19",
+          "snippet": "The cooperative runs a cider press that any member may book for a day. A cold spell in 2021 cut the apple harvest by roughly a third. Apple varieties grown by members include several found nowhere else in the region. Members vote on new plantings at a meeting held every November. Its bylaws require members to set aside a share of each harvest for the local school.",
+          "date": "2020-07-23"
+        },
+        {
+          "source_name": "notes.example.org",
+          "title": "The Harlow Valley orchard cooperative: studies note 20",
+          "url": "https://notes.example.org/harlow-valley-orchard-cooperative/20",
+          "snippet": "Members vote on new plantings at a meeting held every November. It now counts about ninety member farms across three valleys. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. Its bylaws require members to set aside a share of each harvest for the local school. A cold spell in 2021 cut the apple harvest by roughly a third. The Harlow Valley orchard cooperative was founded by twelve growers in 1952.",
+          "date": "2021-03-20"
+        },
+        {
+          "source_name": "notes.example.net",
+          "title": "The Harlow Valley orchard cooperative: guides note 21",
+          "url": "https://notes.example.net/harlow-valley-orchard-cooperative/21",
+          "snippet": "The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Its bylaws require members to set aside a share of each harvest for the local school.",
+          "date": "2023-08-21"
+        },
+        {
+          "source_name": "library.example.net",
+          "title": "The Harlow Valley orchard cooperative: archive note 22",
+          "url": "https://library.example.net/harlow-valley-orchard-cooperative/22",
+          "snippet": "Members vote on new plantings at a meeting held every November. The cooperative publishes its annual yields in a report to members each spring.",
+          "date": "2020-07-01"
+        },
+        {
+          "source_name": "records.example.net",
+          "title": "The Harlow Valley orchard cooperative: reports note 23",
+          "url": "https://records.example.net/harlow-valley-orchard-cooperative/23",
+          "snippet": "Its bylaws require members to set aside a share of each harvest for the local school. Members vote on new plantings at a meeting held every November. The cooperative publishes its annual yields in a report to members each spring. The cooperative runs a cider press that any member may book for a day.",
+          "date": "2014-01-01"
+        },
+        {
+          "source_name": "library.example.net",
+          "title": "The Harlow Valley orchard cooperative: reports note 24",
+          "url": "https://library.example.net/harlow-valley-orchard-cooperative/24",
+          "snippet": "Apple varieties grown by members include several found nowhere else in the region. A cold spell in 2021 cut the apple harvest by roughly a third.",
+          "date": "2026-07-22"
+        },
+        {
+          "source_name": "studies.example.org",
+          "title": "The Harlow Valley orchard cooperative: archive note 25",
+          "url": "https://studies.example.org/harlow-valley-orchard-cooperative/25",
+          "snippet": "The Harlow Valley orchard cooperative was founded by twelve growers in 1952.",
+          "date": ""
+        },
+        {
+          "source_name": "records.example.org",
+          "title": "The Harlow Valley orchard cooperative: news note 26",
+          "url": "https://records.example.org/harlow-valley-orchard-cooperative/26",
+          "snippet": "Members vote on new plantings at a meeting held every November. The cooperative publishes its annual yields in a report to members each spring. Its bylaws require members to set aside a share of each harvest for the local school. A cold spell in 2021 cut the apple harvest by roughly a third. The cooperative runs a cider press that any member may book for a day.",
+          "date": ""
+        },
+        {
+          "source_name": "guides.example.org",
+          "title": "The Harlow Valley orchard cooperative: records note 27",
+          "url": "https://guides.example.org/harlow-valley-orchard-cooperative/27",
+          "snippet": "Members vote on new plantings at a meeting held every November. The cooperative publishes its annual yields in a report to members each spring. It now counts about ninety member farms across three valleys. The cooperative runs a cider press that any member may book for a day.",
+          "date": "2001-11-01"
+        },
+        {
+          "source_name": "reports.example.com",
+          "title": "The Harlow Valley orchard cooperative: notes note 28",
+          "url": "https://reports.example.com/harlow-valley-orchard-cooperative/28",
+          "snippet": "Members vote on new plantings at a meeting held every November. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring. Its bylaws require members to set aside a share of each harvest for the local school.",
+          "date": "2024-07-09"
+        },
+        {
+          "source_name": "reports.example.net",
+          "title": "The Harlow Valley orchard cooperative: reports note 29",
+          "url": "https://reports.example.net/harlow-valley-orchard-cooperative/29",
+          "snippet": "Its bylaws require members to set aside a share of each harvest for the local school. The cooperative publishes its annual yields in a report to members each spring. It now counts about ninety member farms across three valleys.",
+          "date": "2002-04-01"
+        },
+        {
+          "source_name": "notes.example.org",
+          "title": "The Harlow Valley orchard cooperative: archive note 30",
+          "url": "https://notes.example.org/harlow-valley-orchard-cooperative/30",
+          "snippet": "The Harlow Valley orchard cooperative was founded by twelve growers in 1952. It now counts about ninety member farms across three valleys. The cooperative runs a cider press that any member may book for a day.",
+          "date": "2022-07-07"
+        },
+        {
+          "source_name": "notes.example.org",
+          "title": "The Harlow Valley orchard cooperative: news note 31",
+          "url": "https://notes.example.org/harlow-valley-orchard-cooperative/31",
+          "snippet": "Members vote on new plantings at a meeting held every November. It now counts about ninety member farms across three valleys. The cooperative runs a cider press that any member may book for a day.",
+          "date": "2021-09-16"
+        },
+        {
+          "source_name": "news.example.net",
+          "title": "The Harlow Valley orchard cooperative: news note 32",
+          "url": "https://news.example.net/harlow-valley-orchard-cooperative/32",
+          "snippet": "A cold spell in 2021 cut the apple harvest by roughly a third. Apple varieties grown by members include several found nowhere else in the region.",
+          "date": "2012-06-01"
+        },
+        {
+          "source_name": "guides.example.com",
+          "title": "The Harlow Valley orchard cooperative: library note 33",
+          "url": "https://guides.example.com/harlow-valley-orchard-cooperative/33",
+          "snippet": "A cold spell in 2021 cut the apple harvest by roughly a third. It now counts about ninety member farms across three valleys. The cooperative runs a cider press that any member may book for a day. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Members vote on new plantings at a meeting held every November. Its bylaws require members to set aside a share of each harvest for the local school.",
+          "date": ""
+        }
+      ],
+      "language": "en",
+      "coverage": null
+    }
+  },
+  "long-quote": {
+    "captured_at": "synthetic",
+    "endpoint": "GET /api/v1/verifications/e91a5c37",
+    "status": 200,
+    "body": {
+      "verification_id": "e91a5c37",
+      "claim": "Lake Orvell covers about eleven square kilometres and is fed by four streams.",
+      "visibility": "public",
+      "depth": "standard",
+      "domain": "General",
+      "entities": [
+        {
+          "name": "Lake Orvell",
+          "qid": null
+        },
+        {
+          "name": "the Orvell uplands",
+          "qid": null
+        }
+      ],
+      "presumed_intent": "Check what is recorded about Lake Orvell.",
+      "verdict": "True",
+      "confidence": "high",
+      "lenz_score": 9,
+      "key_finding": "Boating is limited to non-motorised craft under a district rule adopted in 1999.",
+      "executive_summary": "Water quality monitoring has run at three fixed points since 1987. The deepest point measured in the last survey was forty-one metres. Lake Orvell covers about eleven square kilometres and is fed by four streams. The lakeside path is about nineteen kilometres long and fully signposted. Boating is limited to non-motorised craft under a district rule adopted in 1999.",
+      "warnings": [
+        "Lake Orvell covers about eleven square kilometres and is fed by four streams.",
+        "Summer algae blooms have become shorter since runoff controls were added upstream."
+      ],
+      "created_at": "2026-08-12T10:00:00+00:00",
+      "modified_at": null,
+      "sources": [
+        {
+          "source_name": "library.example.net",
+          "title": "Lake Orvell: guides note 1",
+          "url": "https://library.example.net/lake-orvell/1",
+          "snippet": "The deepest point measured in the last survey was forty-one metres. The lake freezes over in most winters, usually for six to eight weeks. A reintroduced population of native trout has grown steadily since 2010. Boating is limited to non-motorised craft under a district rule adopted in 1999. Water quality monitoring has run at three fixed points since 1987. The lakeside path is about nineteen kilometres long and fully signposted. Lake Orvell covers about eleven square kilometres and is fed by four streams. Summer algae blooms have become shorter since runoff controls were added upstream. The deepest point measured in the last survey was forty-one metres.",
+          "date": "2019-10-08"
+        },
+        {
+          "source_name": "news.example.com",
+          "title": "Lake Orvell: notes note 2",
+          "url": "https://news.example.com/lake-orvell/2",
+          "snippet": "Boating is limited to non-motorised craft under a district rule adopted in 1999. The lake freezes over in most winters, usually for six to eight weeks. The deepest point measured in the last survey was forty-one metres. Water quality monitoring has run at three fixed points since 1987. A reintroduced population of native trout has grown steadily since 2010. Lake Orvell covers about eleven square kilometres and is fed by four streams. Summer algae blooms have become shorter since runoff controls were added upstream. The lakeside path is about nineteen kilometres long and fully signposted. Boating is limited to non-motorised craft under a district rule adopted in 1999.",
+          "date": "2024-03-01"
+        },
+        {
+          "source_name": "notes.example.net",
+          "title": "",
+          "url": "https://notes.example.net/lake-orvell/3",
+          "snippet": "A reintroduced population of native trout has grown steadily since 2010. Boating is limited to non-motorised craft under a district rule adopted in 1999. The lakeside path is about nineteen kilometres long and fully signposted. Summer algae blooms have become shorter since runoff controls were added upstream. The lake freezes over in most winters, usually for six to eight weeks. Water quality monitoring has run at three fixed points since 1987.",
+          "date": "2016-05-01"
+        },
+        {
+          "source_name": "library.example.net",
+          "title": "Lake Orvell: records note 4",
+          "url": "https://library.example.net/lake-orvell/4",
+          "snippet": "Lake Orvell covers about eleven square kilometres and is fed by four streams. Boating is limited to non-motorised craft under a district rule adopted in 1999. The lakeside path is about nineteen kilometres long and fully signposted. The deepest point measured in the last survey was forty-one metres. A reintroduced population of native trout has grown steadily since 2010. Water quality monitoring has run at three fixed points since 1987. Summer algae blooms have become shorter since runoff controls were added upstream. The lake freezes over in most winters, usually for six to eight weeks. Lake Orvell covers about eleven square kilometres and is fed by four streams.",
+          "date": "2015-04-13"
+        },
+        {
+          "source_name": "archive.example.org",
+          "title": "Lake Orvell: studies note 5",
+          "url": "https://archive.example.org/lake-orvell/5",
+          "snippet": "The deepest point measured in the last survey was forty-one metres. Water quality monitoring has run at three fixed points since 1987. The lakeside path is about nineteen kilometres long and fully signposted. Lake Orvell covers about eleven square kilometres and is fed by four streams. Boating is limited to non-motorised craft under a district rule adopted in 1999.",
+          "date": "2008-01-01"
+        },
+        {
+          "source_name": "library.example.org",
+          "title": "Lake Orvell: notes note 6",
+          "url": "https://library.example.org/lake-orvell/6",
+          "snippet": "Boating is limited to non-motorised craft under a district rule adopted in 1999. The lakeside path is about nineteen kilometres long and fully signposted. Water quality monitoring has run at three fixed points since 1987. The lake freezes over in most winters, usually for six to eight weeks. Summer algae blooms have become shorter since runoff controls were added upstream. A reintroduced population of native trout has grown steadily since 2010. Lake Orvell covers about eleven square kilometres and is fed by four streams. The deepest point measured in the last survey was forty-one metres. Boating is limited to non-motorised craft under a district rule adopted in 1999.",
+          "date": ""
+        },
+        {
+          "source_name": "guides.example.org",
+          "title": "Lake Orvell: archive note 7",
+          "url": "https://guides.example.org/lake-orvell/7",
+          "snippet": "The lakeside path is about nineteen kilometres long and fully signposted. Water quality monitoring has run at three fixed points since 1987. Lake Orvell covers about eleven square kilometres and is fed by four streams. A reintroduced population of native trout has grown steadily since 2010. The deepest point measured in the last survey was forty-one metres. Boating is limited to non-motorised craft under a district rule adopted in 1999. Summer algae blooms have become shorter since runoff controls were added upstream. The lake freezes over in most winters, usually for six to eight weeks. The lakeside path is about nineteen kilometres long and fully signposted.",
+          "date": ""
+        },
+        {
+          "source_name": "archive.example.com",
+          "title": "Lake Orvell: records note 8",
+          "url": "https://archive.example.com/lake-orvell/8",
+          "snippet": "Water quality monitoring has run at three fixed points since 1987. Summer algae blooms have become shorter since runoff controls were added upstream. Boating is limited to non-motorised craft under a district rule adopted in 1999. The deepest point measured in the last survey was forty-one metres. The lake freezes over in most winters, usually for six to eight weeks. A reintroduced population of native trout has grown steadily since 2010.",
+          "date": "2022-01-01"
+        },
+        {
+          "source_name": "records.example.net",
+          "title": "Lake Orvell: studies note 9",
+          "url": "https://records.example.net/lake-orvell/9",
+          "snippet": "Lake Orvell covers about eleven square kilometres and is fed by four streams. Water quality monitoring has run at three fixed points since 1987. Summer algae blooms have become shorter since runoff controls were added upstream. Boating is limited to non-motorised craft under a district rule adopted in 1999. The lakeside path is about nineteen kilometres long and fully signposted. The lake freezes over in most winters, usually for six to eight weeks. A reintroduced population of native trout has grown steadily since 2010. The deepest point measured in the last survey was forty-one metres.",
+          "date": "2024-02-21"
+        },
+        {
+          "source_name": "reports.example.com",
+          "title": "Lake Orvell: guides note 10",
+          "url": "https://reports.example.com/lake-orvell/10",
+          "snippet": "Summer algae blooms have become shorter since runoff controls were added upstream.",
+          "date": "2025-08-02"
+        },
+        {
+          "source_name": "records.example.org",
+          "title": "Lake Orvell: notes note 11",
+          "url": "https://records.example.org/lake-orvell/11",
+          "snippet": "Boating is limited to non-motorised craft under a district rule adopted in 1999. Summer algae blooms have become shorter since runoff controls were added upstream.",
+          "date": "2018-09-02"
+        },
+        {
+          "source_name": "news.example.org",
+          "title": "Lake Orvell: library note 12",
+          "url": "https://news.example.org/lake-orvell/12",
+          "snippet": "A reintroduced population of native trout has grown steadily since 2010. Summer algae blooms have become shorter since runoff controls were added upstream. Water quality monitoring has run at three fixed points since 1987. Boating is limited to non-motorised craft under a district rule adopted in 1999.",
+          "date": "2020-01-01"
+        },
+        {
+          "source_name": "records.example.net",
+          "title": "Lake Orvell: notes note 13",
+          "url": "https://records.example.net/lake-orvell/13",
+          "snippet": "The lakeside path is about nineteen kilometres long and fully signposted. A reintroduced population of native trout has grown steadily since 2010. Water quality monitoring has run at three fixed points since 1987. The deepest point measured in the last survey was forty-one metres.",
+          "date": "2023-12-11"
+        },
+        {
+          "source_name": "archive.example.org",
+          "title": "Lake Orvell: records note 14",
+          "url": "https://archive.example.org/lake-orvell/14",
+          "snippet": "Summer algae blooms have become shorter since runoff controls were added upstream. The deepest point measured in the last survey was forty-one metres. Lake Orvell covers about eleven square kilometres and is fed by four streams. The lakeside path is about nineteen kilometres long and fully signposted. Boating is limited to non-motorised craft under a district rule adopted in 1999. The lake freezes over in most winters, usually for six to eight weeks. A reintroduced population of native trout has grown steadily since 2010. Water quality monitoring has run at three fixed points since 1987. Summer algae blooms have become shorter since runoff controls were added upstream. The deepest point measured in the last survey was forty-one metres. Lake Orvell covers about eleven square kilometres and is fed by four streams. The lakeside path is about nineteen kilometres long and fully signposted. Boating is limited to non-motorised craft under a district rule adopted in 1999. The lake freezes over in most winters, usually for six to eight weeks. A reintroduced population of native trout has grown steadily since 2010. Water quality monitoring has run at three fixed points since 1987. Summer algae blooms have become shorter since runoff controls were added upstream. The deepest point measured in the last survey was forty-one metres. Lake Orvell covers about eleven square kilometres and is fed by four streams. The lakeside path is about nineteen kilometres long and fully signposted.",
+          "date": ""
+        },
+        {
+          "source_name": "reports.example.org",
+          "title": "Lake Orvell: notes note 15",
+          "url": "https://reports.example.org/lake-orvell/15",
+          "snippet": "The deepest point measured in the last survey was forty-one metres. A reintroduced population of native trout has grown steadily since 2010. Water quality monitoring has run at three fixed points since 1987. The lakeside path is about nineteen kilometres long and fully signposted. Summer algae blooms have become shorter since runoff controls were added upstream. Boating is limited to non-motorised craft under a district rule adopted in 1999. Lake Orvell covers about eleven square kilometres and is fed by four streams. The lake freezes over in most winters, usually for six to eight weeks. The deepest point measured in the last survey was forty-one metres. A reintroduced population of native trout has grown steadily since 2010.",
+          "date": "2020-01-16"
+        },
+        {
+          "source_name": "notes.example.com",
+          "title": "Lake Orvell: records note 16",
+          "url": "https://notes.example.com/lake-orvell/16",
+          "snippet": "The lake freezes over in most winters, usually for six to eight weeks.",
+          "date": "2025-09-01"
+        },
+        {
+          "source_name": "archive.example.org",
+          "title": "Lake Orvell: library note 17",
+          "url": "https://archive.example.org/lake-orvell/17",
+          "snippet": "Water quality monitoring has run at three fixed points since 1987. A reintroduced population of native trout has grown steadily since 2010.",
+          "date": "2022-01-01"
+        }
+      ],
+      "language": "en",
+      "coverage": null
+    }
+  }
+}

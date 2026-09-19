@@ -1,0 +1,25 @@
+{
+  "name": "lenz-card",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Lenz verdict card (MCP Apps). Preact, built to a committed dist/ served by src/lenz_mcp/mcp_card.py.",
+  "type": "module",
+  "cardVersion": 3,
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test \"src/**/*.test.js\"",
+    "test:host": "node --test tests/host.test.mjs",
+    "render": "node tests/render.mjs",
+    "build:dev": "node build.mjs --dev",
+    "smoke": "node tests/mount-smoke.mjs",
+    "check:published": "node tests/check-published-bundles.mjs"
+  },
+  "dependencies": {
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "axe-core": "4.10.3",
+    "esbuild": "0.24.2",
+    "playwright-core": "1.58.2"
+  }
+}

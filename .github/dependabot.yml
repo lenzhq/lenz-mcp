@@ -1,0 +1,46 @@
+version: 2
+
+# One weekly pull request per ecosystem for minor and patch updates, and one
+# for major updates, which change behaviour and are reviewed on their own.
+# The groups apply to version updates only: a security update still arrives
+# as soon as it is published, in its own pull request.
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python-minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+      python-major:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [major]
+  - package-ecosystem: npm
+    directory: /src/lenz_mcp/card
+    schedule:
+      interval: weekly
+    groups:
+      card-minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+      card-major:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [major]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+      actions-major:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [major]

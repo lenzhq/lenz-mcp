@@ -1,0 +1,185 @@
+name: ci
+
+# Every job runs on every pull request and every push to main: a workflow that
+# filtered its triggers by path would leave its required check pending forever
+# on a pull request that touched nothing it watches. `ci-ok` is the one check
+# branch protection requires; it passes only when every job below succeeded.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - run: uv sync --frozen --group dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - name: No private references in tracked files
+        run: python3 scripts/scrub_check.py
+
+  types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - run: uv sync --frozen --group dev
+      - run: uv run mypy
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - run: uv sync --frozen --group dev --group eval --python ${{ matrix.python }}
+      # The server's tests, the wire harness on both protocol eras, and the
+      # per-client goldens of what each model sees.
+      - run: uv run --python ${{ matrix.python }} pytest -q
+
+  card:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: src/lenz_mcp/card
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/lenz_mcp/card/package-lock.json
+      - run: npm ci
+      - name: The committed bundle was built from the current src/
+        run: |
+          npm run build
+          dirty="$(git status --porcelain -- dist)"
+          if [ -n "${dirty}" ]; then
+            echo "::error file=src/lenz_mcp/card/dist/versions.json::Rebuilding the card changed dist/. Run \`npm run build\` in src/lenz_mcp/card and commit the result."
+            printf '%s\n' "${dirty}"
+            exit 1
+          fi
+      - name: The committed dev bundle was built from the current src/ too
+        run: |
+          npm run build:dev
+          dirty="$(git status --porcelain -- dist-dev)"
+          if [ -n "${dirty}" ]; then
+            echo "::error::Rebuilding the dev card changed dist-dev/. Run \`npm run build:dev\` and commit the result."
+            exit 1
+          fi
+      - name: A published card bundle has not changed
+        run: BASE_REF=origin/main npm run check:published
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/card-unit.log
+          bash ../../../scripts/check-node-test-count.sh /tmp/card-unit.log 70 "npm test"
+      - name: Install Chromium
+        run: |
+          version="$(node -p "require('./package-lock.json').packages['node_modules/playwright-core'].version")"
+          npx --yes "playwright@${version}" install --with-deps chromium
+      - name: The built card mounts at all
+        run: npm run smoke
+      - name: Stub-host flows
+        run: |
+          set -o pipefail
+          npm run test:host 2>&1 | tee /tmp/card-host.log
+          bash ../../../scripts/check-node-test-count.sh /tmp/card-host.log 35 "npm run test:host"
+      - name: Every card state through the stub host (axe, reflow, console)
+        run: |
+          set -o pipefail
+          npm run render -- "${RUNNER_TEMP}/card-gallery" 2>&1 | tee /tmp/card-render.log
+          states="$(sed -nE 's/^([0-9]+) states .*/\1/p' /tmp/card-render.log | tail -1)"
+          if [ -z "${states}" ] || [ "${states}" -lt 60 ]; then
+            echo "::error::the gallery rendered ${states:-no} states, below the floor of 60."
+            exit 1
+          fi
+
+  wheel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: Build the wheel
+        run: LENZ_MCP_VERSION=0.0.0.dev0 uv build --wheel --out-dir dist
+      - name: Install it alone and serve the card from package data
+        run: |
+          uv venv /tmp/wheel-venv
+          uv pip install --python /tmp/wheel-venv dist/*.whl
+          cd /tmp
+          /tmp/wheel-venv/bin/python - <<'PY'
+          import json
+          from importlib import metadata, resources
+
+          import lenz_mcp.asgi  # noqa: F401 - the app imports
+          from lenz_mcp import mcp_card
+
+          assert metadata.version('lenz-mcp') == '0.0.0.dev0'
+          dist = resources.files('lenz_mcp') / 'card' / 'dist'
+          versions = json.loads((dist / 'versions.json').read_text())
+          for uri, entry in versions.items():
+              assert (dist / entry['file']).read_text().startswith('<!doctype html>'), uri
+          assert not (resources.files('lenz_mcp') / 'card' / 'src').is_dir()
+          print(f'wheel ok: {len(versions)} card version(s), current {mcp_card.CARD_URI}')
+          PY
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: bash scripts/container_test.sh HEAD
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  ci-ok:
+    if: always()
+    needs: [lint, types, test, card, wheel, container, secrets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job succeeded
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          results = json.loads(os.environ['RESULTS'])
+          bad = [r for r in results if r != 'success']
+          if bad:
+              print(f'not every job succeeded: {bad}')
+              sys.exit(1)
+          print(f'{len(results)} jobs succeeded.')
+          PY

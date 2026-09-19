@@ -1,0 +1,349 @@
+{
+  "card_enabled": true,
+  "card_resource": {
+    "mimeTypes": [
+      "text/html;profile=mcp-app"
+    ],
+    "uri": "ui://lenz/card-v3"
+  },
+  "client": "no-user-agent",
+  "instructions": "Lenz checks the factual claims in a draft, a pasted text or your previous answer against independent sources. Use it when the user names Lenz; asks you to check, double-check, verify, confirm or fact-check something; asks you to audit a draft or your previous answer for factual errors; asks whether something is true or accurate; or doubts a factual statement you made (“are you sure?”, “is that right?”). Only when the statement is a factual claim: a fact, a figure, a date, a quote or an attribution. Not for opinions, predictions, arithmetic, how code behaves or text with no checkable claim. Start with `assess_claim`, the quick check, for one claim or a whole text: a verdict and a confidence for each claim in about 15-20 seconds. Present a quick verdict as a first read, not as final. When a row carries a `rationale`, show it with the verdict as the reviewers' reasoning, never as sourced evidence; when it carries a `dissent`, say that a reviewer disagreed and why. Then act on its confidence: on low, or when the claim is high-stakes for the user (legal, medical, financial, or about to be published), recommend a deep check; on medium, or when a row carries a dissent, offer one; on high, mention that one is available without pushing it. On a long text, name at most the two claims that matter; never start deep checks across every row. `verify_claim` is the deep check: a 1-10 score, the key finding, warnings and the main sources, in about 60-90 seconds, for more credits. Never start one without the user's yes, unless they asked for sources, a deep check or a verification: then run it directly. Say a deep check is running; if the call returns first, `get_verification` waits for it. A deep check replaces any earlier quick verdict on the same claim: if it changed, say so plainly and why, without apologising or averaging the two. If a deep check fails as `upstream_unavailable`, say source verification is unavailable. `list_verifications` finds an earlier deep check, or one whose result never arrived. `ask_followup` answers a follow-up on a completed deep check. `check_usage` shows credits left; never a prerequisite. Verdicts are directional, not absolute: always show the confidence.",
+  "prompts": [
+    {
+      "arguments": [
+        {
+          "description": "Paste the answer you want checked. Lenz cannot see the conversation, so it needs the text here.",
+          "name": "answer",
+          "required": true
+        }
+      ],
+      "description": "Check the factual claims in an answer your assistant gave against independent sources.",
+      "name": "check_last_answer",
+      "title": "Check your last answer with Lenz"
+    },
+    {
+      "arguments": [
+        {
+          "description": "The text to check: paste a draft, an article or any passage.",
+          "name": "text",
+          "required": true
+        }
+      ],
+      "description": "Check the factual claims in a text against independent sources: a draft, an article or any passage you paste.",
+      "name": "check_text",
+      "title": "Check this text with Lenz"
+    }
+  ],
+  "tools": [
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": true,
+        "title": "Ask a follow-up"
+      },
+      "description": "Ask a grounded follow-up question about a completed `verify_claim` result.\n\n    The `verify_claim`/`get_verification` result is trimmed; this reads the FULL\n    evidence (research, debate, per-panelist adjudication, all sources) the\n    trimmed payload omits and answers ``question`` from it. Pass the\n    ``verification_id`` returned by `get_verification` (NOT a task_id). Only\n    works on a completed `verify_claim` — not on `assess_claim` results. Costs\n    credits at the cheap rate, same as `assess_claim`. The conversation is kept\n    server-side per verification, so ask\n    follow-ups sequentially rather than in parallel. Replies in English unless\n    the user explicitly asked for another language — leave ``language`` unset.\n    ",
+      "inputSchema": {
+        "properties": {
+          "language": {
+            "default": "",
+            "description": "Leave unset. English is the default. Set this only if the user explicitly asked for the answer in another language — not to match the language of the claim, the conversation, or the user locale. Supported: en, es, de, fr, it, pt, nl, sv, da, no, fi, bg.",
+            "enum": [
+              "",
+              "en",
+              "es",
+              "de",
+              "fr",
+              "it",
+              "pt",
+              "nl",
+              "sv",
+              "da",
+              "no",
+              "fi",
+              "bg"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "question": {
+            "description": "The follow-up question, answered from the verification's full research, debate, and adjudication. Maximum 500 characters — ask one focused question rather than a multi-part one.",
+            "maxLength": 500,
+            "title": "Question",
+            "type": "string"
+          },
+          "verification_id": {
+            "description": "The verification_id of a COMPLETED verify_claim result (returned by get_verification) — NOT a task_id.",
+            "title": "Verification Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verification_id",
+          "question"
+        ],
+        "title": "ask_followupArguments",
+        "type": "object"
+      },
+      "meta_keys": [],
+      "model_visible": true,
+      "name": "ask_followup",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "ask_followupDictOutput",
+        "type": "object"
+      },
+      "title": "Ask a follow-up"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": true,
+        "title": "Fast fact-check"
+      },
+      "description": "The quick check: a verdict and a bucketed confidence for each factual claim in\n    a text or a list (3-model panel, about 15-20 seconds, one credit per claim).\n    Use it when the user says things like “fact-check this”, “double-check that”,\n    “is this accurate?”, “is that true?” or “are you sure?” about a factual\n    statement. When the user doubts something you said, pass the specific\n    statement being doubted, not the whole conversation.\n\n    For one claim or a whole text (a draft, a pasted text or your previous\n    answer), pass ONE text in ``claim`` (every claim found gets a row, up to\n    20) or up to 20 claims in ``claims`` (one row per item, same order). A\n    pasted text goes in ``claim`` whole and unedited — never split it, reword\n    it, resolve its pronouns or add figures. ``claims`` is only for claims the\n    user listed separately.\n    Verdicts are True / Mostly True / Mixed / Mostly False / False. No sources:\n    present each verdict as a first read, not as final. A row may carry\n    ``rationale``, a reviewer's reasoning for the verdict, and ``dissent``, the\n    reasoning of the reviewer farthest from it: reviewers' notes, not checked\n    sources. A low-confidence row carries ``recommend_verify: true`` and a\n    ``next_step``: recommend `verify_claim`, the deep check, and ask before\n    running it. On medium offer it; on high mention it. A vague claim is\n    assessed on its most likely reading (the row's ``claim``). Leave\n    ``language`` unset.\n    ",
+      "inputSchema": {
+        "properties": {
+          "claim": {
+            "default": "",
+            "description": "ONE statement to fact-check, in natural language (e.g. \"Honey never spoils\"). If the text contains several atomic claims, each is verdicted separately (up to 20, one credit per verdict). Leave empty when passing `claims`.",
+            "title": "Claim",
+            "type": "string"
+          },
+          "claims": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A list of up to 20 claims the user listed separately — one verdict per item, in the same order. Each item is one claim, not a document; a pasted text goes in `claim` instead. A compound item is judged on its main claim and the rest is listed in that row's `identified_claims`. Mutually exclusive with `claim`.",
+            "title": "Claims"
+          },
+          "language": {
+            "default": "",
+            "description": "Leave unset. English is the default. Set this only if the user explicitly asked for the answer in another language — not to match the language of the claim, the conversation, or the user locale. Supported: en, es, de, fr, it, pt, nl, sv, da, no, fi, bg.",
+            "enum": [
+              "",
+              "en",
+              "es",
+              "de",
+              "fr",
+              "it",
+              "pt",
+              "nl",
+              "sv",
+              "da",
+              "no",
+              "fi",
+              "bg"
+            ],
+            "title": "Language",
+            "type": "string"
+          }
+        },
+        "title": "assess_claimArguments",
+        "type": "object"
+      },
+      "meta_keys": [],
+      "model_visible": true,
+      "name": "assess_claim",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "assess_claimDictOutput",
+        "type": "object"
+      },
+      "title": "Fast fact-check"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Check usage & credits"
+      },
+      "description": "Return the account's remaining Lenz credits, and what they still buy.\n\n    One pool funds every call. ``costs`` is the live price list — read the\n    weight from there rather than assuming one. ``verify_claim`` is the\n    expensive tool by an order of magnitude; ``assess_claim`` and\n    ``ask_followup`` are the cheap ones.\n\n    ``costs`` is keyed by capability at its default price. ``cost_options``\n    holds the prices that depend on a request parameter, nested capability →\n    parameter → value — today ``verify_claim`` at ``depth=\"low\"``, under\n    ``cost_options.verify.depth.low``. Read the low-depth price from there.\n\n    ``assess_remaining`` and ``verify_remaining`` are two views of the SAME\n    balance, not separate allowances: spending on one reduces both. Call this\n    when the user asks about credits, or before a large batch to size it\n    against ``credits_remaining``. It is not a prerequisite: never call it\n    before an ordinary check. ``next`` is one example of what the user can ask.\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "check_usageArguments",
+        "type": "object"
+      },
+      "meta_keys": [],
+      "model_visible": true,
+      "name": "check_usage",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "check_usageDictOutput",
+        "type": "object"
+      },
+      "title": "Check usage & credits"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Get deep fact-check result"
+      },
+      "description": "Get a deep `verify_claim` result: wait for a running check by ``task_id``,\n    or fetch a completed one by ``verification_id``.\n\n    With a ``task_id`` (from `verify_claim` or `select_claims`) this waits for\n    the run to finish and returns ``status: completed`` with the\n    verdict, the 1–10 Lenz score, confidence, key finding, executive summary,\n    top sources, the ``depth`` the verdict was produced at and the\n    ``verification_id`` — pass that to `ask_followup` for a grounded follow-up.\n    If the check needs a decision (several claims, or a near-duplicate) it\n    returns ``status: needs_input`` with the options. Still ``processing``\n    after the wait means tell the user it is still running and call again;\n    `list_verifications` finds it later if the conversation moves on. A\n    completed result replaces any earlier quick verdict on the same claim; its\n    ``supersedes`` and ``presentation`` say how to tell the user. With an 8-character\n    ``verification_id`` it returns the stored result immediately. (No Lenz\n    link: verify_claim results are private to the caller, so a claim-page link\n    would be share-gated rather than publicly viewable.)\n    ",
+      "inputSchema": {
+        "properties": {
+          "task_id": {
+            "description": "The task_id returned by verify_claim or select_claims (waits for the running check), or the 8-character verification_id of a completed result (fetches it).",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "title": "get_verificationArguments",
+        "type": "object"
+      },
+      "meta_keys": [],
+      "model_visible": true,
+      "name": "get_verification",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "get_verificationDictOutput",
+        "type": "object"
+      },
+      "title": "Get deep fact-check result"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Your recent checks"
+      },
+      "description": "List the user's most recent completed deep checks (`verify_claim`), newest first, up to 10.\n\n    Call this when the user asks about an earlier deep check, or when a\n    `verify_claim` was started and its result never arrived: a check that\n    finished after the wait ended is listed here. A row appears only once a\n    check has finished, so a check still running is not listed yet, and quick\n    checks (`assess_claim`) are not stored. Each row carries the claim, the\n    verdict, the score, the confidence, the key finding and a\n    ``verification_id``: pass it to `get_verification` for the full result\n    with its sources, or to `ask_followup`. Read-only: it never starts a check\n    and costs no credits.\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "list_verificationsArguments",
+        "type": "object"
+      },
+      "meta_keys": [],
+      "model_visible": true,
+      "name": "list_verifications",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "list_verificationsDictOutput",
+        "type": "object"
+      },
+      "title": "Your recent checks"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false,
+        "title": "Resolve a multi-claim interrupt"
+      },
+      "description": "Resolve a `needs_input` verification by choosing which claim(s) to run.\n\n    When `verify_claim` or `get_verification` returns ``status: needs_input``\n    with reason ``multi_claim``, call this with\n    that ``task_id`` and a ``claims`` list of one or more of the offered claim\n    texts, exactly as listed. Each selected claim starts its own deep\n    verification. With ONE claim selected this waits for the check and\n    returns its result like `get_verification` (with the new ``task_id``);\n    with several it returns one ``task_id`` per claim to pass to\n    `get_verification`. (Not for ``duplicate_found`` — use the surfaced\n    `similar_claims` there instead.)\n    ",
+      "inputSchema": {
+        "properties": {
+          "claims": {
+            "description": "One or more of the exact claim texts offered by get_verification (its `claims`). Each selected claim starts its own deep verification.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "task_id": {
+            "description": "The task_id of the needs_input verification being resolved (from the get_verification response).",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "claims"
+        ],
+        "title": "select_claimsArguments",
+        "type": "object"
+      },
+      "meta_keys": [],
+      "model_visible": true,
+      "name": "select_claims",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "select_claimsDictOutput",
+        "type": "object"
+      },
+      "title": "Resolve a multi-claim interrupt"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false,
+        "title": "Deep fact-check"
+      },
+      "description": "The deep check: a verdict with a 1–10 score, the key finding, warnings and the\n    main sources for ONE claim (about a minute to a minute and a half).\n\n    Not the default. Run only when the user asked for sources, a deep check or\n    a verification, or agreed after a quick check; a plain \"check this\" is\n    `assess_claim`. Never start one unasked. It costs 10 credits against 1 for `assess_claim`\n    (``depth=\"low\"`` costs 5; `check_usage` has the live price list). Tell the\n    user the deep check is running. Waits for the check and returns\n    ``status: completed`` when it finishes in time — a claim Lenz has\n    checked before comes back at once. Otherwise returns ``status: submitted``\n    with a ``task_id``: call `get_verification` with it, which waits again. A\n    completed result replaces any earlier quick verdict on the same claim; its\n    ``supersedes`` and ``presentation`` say how to tell the user. If the text\n    contains several claims the result is ``status: needs_input`` with a\n    numbered list: show it to the user and call `select_claims` with the exact\n    text of the chosen claim(s).\n    ",
+      "inputSchema": {
+        "properties": {
+          "claim": {
+            "description": "ONE claim to check in depth against sources. Run it once the user agreed to a deep check, or when they asked for sources, a deep check or a verification.",
+            "title": "Claim",
+            "type": "string"
+          },
+          "depth": {
+            "default": "standard",
+            "description": "How much research to do. \"standard\" (default) is the full pass. \"low\" is a shallower one — fewer sources, the same models — for half the credits; it saves only about a fifth of the time, so both take about a minute or more. Pick \"low\" when the user wants to spend fewer credits. The charge follows the depth you request; the `depth` on the completed result is the depth the verdict was actually produced at (a \"low\" request may be served from an existing deeper check).",
+            "enum": [
+              "standard",
+              "low"
+            ],
+            "title": "Depth",
+            "type": "string"
+          },
+          "language": {
+            "default": "",
+            "description": "Leave unset. English is the default. Set this only if the user explicitly asked for the answer in another language — not to match the language of the claim, the conversation, or the user locale. Supported: en, es, de, fr, it, pt, nl, sv, da, no, fi, bg.",
+            "enum": [
+              "",
+              "en",
+              "es",
+              "de",
+              "fr",
+              "it",
+              "pt",
+              "nl",
+              "sv",
+              "da",
+              "no",
+              "fi",
+              "bg"
+            ],
+            "title": "Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim"
+        ],
+        "title": "verify_claimArguments",
+        "type": "object"
+      },
+      "meta_keys": [],
+      "model_visible": true,
+      "name": "verify_claim",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "verify_claimDictOutput",
+        "type": "object"
+      },
+      "title": "Deep fact-check"
+    }
+  ],
+  "user_agent": ""
+}
