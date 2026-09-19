@@ -539,14 +539,28 @@ function Row({ index, row, host, open, hidden, onToggle, announce, registerCompl
         <button type="button" class="lz-row-head" ref={headRef} aria-expanded={open} aria-controls={panelId} onClick={onToggle}>
           <span class="row-claim">{row.claim}</span>
           {row.error ? (
-            <span class="lz-meta">{copy.ROW_ERROR[row.error] || copy.ROW_ERROR_DEFAULT}</span>
+            <span class="lz-meta row-meta">{copy.ROW_ERROR[row.error] || copy.ROW_ERROR_DEFAULT}</span>
           ) : (
-            <span class="row-line">
-              <span class={`row-verdict ${busy ? 'dimmed' : `v-${verdictKey(verdict)}`}`}>{verdict}</span>
-              {result && result.score != null ? <span class="lz-meta row-score">{`${result.score}/10`}</span> : null}
-              {result ? <span class="lz-meta">{` · ${copy.rowSources(result.sourcesTotal)}`}</span> : null}
-              {!result && markers.length ? <span class="lz-meta">{` · ${markers.join(' · ')}`}</span> : null}
-            </span>
+            <>
+              <span class="row-line">
+                <span class={`row-verdict ${busy ? 'dimmed' : `v-${verdictKey(verdict)}`}`}>{verdict}</span>
+                {result && result.score != null ? <span class="lz-meta row-score">{`${result.score}/10`}</span> : null}
+              </span>
+              {/* The meta has its own line, but read aloud the row still runs "True 9/10 ·
+                  Checked against 14 sources": the separator is there for a screen reader. */}
+              {result ? (
+                <span class="lz-meta row-meta">
+                  <span class="lz-sr"> · </span>
+                  {copy.rowSources(result.sourcesTotal)}
+                </span>
+              ) : null}
+              {!result && markers.length ? (
+                <span class="lz-meta row-meta">
+                  <span class="lz-sr"> · </span>
+                  {markers.join(' · ')}
+                </span>
+              ) : null}
+            </>
           )}
         </button>
         {open ? (
@@ -604,11 +618,13 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
 
   return (
     <div class="lz">
-      <h1 class="lz-claim" tabIndex={-1}>
-        {copy.listHeading(rows.length)}
-      </h1>
-      <p class="lz-body lz-tally">{copy.tallyLine(tally(counted))}</p>
-      <div class="lz-region">
+      <div class="lz-head">
+        <h1 class="lz-claim" tabIndex={-1}>
+          {copy.listHeading(rows.length)}
+        </h1>
+        <p class="lz-body lz-tally">{copy.tallyLine(tally(counted))}</p>
+      </div>
+      <div class="lz-region lz-rows-region">
         <ol class="lz-list lz-rows">
           {rows.map((row, i) => (
             <Row
@@ -865,7 +881,7 @@ function PickedRows({ picks, requested = [], host, announce, registerCompleted, 
       <h1 class="lz-claim" tabIndex={-1}>
         {running ? copy.pickerRunningHeading(picks.length) : copy.pickerDoneHeading(verdicts, picks.length)}
       </h1>
-      <div class="lz-region">
+      <div class="lz-region lz-rows-region">
         <ol class="lz-list lz-rows">
           {picks.map((pick, i) => (
             <PickedRow
@@ -929,20 +945,23 @@ function PickedRow({ index, pick, host, announce, registerCompleted, reportState
       <div>
         <button type="button" class="lz-row-head" aria-expanded={open} aria-controls={panelId} onClick={onToggle}>
           <span class="row-claim">{pick.claim}</span>
-          <span class="row-line">
-            {result ? (
-              <>
+          {result ? (
+            <>
+              <span class="row-line">
                 <span class={`row-verdict v-${verdictKey(result.verdict)}`}>{result.verdict}</span>
                 {result.score != null ? <span class="lz-meta row-score">{`${result.score}/10`}</span> : null}
-                <span class="lz-meta">{` · ${copy.rowSources(result.sourcesTotal)}`}</span>
-              </>
-            ) : ended ? (
-              <span class="lz-meta">{copy.ROW_DID_NOT_FINISH}</span>
-            ) : (
-              // Running: the stage, so a collapsed row still shows progress.
-              <span class="lz-meta">{state.stage ? copy.stepLine(state.stage, state.index, state.total) : copy.RUNNING_HEADING}</span>
-            )}
-          </span>
+              </span>
+              <span class="lz-meta row-meta">
+                <span class="lz-sr"> · </span>
+                {copy.rowSources(result.sourcesTotal)}
+              </span>
+            </>
+          ) : ended ? (
+            <span class="lz-meta row-meta">{copy.ROW_DID_NOT_FINISH}</span>
+          ) : (
+            // Running: the stage, so a collapsed row still shows progress.
+            <span class="lz-meta row-meta">{state.stage ? copy.stepLine(state.stage, state.index, state.total) : copy.RUNNING_HEADING}</span>
+          )}
         </button>
         {open ? (
           <div class="lz-row-panel" id={panelId}>

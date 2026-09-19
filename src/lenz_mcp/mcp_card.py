@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # Bump BY HAND, with a new dist file and a versions.json entry, whenever the
 # bundle changes. Never derived from the bundle's bytes (see the module note).
-CARD_URI = 'ui://lenz/card-v3'
+CARD_URI = 'ui://lenz/card-v4'
 CARD_URI_PREFIX = 'ui://lenz/'
 CARD_MIME_TYPE = 'text/html;profile=mcp-app'
 

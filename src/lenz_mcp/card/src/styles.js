@@ -29,6 +29,10 @@ export const CSS = `
   --lz-primary: #3D65BC;
   --lz-on-primary: #FFFFFF;
   --lz-off: #E8E4DD;
+  /* The reading measure for prose inside a card wider than a comfortable line:
+     a frozen length, never a font-relative unit. The rows are not prose and span
+     the card. */
+  --lz-measure: 640px;
 }
 :root[data-theme='dark'] {
   --lz-bg: #2A2724;
@@ -69,14 +73,16 @@ body { font-family: var(--lz-font); color: var(--lz-ink); -webkit-font-smoothing
   background: var(--lz-bg);
   border: 1px solid var(--lz-hair);
   border-radius: 10px;
-  padding: 20px;
-  max-width: 640px;
+  padding: 16px;
+  /* Fill the frame the host gives, up to a reading width: a frame wider than the
+     card used to leave an empty band on its right and wrap claims that fit. */
+  max-width: 880px;
   overflow-wrap: anywhere;
 }
 @media (max-width: 419px) { .lz { padding: 16px; } }
 /* A frame the host gives the whole screen width has no room for side rules or
    rounded corners (logic/bleed.js): keep the top and bottom hairlines only, and
-   span the frame, so a landscape phone wider than the 640 px column does not
+   span the frame, so a landscape phone wider than the card's column does not
    show a card that simply stops, with no rule on its right. */
 :root[data-bleed='full'] .lz { border-left-width: 0; border-right-width: 0; border-radius: 0; max-width: none; }
 
@@ -104,9 +110,10 @@ body { font-family: var(--lz-font); color: var(--lz-ink); -webkit-font-smoothing
 .v-false { color: var(--lz-false); }
 .v-unknown { color: var(--lz-ink); }
 
-.lz-region { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--lz-hair); }
-.lz-region.first { margin-top: 16px; padding-top: 0; border-top: 0; }
+.lz-region { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--lz-hair); }
+.lz-region.first { margin-top: 12px; padding-top: 0; border-top: 0; }
 .lz-body { font-size: 15px; line-height: 1.6; }
+.lz-body, .lz-finding, .lz-quote, .lz-note, .lz-caveats, .lz-conf { max-width: var(--lz-measure); }
 .lz-body + .lz-body { margin-top: 10px; }
 .lz-clamp { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .lz-label {
@@ -122,11 +129,11 @@ h2.lz-label { margin: 0 0 10px; font-weight: 400; }
 }
 a.lz-link { display: inline-block; }
 /* A disclosure that closes a list spans its row, so it reads as the list's last line. */
-.lz-row-toggle { display: block; width: 100%; margin-top: 12px; min-height: 44px; }
+.lz-row-toggle { display: block; width: 100%; margin-top: 8px; min-height: 44px; }
 /* Touch: every quiet control keeps a 44px hit area. */
 @media (pointer: coarse) { .lz-link { min-height: 44px; } }
 .lz [tabindex='-1']:focus { outline: none; }
-.lz-actions { margin-top: 20px; }
+.lz-actions { margin-top: 16px; }
 .lz-button {
   appearance: none; font: inherit; font-size: 15px; font-weight: 500; cursor: pointer;
   min-height: 44px; padding: 10px 16px; border-radius: 8px; text-align: center; width: 100%;
@@ -156,7 +163,7 @@ a.lz-link { display: inline-block; }
 .lz-finding { margin-top: 14px; font-size: 17px; font-weight: 500; line-height: 1.45; }
 
 .lz-list { list-style: none; margin: 0; padding: 0; }
-.lz-list > li + li { margin-top: 14px; padding-top: 14px; border-top: 1px dotted var(--lz-hair); }
+.lz-list > li + li { margin-top: 8px; padding-top: 8px; border-top: 1px dotted var(--lz-hair); }
 /* Caveats are a quiet bulleted list, not rows between hairlines: the bullet
    has its own column, so a wrapped line aligns with the
    text above it and not under the bullet. Hairlines keep their job: sections and
@@ -186,27 +193,43 @@ a.lz-link { display: inline-block; }
 .lz-source-meta { margin-top: 2px; }
 .lz-quote { margin-top: 6px; font-size: 15px; line-height: 1.6; text-indent: -0.4em; }
 .lz-rows > li { display: grid; grid-template-columns: 2ch 1fr; gap: 0 10px; }
+/* A row is one line: the claim, and its verdict in a right-hand column so the
+   verdicts scan down one edge. The meta (not sure, reviewers split, sources) sits
+   under the claim only when there is one. The rule between rows is the whole gap:
+   the header's own padding, nothing added. */
+.lz-rows > li + li { margin-top: 0; padding-top: 0; }
+.lz-rows-region { margin-top: 12px; padding-top: 0; }
 /* A row header IS the disclosure: the whole line is the target, and the
    affordance is on the claim's text, never a box. */
 .lz-row-head {
-  appearance: none; display: block; width: 100%; text-align: left; background: none; border: 0;
-  padding: 2px 0; margin: 0; font: inherit; color: inherit; cursor: pointer;
+  appearance: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 16px;
+  align-items: baseline; width: 100%; text-align: left; background: none; border: 0;
+  padding: 8px 0; margin: 0; font: inherit; color: inherit; cursor: pointer;
 }
 .lz-row-head:hover .row-claim { text-decoration: underline; text-underline-offset: 3px; }
-.lz-row-head .row-claim { display: block; }
-.lz-row-head .row-line { display: block; margin-top: 2px; }
+.lz-row-head .row-claim { grid-column: 1; }
+.lz-row-head .row-line { grid-column: 2; grid-row: 1; text-align: right; white-space: nowrap; }
+.lz-row-head .row-meta { grid-column: 1; }
+/* A narrow frame has no room for a second column: the verdict goes under the claim. */
+@media (max-width: 419px) {
+  .lz-row-head { grid-template-columns: minmax(0, 1fr); }
+  .lz-row-head .row-line { grid-column: 1; grid-row: auto; text-align: left; white-space: normal; }
+}
 .lz-row-head .row-verdict.dimmed { color: var(--lz-meta); }
 .lz-row-head .row-score { font-family: var(--lz-mono); font-size: 13px; font-variant-numeric: tabular-nums; margin-left: 6px; }
 @media (pointer: coarse) { .lz-row-head { min-height: 44px; } }
-.lz-row-panel { margin-top: 10px; }
+.lz-row-panel { margin-top: 0; padding-bottom: 8px; }
 .lz-row-changed { margin-top: -4px; }
 .lz-tally { margin-top: 6px; color: var(--lz-meta); }
-.lz-rows > li > .num { font-family: var(--lz-mono); font-size: 13px; color: var(--lz-meta); padding-top: 2px; }
+/* The list card's title and its tally share one line when they fit. */
+.lz-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
+.lz-head .lz-tally { margin-top: 0; }
+.lz-rows > li > .num { font-family: var(--lz-mono); font-size: 13px; color: var(--lz-meta); padding-top: 8px; }
 .lz-rows > li .row-claim { font-size: 15px; line-height: 1.5; }
 .lz-rows > li .row-verdict { font-size: 15px; font-weight: 500; }
 
 .lz-footer {
-  margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--lz-hair);
+  margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--lz-hair);
   display: flex; justify-content: space-between; gap: 12px;
   font-family: var(--lz-mono); font-size: 12px; color: var(--lz-meta);
 }
