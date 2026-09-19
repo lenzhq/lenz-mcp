@@ -19,7 +19,9 @@ every request's bearer token through ``DualModeTokenVerifier``:
 The verified token's ``sub`` is the numeric Lenz user id, set when Lenz
 completes the authorization, so the zero-DB server resolves the user with no
 lookup. Tool calls then mint a
-short-lived service assertion for that user (see ``server._authorization``).
+short-lived service assertion for that user or, with ``LENZ_OAUTH_EXCHANGE``
+on, exchange the verified token for a scoped API token (see
+``server._authorization`` and ``exchange``).
 """
 
 from __future__ import annotations
@@ -48,6 +50,13 @@ AUTH_MODE_OAUTH = 'oauth'
 
 ALLOWED_ALGS = ('RS256',)
 CLOCK_SKEW_LEEWAY = 30  # seconds
+# The token's `sub`: a positive decimal user id, ASCII digits only, no leading
+# zero, at most 20 digits. The API applies the same rule to the same token, so
+# the two never disagree about who a token names: `str.isdigit()` would also
+# accept `01` (which `int()` reads as user 1) and non-ASCII digits (`١٢`,
+# which `int()` reads as 12). `[0-9]`, never `\d`: in Python `\d` matches
+# every Unicode decimal digit.
+SUBJECT_PATTERN = re.compile(r'[1-9][0-9]{0,19}')
 # What may NOT appear in a client id we put on a LOG line. Every other logged
 # field is already constrained — `sub` must be all digits — leaving
 # `client_id`/`azp` as the one attacker-adjacent value, and WorkOS accepts
@@ -381,8 +390,8 @@ class DualModeTokenVerifier(TokenVerifier):
             logger.warning('mcp_oauth_token_rejected err=%s', type(exc).__name__)
             return None
 
-        sub = str(claims.get('sub') or '')
-        if not sub.isdigit():
+        sub = claims.get('sub')
+        if not isinstance(sub, str) or not SUBJECT_PATTERN.fullmatch(sub):
             # The subject is the numeric Lenz user id; anything else can't
             # be bridged to a user.
             logger.warning('mcp_oauth_non_numeric_sub')
