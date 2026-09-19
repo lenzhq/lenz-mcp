@@ -53,20 +53,21 @@ from typing import Any
 # deployed server shares one transport and one envelope, and they fail together.
 # A client packaged without this script can still import it.
 #
-# The repo root goes on sys.path by hand: run by ABSOLUTE path, this script's
-# `sys.path[0]` is its own directory, not the root, and the import would fail
-# however stdlib-only the module is. The package's `__init__` imports nothing,
-# so bare python3 reaches the wire with no dependencies.
+# The package's source root (src/) goes on sys.path by hand: run by ABSOLUTE
+# path, this script's `sys.path[0]` is its own directory, and the package is not
+# installed, so the import would fail however stdlib-only the module is. The
+# package's `__init__` imports nothing, so bare python3 reaches the wire with no
+# dependencies.
 #
-# APPEND, never insert(0). First place gives the repo root precedence over the
+# APPEND, never insert(0). First place gives src/ precedence over the
 # STDLIB, and `wire.py` imports `http.client` and `urllib.request` below this
 # line — so everything they reach for lazily (`email`, `ssl`, `mimetypes`, …)
 # becomes shadowable by any future top-level file of that name. Reproduced with
-# a one-line `email.py` at the repo root: the smoke dies inside
+# a one-line `email.py` on the path: the smoke dies inside
 # `http/client.py: import email.parser`, with a traceback nowhere near the
 # cause. We are overriding nothing (the package is simply absent from the
 # default path), so precedence buys exactly nothing.
-sys.path.append(str(Path(__file__).resolve().parents[1]))
+sys.path.append(str(Path(__file__).resolve().parents[1] / 'src'))
 
 try:
     from lenz_mcp.wire import (  # noqa: E402 — must follow the sys.path line above
