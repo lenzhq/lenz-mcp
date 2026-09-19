@@ -2,14 +2,25 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.lenz/fact-check",
   "title": "Lenz Fact-Check",
-  "description": "Fact-check claims against independent sources — fast verdict or deep multi-step investigation.",
-  "version": "1.0.4",
+  "description": "Check the factual claims in a draft or an answer: a quick verdict, or a deep check with sources.",
+  "version": "1.1.0",
   "websiteUrl": "https://lenz.io",
   "icons": [
     {
-      "src": "https://lenz.io/static/root/icon-512.png",
+      "src": "https://lenz.io/lenz-wordmark-512.png",
       "mimeType": "image/png",
-      "sizes": ["512x512"]
+      "sizes": [
+        "512x512"
+      ],
+      "theme": "light"
+    },
+    {
+      "src": "https://lenz.io/lenz-wordmark-dark-512.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ],
+      "theme": "dark"
     }
   ],
   "repository": {
