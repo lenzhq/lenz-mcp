@@ -18,8 +18,8 @@
     "preact": "10.29.8"
   },
   "devDependencies": {
-    "axe-core": "4.10.3",
-    "esbuild": "0.28.1",
-    "playwright-core": "1.58.2"
+    "axe-core": "4.13.0",
+    "esbuild": "0.28.2",
+    "playwright-core": "1.63.0"
   }
 }
