@@ -1135,7 +1135,7 @@
      {
       "claim": "Members vote on new plantings at a meeting held every November.",
       "confidence": "low",
-      "dissent": "One reviewer disagreed: It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
+      "dissent": "It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
       "next_step": "Lenz is not confident in this quick verdict. Tell the user that a deep check would investigate the claim against independent sources and takes about a minute to a minute and a half, and ask whether to run it. Do not mention tool names or credits to the user. If they say yes, call `verify_claim` with this claim.",
       "rationale": "The Harlow Valley orchard cooperative was founded by twelve growers in 1952. A cold spell in 2021 cut the apple harvest by roughly a third. The cooperative runs a cider press that any member may book for a day. Apple varieties grown by members include several found nowhere else in the region. It now counts about ninety member farms across three valleys. Its bylaws require members to set aside a share of each harvest for the local school.",
       "recommend_verify": true,
@@ -1241,7 +1241,7 @@
      {
       "claim": "Members vote on new plantings at a meeting held every November.",
       "confidence": "low",
-      "dissent": "One reviewer disagreed: It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
+      "dissent": "It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
       "next_step": "Lenz is not confident in this quick verdict. Tell the user that a deep check would investigate the claim against independent sources and takes about a minute to a minute and a half, and ask whether to run it. Do not mention tool names or credits to the user. If they say yes, call `verify_claim` with this claim.",
       "rationale": "The Harlow Valley orchard cooperative was founded by twelve growers in 1952. A cold spell in 2021 cut the apple harvest by roughly a third. The cooperative runs a cider press that any member may book for a day. Apple varieties grown by members include several found nowhere else in the region. It now counts about ninety member farms across three valleys. Its bylaws require members to set aside a share of each harvest for the local school.",
       "recommend_verify": true,
@@ -1393,7 +1393,7 @@
      {
       "claim": "Members vote on new plantings at a meeting held every November.",
       "confidence": "high",
-      "dissent": "One reviewer disagreed: It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
+      "dissent": "It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
       "rationale": "The Harlow Valley orchard cooperative was founded by twelve growers in 1952. A cold spell in 2021 cut the apple harvest by roughly a third. The cooperative runs a cider press that any member may book for a day. Apple varieties grown by members include several found nowhere else in the region. It now counts about ninety member farms across three valleys. Its bylaws require members to set aside a share of each harvest for the local school.",
       "verdict": "Mostly True"
      }
@@ -1425,7 +1425,7 @@
      {
       "claim": "Members vote on new plantings at a meeting held every November.",
       "confidence": "high",
-      "dissent": "One reviewer disagreed: It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
+      "dissent": "It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
       "verdict": "Mostly True"
      }
     ],
@@ -1478,7 +1478,7 @@
      {
       "claim": "Members vote on new plantings at a meeting held every November.",
       "confidence": "low",
-      "dissent": "One reviewer disagreed: It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
+      "dissent": "It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
       "next_step": "Lenz is not confident in this quick verdict. Tell the user that a deep check would investigate the claim against independent sources and takes about a minute to a minute and a half, and ask whether to run it. Do not mention tool names or credits to the user. If they say yes, call `verify_claim` with this claim.",
       "rationale": "The Harlow Valley orchard cooperative was founded by twelve growers in 1952. A cold spell in 2021 cut the apple harvest by roughly a third. The cooperative runs a cider press that any member may book for a day. Apple varieties grown by members include several found nowhere else in the region. It now counts about ninety member farms across three valleys. Its bylaws require members to set aside a share of each harvest for the local school.",
       "recommend_verify": true,
@@ -1514,7 +1514,7 @@
      {
       "claim": "Members vote on new plantings at a meeting held every November.",
       "confidence": "low",
-      "dissent": "One reviewer disagreed: It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
+      "dissent": "It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
       "next_step": "Lenz is not confident in this quick verdict. Tell the user that a deep check would investigate the claim against independent sources and takes about a minute to a minute and a half, and ask whether to run it. Do not mention tool names or credits to the user. If they say yes, call `verify_claim` with this claim.",
       "recommend_verify": true,
       "verdict": "Mostly True"
@@ -1566,7 +1566,7 @@
      {
       "claim": "Members vote on new plantings at a meeting held every November.",
       "confidence": "medium",
-      "dissent": "One reviewer disagreed: It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
+      "dissent": "It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
       "rationale": "The Harlow Valley orchard cooperative was founded by twelve growers in 1952. A cold spell in 2021 cut the apple harvest by roughly a third. The cooperative runs a cider press that any member may book for a day. Apple varieties grown by members include several found nowhere else in the region. It now counts about ninety member farms across three valleys. Its bylaws require members to set aside a share of each harvest for the local school.",
       "verdict": "Mostly True"
      }
@@ -1598,7 +1598,7 @@
      {
       "claim": "Members vote on new plantings at a meeting held every November.",
       "confidence": "medium",
-      "dissent": "One reviewer disagreed: It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
+      "dissent": "It now counts about ninety member farms across three valleys. A cold spell in 2021 cut the apple harvest by roughly a third. Members vote on new plantings at a meeting held every November. The Harlow Valley orchard cooperative was founded by twelve growers in 1952. Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. The cooperative publishes its annual yields in a report to members each spring.",
       "verdict": "Mostly True"
      }
     ],
