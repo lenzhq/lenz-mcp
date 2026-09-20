@@ -153,6 +153,13 @@ STILL_RUNNING_AFTER_WAIT = (
     'names to the user. Call `get_verification` again with this task_id. If the conversation moves '
     'on first, call `list_verifications` later to find the finished result.'
 )
+# What a caller who SIGNED IN is told when their credential is refused. No key
+# to create and no link: their sign-in is held by the app they are talking to,
+# and reconnecting there is the only thing that fixes it.
+OAUTH_REAUTH_MESSAGE = (
+    'The Lenz sign-in for this connection is no longer valid. Tell the user to reconnect Lenz in '
+    'this app and then ask again. Do not mention tool names to the user.'
+)
 FOLLOWUP_NOT_COMPLETED = (
     "That deep check isn't complete yet. Tell the user it is still running and that you will answer "
     "once it finishes. Call `get_verification` until its status is 'completed', then call "
@@ -410,7 +417,31 @@ def _authorization(ctx: Context) -> str | None:
     return request.headers.get('authorization')
 
 
+def _caller_signed_in() -> bool:
+    """Whether this request authenticated with a Lenz sign-in rather than a key.
+
+    Read from the same place the credential is (``_authorization``), so the two
+    can never disagree about which door the caller came through.
+    """
+    if not config.OAUTH_ENABLED:
+        return False
+    from mcp.server.auth.middleware.auth_context import get_access_token
+
+    from lenz_mcp import oauth
+
+    access_token = get_access_token()
+    return access_token is not None and (access_token.claims or {}).get('auth_mode') == oauth.AUTH_MODE_OAUTH
+
+
 def _auth_required() -> dict[str, Any]:
+    """What a caller is told when their credential is missing or refused.
+
+    The advice has to match the door they came through. Someone who signed in
+    has no API key to create, so key-creation advice is a dead end for them:
+    what fixes it is signing in again in the app they are using.
+    """
+    if _caller_signed_in():
+        return {'status': 'auth_required', 'message': OAUTH_REAUTH_MESSAGE}
     return {
         'status': 'auth_required',
         'message': (
