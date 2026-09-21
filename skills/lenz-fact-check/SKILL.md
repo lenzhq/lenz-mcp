@@ -58,12 +58,13 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
    most the one or two that matter. Run it on the user's yes, or directly when they
    asked for sources, a deep check or a verification. `depth: "low"` researches fewer
    sources for half the credits; keep the default `standard` where breadth of evidence
-   is the point. `verify_claim` waits for the check as long as the client allows. In Claude and
-   the ChatGPT app the result usually comes back in the same call; in clients with a
-   shorter tool-call limit (Claude Code, Cursor, VS Code) expect `status: submitted`
-   with a `task_id`: say the check is still running and call
-   `get_verification(task_id)` until it is `completed`. If it returns `needs_input`
-   (several claims in one text), show the list and use `select_claims`. A completed deep
+   is the point. `verify_claim` waits for the check as long as the client allows. In Claude the
+   result usually comes back in the same call; in the ChatGPT app and in clients with
+   a shorter tool-call limit (Claude Code, Cursor, VS Code) expect `status: submitted`
+   with a `task_id` when the check runs long: say the check is still running and call
+   `get_verification(task_id)` until it is `completed`. If a longer text holds several
+   claims it returns `needs_input`: show the list and use `select_claims`. A single
+   sentence runs its first claim only. A completed deep
    check replaces the quick verdict on the same claim: if it changed, say so plainly and
    why. If a result never arrived, `list_verifications` finds it. To dig further into a
    finished check, use `ask_followup` with its `verification_id`.
