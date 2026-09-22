@@ -147,6 +147,8 @@ a.lz-link { display: inline-block; }
 .lz-running .lz-meta { margin-top: 6px; font-variant-numeric: tabular-nums; }
 /* A sentence is prose, not data: secondary ink in the text face, never mono. */
 .lz-note { margin-top: 10px; font-size: 14px; line-height: 1.5; color: var(--lz-meta); }
+/* A button under a note or an alert keeps the 16px a button in .lz-actions has; alone in its region it sits on the rule. */
+.lz-region > * + .lz-button { margin-top: 16px; }
 
 .lz-changed { margin-top: 16px; }
 /* The changed line belongs to the stamp below it, not to the claim above. */
