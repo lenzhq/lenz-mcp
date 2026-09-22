@@ -73,6 +73,21 @@ The server listens on `/mcp`. Callers authenticate with a Lenz API key in the
 AuthKit domain are set. `bash scripts/container_test.sh` builds the image and
 runs the smoke against it.
 
+With OAuth on, each tool call needs a Lenz API credential for the signed-in
+user. `LENZ_OAUTH_EXCHANGE=True` obtains it with an OAuth 2.0 token exchange
+(RFC 8693) at the Lenz API's token endpoint, authenticating as the server's own
+OAuth client:
+
+| Variable | What it is |
+|---|---|
+| `LENZ_OAUTH_EXCHANGE` | `True` to exchange tokens; anything else keeps the signed service assertion (`MCP_SERVICE_SIGNING_KEYS`) |
+| `LENZ_OAUTH_CLIENT_ID` | The server's OAuth client id at the Lenz API |
+| `LENZ_OAUTH_CLIENT_SECRET` | That client's secret. Keep it in a secret store, not in plain configuration |
+| `LENZ_TOKEN_ENDPOINT` | Optional. Defaults to `{MCP_API_BASE_URL}/oauth/token` |
+
+Each tool asks only for the scopes it uses (`exchange.TOOL_SCOPES`), and one
+exchanged token serves a whole tool call, however long it waits.
+
 Error reporting is off unless you set `SENTRY_DSN`. With it set, the server
 reports errors to that Sentry project with `send_default_pii=True`, so events
 can include request details such as headers and the caller's IP address. That

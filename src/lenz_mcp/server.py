@@ -10,6 +10,7 @@ results that resolve to an already-public claim — attaches a branded
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import functools
 import logging
 import re
@@ -25,7 +26,7 @@ from pydantic import Field
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from lenz_mcp import client, config, links
+from lenz_mcp import client, config, exchange, links
 from lenz_mcp.mcp_card import CARD_ONLY_TOOL_META, register_card_resources, with_delivery
 from lenz_mcp.middleware import lenz_middleware
 from lenz_mcp.widget_resource import request_is_chatgpt
@@ -159,6 +160,15 @@ STILL_RUNNING_AFTER_WAIT = (
 OAUTH_REAUTH_MESSAGE = (
     'The Lenz sign-in for this connection is no longer valid. Tell the user to reconnect Lenz in '
     'this app and then ask again. Do not mention tool names to the user.'
+)
+# A check that was submitted and charged, whose credential then failed. The run
+# is untouched by it, so the model is told how to collect the result rather
+# than left to start (and pay for) the same check again.
+CREDENTIAL_LOST_MID_RUN = (
+    'The check itself is running and has already been charged. Once this is resolved, call '
+    '`get_verification` with this task_id to collect the result. If the conversation moves on first, '
+    'call `list_verifications` later to find it. Do not start the same check again. Do not mention '
+    'tool names to the user.'
 )
 FOLLOWUP_NOT_COMPLETED = (
     "That deep check isn't complete yet. Tell the user it is still running and that you will answer "
@@ -386,7 +396,15 @@ register_card_resources(mcp)
 # ── auth + error helpers ─────────────────────────────────────────────
 
 
-def _authorization(ctx: Context) -> str | None:
+# The tool a call is running, and that call's exchanged credential, bound by
+# `requires_auth` for the call's duration. Only the exchange path reads them.
+_CALL_TOOL: contextvars.ContextVar[str] = contextvars.ContextVar('lenz_mcp_call_tool', default='')
+_CALL_CREDENTIAL: contextvars.ContextVar[exchange.CallCredential | None] = contextvars.ContextVar(
+    'lenz_mcp_call_credential', default=None
+)
+
+
+def _authorization(ctx: Context) -> client.Authorization:
     """The credential each tool forwards to the public API.
 
     API-key callers: the inbound ``Authorization`` header, verbatim (v1
@@ -395,6 +413,11 @@ def _authorization(ctx: Context) -> str | None:
     and the API can't accept it — so mint a fresh short-lived service
     assertion for the resolved user instead (the ``act_as_user`` bridge,
     src/lenz_mcp/bridge.py; the API re-checks user status per call).
+
+    With ``LENZ_OAUTH_EXCHANGE`` on, an OAuth caller gets the call's
+    ``exchange.CallCredential`` instead: the client resolves it to an exchanged
+    API token on the first request, scoped to the running tool, and every later
+    request of the same call (each poll of a deep-check wait) reuses it.
     """
     if config.OAUTH_ENABLED:
         from mcp.server.auth.middleware.auth_context import get_access_token
@@ -403,6 +426,13 @@ def _authorization(ctx: Context) -> str | None:
 
         access_token = get_access_token()
         if access_token is not None and (access_token.claims or {}).get('auth_mode') == oauth.AUTH_MODE_OAUTH:
+            if config.OAUTH_EXCHANGE:
+                credential = _CALL_CREDENTIAL.get()
+                if credential is None or not credential.is_for(access_token.token):
+                    credential = exchange.CallCredential(access_token.token, exchange.scopes_for(_CALL_TOOL.get()))
+                    _CALL_CREDENTIAL.set(credential)
+                return credential
+
             from lenz_mcp.bridge import mint_service_assertion
 
             # subject is digits-only — enforced by DualModeTokenVerifier.
@@ -431,6 +461,62 @@ def _caller_signed_in() -> bool:
 
     access_token = get_access_token()
     return access_token is not None and (access_token.claims or {}).get('auth_mode') == oauth.AUTH_MODE_OAUTH
+
+
+def _exchange_failure_result(exc: exchange.ExchangeFailed | exchange.ExchangeNotConfigured) -> dict[str, Any]:
+    """The tool result for an OAuth call whose API token could not be obtained."""
+    if isinstance(exc, exchange.ExchangeNotConfigured):
+        logger.error('mcp_exchange_not_configured')
+        return _error_result(client.ApiResponse(status=503, data={'retry_after': exchange.DEFAULT_RETRY_AFTER_S}))
+    if exc.kind == 'reauth':
+        # The user's sign-in is no longer accepted: the same answer as the API's
+        # own 401, so a host re-authenticates exactly as it does today.
+        return _error_result(client.ApiResponse(status=401, data={}))
+    if exc.kind == 'scope':
+        return {
+            'status': 'error',
+            'message': 'This Lenz connection is not allowed to do that. Retrying will not help.',
+        }
+    if exc.kind == 'approval':
+        uri = exc.approval_uri if _is_own_url(exc.approval_uri) else config.API_CREDENTIALS_URL
+        return {
+            'status': 'approval_required',
+            'message': (
+                f'This app needs your approval before it can use your Lenz account. Approve it at {uri}, '
+                'then ask again.'
+            ),
+            'approval_url': uri,
+        }
+    if exc.kind == 'blocked':
+        return {
+            'status': 'forbidden',
+            'message': 'This app is blocked from using your Lenz account. Retrying will not help.',
+        }
+    return _error_result(
+        client.ApiResponse(status=503, data={'retry_after': exc.retry_after or exchange.DEFAULT_RETRY_AFTER_S})
+    )
+
+
+def _credential_lost_mid_run(
+    exc: exchange.ExchangeFailed | exchange.ExchangeNotConfigured, task_id: str
+) -> dict[str, Any]:
+    """The same mapping, for a check that is already running and already paid for.
+
+    The credential failed between the submission and the verdict. The run is
+    unaffected — it finishes server-side — so the result keeps its ``task_id``
+    and says how to collect it, rather than reading as a check that never
+    started.
+    """
+    result = _exchange_failure_result(exc)
+    result['task_id'] = task_id
+    result['message'] = f'{result["message"]} {CREDENTIAL_LOST_MID_RUN}'
+    return result
+
+
+def _is_own_url(value: str | None) -> bool:
+    """Whether ``value`` is a page of the Lenz site, the only place an approval
+    link may point to."""
+    return isinstance(value, str) and value.startswith(f'{config.FRONTEND_URL}/') and not _AUTH_UNSENDABLE.search(value)
 
 
 def _auth_required() -> dict[str, Any]:
@@ -502,12 +588,23 @@ def requires_auth(fn):
         # FastMCP injects ctx by name; tests pass it positionally. Detect by the
         # request_context attribute so both (and a duck-typed test ctx) work.
         ctx = kwargs.get('ctx') or next((a for a in args if hasattr(a, 'request_context')), None)
-        authorization = _authorization(ctx)
-        if not authorization:
-            return _auth_required()
-        if _AUTH_UNSENDABLE.search(authorization):
-            return _auth_unsendable()
-        return await fn(*args, **kwargs)
+        tool_token = _CALL_TOOL.set(fn.__name__)
+        credential_token = _CALL_CREDENTIAL.set(None)
+        try:
+            authorization = _authorization(ctx)
+            if not authorization:
+                return _auth_required()
+            if isinstance(authorization, str) and _AUTH_UNSENDABLE.search(authorization):
+                return _auth_unsendable()
+            try:
+                return await fn(*args, **kwargs)
+            except (exchange.ExchangeFailed, exchange.ExchangeNotConfigured) as exc:
+                # Only the exchange path raises these, from inside the client,
+                # whenever the call's API token could not be obtained.
+                return _exchange_failure_result(exc)
+        finally:
+            _CALL_CREDENTIAL.reset(credential_token)
+            _CALL_TOOL.reset(tool_token)
 
     return wrapper
 
@@ -866,7 +963,9 @@ async def _await_verification(ctx: Context, task_id: str, *, started_at: float |
     service assertion is short-lived,
     and a wait longer than its lifetime would otherwise 401 its own later polls and
     end a running check as ``auth_required``. An API key is forwarded as-is
-    every time.
+    every time. On the exchange path the resolved credential is the call's own
+    (``exchange.CallCredential``), so the polls share ONE exchanged token —
+    the API issues it with enough life for the whole wait.
     """
     # The budget covers the WHOLE tool call, from `started_at` (the tool's own
     # entry) when the caller submitted something first. The client's cut is on
@@ -880,7 +979,14 @@ async def _await_verification(ctx: Context, task_id: str, *, started_at: float |
     # same call, and a submit to our own API outlasting a 45-130 s budget is
     # not a case worth losing that for.
     while True:
-        out = await _verification_result(_authorization(ctx), task_id)
+        try:
+            out = await _verification_result(_authorization(ctx), task_id)
+        except (exchange.ExchangeFailed, exchange.ExchangeNotConfigured) as exc:
+            # The run is already submitted and already charged, so this failure
+            # must not swallow its id: it is answered here, with the task_id,
+            # instead of unwinding to the bare tool result `requires_auth`
+            # builds for a failure before anything was started.
+            return _credential_lost_mid_run(exc, task_id)
         if out.get('status') != 'processing':
             return out
         remaining = deadline - time.monotonic()
@@ -1092,7 +1198,7 @@ def _needs_input_message(data: dict[str, Any]) -> str:
 
 
 async def _verification_result(
-    authorization: str | None, task_id: str, *, name_not_found: bool = False
+    authorization: client.Authorization, task_id: str, *, name_not_found: bool = False
 ) -> dict[str, Any]:
     """Fetch + map a deep verification status to an agent/widget-safe result.
 

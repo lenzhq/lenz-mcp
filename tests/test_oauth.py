@@ -141,6 +141,43 @@ def test_non_numeric_sub_rejected():
     assert _run(_verifier().verify_token(_mint(sub='workos-user-xyz'))) is None
 
 
+# The API applies the same rule to the same token, so the two never disagree
+# about which user a token names.
+@pytest.mark.parametrize('sub', ['1', '42', '12345678901234567890'])
+def test_a_positive_decimal_user_id_is_accepted(sub):
+    out = _run(_verifier().verify_token(_mint(sub=sub)))
+    assert out is not None
+    assert out.subject == sub
+
+
+@pytest.mark.parametrize(
+    'sub',
+    [
+        '0',  # no user 0
+        '01',  # a leading zero: int() would read user 1
+        '١٢',  # Arabic-Indic digits: str.isdigit() accepts them, int() reads 12
+        '１２',  # fullwidth digits, the same trap
+        '1.0',
+        '-1',
+        '+1',
+        ' 1',
+        '1\n',
+        '',
+        '123456789012345678901',  # 21 digits
+    ],
+)
+def test_a_subject_outside_the_shared_rule_is_refused(sub):
+    assert _run(_verifier().verify_token(_mint(sub=sub))) is None
+
+
+def test_a_non_string_subject_is_refused():
+    assert _run(_verifier().verify_token(_mint(sub=42))) is None
+
+
+def test_the_subject_rule_is_the_apis_regex():
+    assert oauth.SUBJECT_PATTERN.pattern == '[1-9][0-9]{0,19}'
+
+
 def test_missing_kid_rejected():
     assert _run(_verifier().verify_token(_mint(kid=None))) is None
 

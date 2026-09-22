@@ -12,7 +12,7 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -58,6 +58,26 @@ def _idem_key(*parts: str) -> str:
     """
     raw = '\x00'.join(str(p) for p in parts)
     return hashlib.sha256(_utf8_safe(raw).encode()).hexdigest()
+
+
+class Credential(Protocol):
+    """A credential resolved per request instead of forwarded as a string: the
+    OAuth token exchange's per-call credential (``exchange.CallCredential``).
+
+    ``header`` is the ``Authorization`` value to send; ``renew`` is asked once
+    after the API answers 401 on it and returns a fresh value, or None to give
+    up. Either may raise the exchange's own errors, which the tool wrapper maps
+    to a tool result.
+    """
+
+    async def header(self) -> str: ...
+
+    async def renew(self) -> str | None: ...
+
+
+# What a tool forwards: the caller's header verbatim, the bridge's assertion,
+# a per-call exchanged credential, or nothing.
+Authorization = str | Credential | None
 
 
 @dataclass
@@ -266,18 +286,19 @@ def _get_client() -> httpx.AsyncClient:
     return _http_client
 
 
-async def _request(
+async def _send(
     method: str,
+    url: str,
     path: str,
     authorization: str | None,
     *,
-    json: dict[str, Any] | None = None,
-    timeout: float = config.DEFAULT_TIMEOUT,
-    idempotency_key: str | None = None,
-) -> ApiResponse:
-    url = f'{config.API_BASE_URL}{path}'
+    json: dict[str, Any] | None,
+    timeout: float,
+    idempotency_key: str | None,
+) -> httpx.Response | None:
+    """One HTTP request; None on a transport failure (logged)."""
     try:
-        resp = await _get_client().request(
+        return await _get_client().request(
             method,
             url,
             json=_utf8_safe(json),
@@ -295,6 +316,35 @@ async def _request(
     # is the backstop, not the diagnosis.
     except (httpx.HTTPError, httpx.InvalidURL, UnicodeError) as exc:
         logger.warning('mcp_api_transport_error method=%s path=%s err=%s', method, path, exc)
+        return None
+
+
+async def _request(
+    method: str,
+    path: str,
+    authorization: Authorization,
+    *,
+    json: dict[str, Any] | None = None,
+    timeout: float = config.DEFAULT_TIMEOUT,
+    idempotency_key: str | None = None,
+) -> ApiResponse:
+    url = f'{config.API_BASE_URL}{path}'
+    credential: Credential | None = None
+    header: str | None
+    if authorization is None or isinstance(authorization, str):
+        header = authorization
+    else:
+        credential = authorization
+        header = await credential.header()
+    resp = await _send(method, url, path, header, json=json, timeout=timeout, idempotency_key=idempotency_key)
+    if resp is not None and resp.status_code == 401 and credential is not None:
+        # An exchanged token the API no longer accepts (revoked, or expired
+        # early): exchange again, once, and resend. The API refused the first
+        # request outright, so resending a write repeats nothing.
+        renewed = await credential.renew()
+        if renewed is not None:
+            resp = await _send(method, url, path, renewed, json=json, timeout=timeout, idempotency_key=idempotency_key)
+    if resp is None:
         return ApiResponse(status=0, data={})
 
     try:
@@ -311,7 +361,7 @@ async def _request(
 
 
 async def assess(
-    authorization: str | None, *, text: str = '', claims: list[str] | None = None, language: str
+    authorization: Authorization, *, text: str = '', claims: list[str] | None = None, language: str
 ) -> ApiResponse:
     # One text (`claim`, expanded server-side) or a list (`claims`, one row per
     # item). The idempotency key covers whichever was sent — the API rejects a
@@ -334,7 +384,7 @@ async def assess(
 
 
 async def verify(
-    authorization: str | None, *, text: str, language: str, depth: str = 'standard', retry_of: str | None = None
+    authorization: Authorization, *, text: str, language: str, depth: str = 'standard', retry_of: str | None = None
 ) -> ApiResponse:
     # `depth` is part of the idempotency key because the API rejects a key
     # reused with a different body (422, body-hash mismatch): without it, a
@@ -358,11 +408,11 @@ async def verify(
     )
 
 
-async def verify_status(authorization: str | None, *, task_id: str) -> ApiResponse:
+async def verify_status(authorization: Authorization, *, task_id: str) -> ApiResponse:
     return await _request('GET', f'/verify/status/{task_id}', authorization)
 
 
-async def verification_detail(authorization: str | None, *, verification_id: str) -> ApiResponse:
+async def verification_detail(authorization: Authorization, *, verification_id: str) -> ApiResponse:
     """A stored result by its 8-hex verification_id (GET /verifications/{id}).
 
     The endpoint takes an OPTIONAL bearer: with the caller's key it also serves
@@ -371,7 +421,7 @@ async def verification_detail(authorization: str | None, *, verification_id: str
     return await _request('GET', f'/verifications/{verification_id}', authorization)
 
 
-async def list_verifications(authorization: str | None, *, page_size: int) -> ApiResponse:
+async def list_verifications(authorization: Authorization, *, page_size: int) -> ApiResponse:
     """The caller's own completed verifications, newest first (GET /verifications).
 
     The API scopes the list to the credential, and a row exists only once a run
@@ -380,7 +430,7 @@ async def list_verifications(authorization: str | None, *, page_size: int) -> Ap
     return await _request('GET', f'/verifications?page=1&page_size={int(page_size)}', authorization)
 
 
-async def select(authorization: str | None, *, task_id: str, texts: list[str]) -> ApiResponse:
+async def select(authorization: Authorization, *, task_id: str, texts: list[str]) -> ApiResponse:
     return await _request(
         'POST',
         f'/verify/{task_id}/select',
@@ -390,7 +440,7 @@ async def select(authorization: str | None, *, task_id: str, texts: list[str]) -
     )
 
 
-async def ask(authorization: str | None, *, verification_id: str, message: str, language: str = '') -> ApiResponse:
+async def ask(authorization: Authorization, *, verification_id: str, message: str, language: str = '') -> ApiResponse:
     # No idempotency key, deliberately, even though the REST endpoint honours
     # one. `ask` is a conversational append —
     # asking the same question twice is a legit second turn, and it gets a
@@ -411,5 +461,5 @@ async def ask(authorization: str | None, *, verification_id: str, message: str, 
     )
 
 
-async def me_usage(authorization: str | None) -> ApiResponse:
+async def me_usage(authorization: Authorization) -> ApiResponse:
     return await _request('GET', '/me/usage', authorization)
