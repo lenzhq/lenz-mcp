@@ -208,6 +208,22 @@ OAUTH_ISSUER: str = f'https://{WORKOS_AUTHKIT_DOMAIN}' if WORKOS_AUTHKIT_DOMAIN 
 # the API only; empty means the bridge refuses.
 SERVICE_SIGNING_KEY: str = next(iter(_env_list('MCP_SERVICE_SIGNING_KEYS')), '')
 
+# ── The token exchange (src/lenz_mcp/exchange.py) — dark behind LENZ_OAUTH_EXCHANGE ─
+# On (with OAuth on), an OAuth tool call exchanges the user's verified token at
+# the API's token endpoint for a scoped API access token, instead of signing
+# the bridge assertion above. Off, nothing below is read.
+OAUTH_EXCHANGE: bool = _env_flag('LENZ_OAUTH_EXCHANGE')
+# This service's own OAuth client at the API (HTTP Basic on the exchange).
+OAUTH_CLIENT_ID: str = _env('LENZ_OAUTH_CLIENT_ID')
+OAUTH_CLIENT_SECRET: str = _env('LENZ_OAUTH_CLIENT_SECRET')
+# Where the exchange is made. The API's token endpoint sits under its versioned
+# base, so the default follows MCP_API_BASE_URL.
+TOKEN_ENDPOINT: str = _env('LENZ_TOKEN_ENDPOINT', f'{API_BASE_URL}/oauth/token')
+# The RFC 8707 resource the exchanged token is for: the public API's
+# identifier, which is its public URL even when MCP_API_BASE_URL points
+# somewhere else.
+API_RESOURCE: str = f'{FRONTEND_URL}/api/v1'
+
 # The resource indicator tokens are audience-bound to (RFC 8707). Exactly the
 # public MCP URL — the verifier rejects any other audience. No trailing slash.
 MCP_PUBLIC_URL: str = os.environ.get('MCP_PUBLIC_URL', f'{FRONTEND_URL}/mcp').rstrip('/')
