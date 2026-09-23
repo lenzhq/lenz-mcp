@@ -1,12 +1,12 @@
 {
-  "card_enabled": false,
+  "card_enabled": true,
   "card_resource": {
     "mimeTypes": [
       "text/html;profile=mcp-app"
     ],
     "uri": "ui://lenz/card-v5"
   },
-  "client": "chatgpt",
+  "client": "chatgpt-app",
   "declares_mcp_apps": true,
   "instructions": "Lenz checks the factual claims in a draft, a pasted text or your previous answer against independent sources. Use it when the user names Lenz; asks you to check, double-check, verify, confirm or fact-check something; asks you to audit a draft or your previous answer for factual errors; asks whether something is true or accurate; or doubts a factual statement you made (“are you sure?”, “is that right?”). Only when the statement is a factual claim: a fact, a figure, a date, a quote or an attribution. Not for opinions, predictions, arithmetic, how code behaves or text with no checkable claim. Start with `assess_claim`, the quick check, for one claim or a whole text: a verdict and a confidence for each claim in about 15-20 seconds. Present a quick verdict as a first read, not as final. When a row carries a `rationale`, show it with the verdict as the reviewers' reasoning, never as sourced evidence; when it carries a `dissent`, say that a reviewer disagreed and why. Then act on its confidence: on low, or when the claim is high-stakes for the user (legal, medical, financial, or about to be published), recommend a deep check; on medium, or when a row carries a dissent, offer one; on high, mention that one is available without pushing it. On a long text, name at most the two claims that matter; never start deep checks across every row. `verify_claim` is the deep check: a 1-10 score, the key finding, warnings and the main sources, in about 60-90 seconds, for more credits. Never start one without the user's yes, unless they asked for sources, a deep check or a verification: then run it directly. Say a deep check is running; if the call returns first, `get_verification` waits for it. A deep check replaces any earlier quick verdict on the same claim: if it changed, say so plainly and why, without apologising or averaging the two. If a deep check fails as `upstream_unavailable`, say source verification is unavailable. `list_verifications` finds an earlier deep check, or one whose result never arrived. `ask_followup` answers a follow-up on a completed deep check. `check_usage` shows credits left; never a prerequisite. Verdicts are directional, not absolute: always show the confidence.",
   "prompts": [
@@ -153,7 +153,9 @@
         "title": "assess_claimArguments",
         "type": "object"
       },
-      "meta_keys": [],
+      "meta_keys": [
+        "ui.resourceUri:str"
+      ],
       "model_visible": true,
       "name": "assess_claim",
       "outputSchema": {
@@ -208,7 +210,9 @@
         "title": "get_verificationArguments",
         "type": "object"
       },
-      "meta_keys": [],
+      "meta_keys": [
+        "ui.resourceUri:str"
+      ],
       "model_visible": true,
       "name": "get_verification",
       "outputSchema": {
@@ -217,6 +221,40 @@
         "type": "object"
       },
       "title": "Get deep fact-check result"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Get deep fact-check result (widget)"
+      },
+      "description": "Widget-only twin of `get_verification` (hidden from the model).",
+      "inputSchema": {
+        "properties": {
+          "task_id": {
+            "description": "task_id from verify_claim; polled by the Lenz widget in-card.",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "title": "get_verification_widgetArguments",
+        "type": "object"
+      },
+      "meta_keys": [
+        "ui.visibility:list"
+      ],
+      "model_visible": false,
+      "name": "get_verification_widget",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "get_verification_widgetDictOutput",
+        "type": "object"
+      },
+      "title": "Get deep fact-check result (widget)"
     },
     {
       "annotations": {
@@ -287,6 +325,89 @@
         "destructiveHint": false,
         "openWorldHint": true,
         "readOnlyHint": false,
+        "title": "Start the checks chosen in the Lenz card"
+      },
+      "description": "Called by the Lenz card, never by the assistant: start a PAID deep check\n    for each claim the user ticked, and return their task_ids at once.\n\n    `select_claims` waits for the verdict when one claim is chosen, which is\n    right for the assistant and wrong for a card that has to show the checks\n    running — and longer than some hosts allow a tool call to take. This submits\n    and returns; the card then polls `get_verification_widget` per task_id.\n\n    Retry-safe by construction: the same parent and the same texts derive the\n    same idempotency key, so a lost answer, a re-mount or a double tap replays\n    the first response and starts nothing new. A parent whose selection is\n    already resolved answers `already_resolved`, which the card reads as \"this\n    one has moved on\" rather than retrying forever.\n    ",
+      "inputSchema": {
+        "properties": {
+          "claims": {
+            "description": "The claim texts the user ticked in the card, exactly as the card offered them.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "task_id": {
+            "description": "The task_id of the needs_input check the card is resolving.",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "claims"
+        ],
+        "title": "select_claims_widgetArguments",
+        "type": "object"
+      },
+      "meta_keys": [
+        "ui.visibility:list"
+      ],
+      "model_visible": false,
+      "name": "select_claims_widget",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "select_claims_widgetDictOutput",
+        "type": "object"
+      },
+      "title": "Start the checks chosen in the Lenz card"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false,
+        "title": "Start a deep fact-check (Lenz card)"
+      },
+      "description": "Called by the Lenz card, never by the assistant: start a deep check and\n    return its task_id at once.\n\n    `verify_claim` waits for the check before it answers, which is right for\n    the assistant and wrong for a card that has to show the check running. This\n    submits and returns; the card then polls `get_verification_widget`. A repeat\n    of the same claim joins the same check at no new charge (the API\n    replays the key's first response for a day). The depth is the server's\n    (config.CARD_VERIFY_DEPTH), never the card's. ``retry_of`` names a failed,\n    retryable run of this user's to try again: it gets its own key, since the\n    old key would replay the failure.\n    ",
+      "inputSchema": {
+        "properties": {
+          "claim": {
+            "description": "The claim the Lenz card shows, exactly as it shows it.",
+            "title": "Claim",
+            "type": "string"
+          },
+          "retry_of": {
+            "default": "",
+            "description": "The task_id of a failed check the card is trying again. Empty for a first run.",
+            "title": "Retry Of",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim"
+        ],
+        "title": "start_verification_widgetArguments",
+        "type": "object"
+      },
+      "meta_keys": [
+        "ui.visibility:list"
+      ],
+      "model_visible": false,
+      "name": "start_verification_widget",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "start_verification_widgetDictOutput",
+        "type": "object"
+      },
+      "title": "Start a deep fact-check (Lenz card)"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false,
         "title": "Deep fact-check"
       },
       "description": "The deep check: a verdict with a 1–10 score, the key finding, warnings and the\n    main sources for ONE claim (about a minute to a minute and a half).\n\n    Not the default. Run only when the user asked for sources, a deep check or\n    a verification, or agreed after a quick check; a plain \"check this\" is\n    `assess_claim`. Never start one unasked. It costs 10 credits against 1 for `assess_claim`\n    (``depth=\"low\"`` costs 5; `check_usage` has the live price list). Tell the\n    user the deep check is running. Waits for the check and returns\n    ``status: completed`` when it finishes in time — a claim Lenz has\n    checked before comes back at once. Otherwise returns ``status: submitted``\n    with a ``task_id``: call `get_verification` with it, which waits again. A\n    completed result replaces any earlier quick verdict on the same claim; its\n    ``supersedes`` and ``presentation`` say how to tell the user. If the text\n    contains several claims the result is ``status: needs_input`` with a\n    numbered list: show it to the user and call `select_claims` with the exact\n    text of the chosen claim(s).\n    ",
@@ -335,7 +456,9 @@
         "title": "verify_claimArguments",
         "type": "object"
       },
-      "meta_keys": [],
+      "meta_keys": [
+        "ui.resourceUri:str"
+      ],
       "model_visible": true,
       "name": "verify_claim",
       "outputSchema": {
@@ -346,5 +469,5 @@
       "title": "Deep fact-check"
     }
   ],
-  "user_agent": "openai-mcp/1.0.0"
+  "user_agent": "openai-mcp/1.0.0 (ChatGPT)"
 }

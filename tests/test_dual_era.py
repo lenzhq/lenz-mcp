@@ -27,7 +27,15 @@ import pytest
 
 from lenz_mcp import client as mcp_client
 from lenz_mcp.client import ApiResponse
-from lenz_mcp.testing import LEGACY, MODERN, MODERN_VERSION, assembled_app, modern_meta
+from lenz_mcp.testing import (
+    DECLARES_APPS,
+    DECLARES_NO_APPS,
+    LEGACY,
+    MODERN,
+    MODERN_VERSION,
+    assembled_app,
+    modern_meta,
+)
 
 # The package's top-level name, whatever it is called in this checkout: its
 # loggers are the server's own.
@@ -36,17 +44,29 @@ _PACKAGE_ROOT = mcp_client.__name__.split('.')[0]
 SDK_MAJOR = int(version('mcp').split('.')[0])
 KEY = 'Bearer lenz_dual_era_key'
 
-# The identities that decide what a client is served. `openai-mcp` alone is a trap:
-# the ChatGPT app and its Responses-API connector share the token and get different
-# manifests, waits and cards (src/lenz_mcp/client.py::client_identity).
+# The identities that decide how long a client's deep check may WAIT.
+# `openai-mcp` alone is a trap there: the ChatGPT app and its Responses-API
+# connector share the token and cut a tool call at 119.8 s and 59.8 s
+# (src/lenz_mcp/client.py::parse_identity).
 CLAUDE = 'Claude-User/1.0'
 CHATGPT_APP = 'openai-mcp/1.0.0'
 CHATGPT_CODEX = 'openai-mcp/1.0.0 (Codex)'
 CHATGPT_API = 'openai-mcp/1.0.0 (Responses API)'
 UNPARSED = 'openai-mcp/1.0.0 (Responses API) proxy/1.0'
-CARD_CLIENTS = (CLAUDE, CHATGPT_APP, CHATGPT_CODEX)
-NON_CARD_CLIENTS = (CHATGPT_API, UNPARSED, 'claude-code/2.1.4')
 ERAS = (LEGACY, MODERN)
+
+# The CARD is keyed on none of those. Who is served one follows what the client
+# DECLARES, and a declaration only exists on the 2026-07-28 era: the 2025
+# handshake declares capabilities once, and this server is stateless, so
+# nothing survives to the `tools/list` that follows. The two eras therefore
+# decide by different rules, deliberately, and each leg below says which.
+#
+# LEGACY: the vendor token decides, because there is nothing else to read and
+# the Claude card renderer still opens 2025-era sessions — without the fallback
+# it would lose its own card. So every `openai-mcp` suffix is served one here,
+# the Responses-API connector and an unparsable UA included.
+CARD_VENDOR_CLIENTS = (CLAUDE, CHATGPT_APP, CHATGPT_CODEX, CHATGPT_API, UNPARSED)
+NON_CARD_VENDOR_CLIENTS = ('claude-code/2.1.4', 'python-httpx/0.28')
 
 
 @pytest.fixture
@@ -79,15 +99,15 @@ def server_no_card():
         yield harness
 
 
-def _wire(harness, user_agent=CLAUDE, era=LEGACY):
-    wire = harness.wire(user_agent=user_agent, authorization=KEY)
+def _wire(harness, user_agent=CLAUDE, era=LEGACY, capabilities=None):
+    wire = harness.wire(user_agent=user_agent, authorization=KEY, capabilities=capabilities)
     if era == LEGACY:
         wire.initialize()
     return wire
 
 
-def _tools(harness, user_agent, era):
-    wire = _wire(harness, user_agent, era)
+def _tools(harness, user_agent, era, capabilities=None):
+    wire = _wire(harness, user_agent, era, capabilities)
     return {t['name']: t for t in wire.call('tools/list', era=era, name='tools/list')['tools']}
 
 
@@ -227,7 +247,7 @@ def test_the_deep_check_wait_resolves_through_the_identity(server, api, monkeypa
 
     monkeypatch.setattr(
         mcp_config,
-        'VERIFY_WAIT_SECONDS_BY_USER_AGENT',
+        'VERIFY_WAIT_SECONDS_BY_IDENTITY',
         {'Claude-User': 210.0, 'openai-mcp': 100.0, 'openai-mcp (Codex)': 100.0},
     )
     monkeypatch.setattr(mcp_config, 'VERIFY_WAIT_SECONDS', 45.0)
@@ -324,26 +344,57 @@ def test_another_middleware_in_front_does_not_lose_the_identity(server, api, era
 
 
 @pytest.mark.parametrize('era', ERAS)
-@pytest.mark.parametrize('user_agent', CARD_CLIENTS)
-def test_a_card_client_gets_the_card_meta_in_either_era(server, era, user_agent):
+@pytest.mark.parametrize('user_agent', CARD_VENDOR_CLIENTS)
+def test_a_client_that_can_render_a_card_gets_one_in_either_era(server, era, user_agent):
+    """A card host is served the card in both eras — by two different rules.
+
+    Modern: it DECLARES the extension, so its User-Agent is beside the point.
+    Legacy: nothing is declared, so its vendor token decides. Both legs assert
+    the same outcome, which is what a client whose sessions straddle the two
+    eras actually needs; `test_the_two_eras_agree_only_where_the_rules_do`
+    is where the divergence is pinned.
+    """
     from lenz_mcp import mcp_card
 
-    tools = _tools(server, user_agent, era)
+    tools = _tools(server, user_agent, era, DECLARES_APPS if era == MODERN else None)
     for name in mcp_card.CARD_TOOL_NAMES & set(tools):
         assert tools[name].get('_meta') == dict(mcp_card.CARD_TOOL_META), name
     assert mcp_card.CARD_ONLY_TOOL_NAMES <= set(tools), 'a card client keeps the card-only tools'
 
 
 @pytest.mark.parametrize('era', ERAS)
-@pytest.mark.parametrize('user_agent', NON_CARD_CLIENTS)
-def test_a_non_card_client_never_sees_a_card_only_tool(server, era, user_agent):
+@pytest.mark.parametrize('user_agent', NON_CARD_VENDOR_CLIENTS)
+def test_a_client_that_cannot_render_a_card_never_sees_a_card_only_tool(server, era, user_agent):
     """`ui.visibility: ['app']` is a client-honored hint, not server enforcement —
     the Responses-API connector ignores it and lists everything to its model, and
-    two of those tools START PAID CHECKS. Stripping is what actually withholds them."""
+    two of those tools START PAID CHECKS. Stripping is what actually withholds them.
+
+    Modern: it declares capabilities without the extension. Legacy: it is not a
+    card vendor. Different rules, same answer.
+    """
     from lenz_mcp import mcp_card
 
-    tools = _tools(server, user_agent, era)
+    tools = _tools(server, user_agent, era, DECLARES_NO_APPS if era == MODERN else None)
     assert not (mcp_card.CARD_ONLY_TOOL_NAMES & set(tools)), f'{user_agent} was served a card-only tool'
+
+
+def test_the_two_eras_agree_only_where_the_rules_do(server):
+    """`Claude-User` that declares NOTHING: closed on modern, open on legacy.
+
+    This is the one divergence the design accepts, and it is Claude Code —
+    which sends the Claude app's User-Agent and declares no UI. On the modern
+    era its own declaration closes it out, which is the regression this change
+    was allowed to cause. On the legacy era there is no declaration to read, so
+    the vendor token decides and it keeps today's answer. It speaks the modern
+    era in production, so the legacy leg is the compatibility floor and not the
+    behaviour anyone gets.
+    """
+    from lenz_mcp import mcp_card
+
+    modern = _tools(server, CLAUDE, MODERN, DECLARES_NO_APPS)
+    legacy = _tools(server, CLAUDE, LEGACY)
+    assert not (mcp_card.CARD_ONLY_TOOL_NAMES & set(modern)), 'a declared no must close the card on the modern era'
+    assert mcp_card.CARD_ONLY_TOOL_NAMES <= set(legacy), 'the legacy era has no declaration and keeps the fallback'
 
 
 @pytest.mark.parametrize('era', ERAS)
@@ -361,8 +412,9 @@ def test_with_the_flag_off_nobody_gets_a_card(server_no_card, era):
 def test_no_manifest_carries_an_openai_namespaced_key(server, era):
     """After the widget went nothing is OpenAI-specific on the wire. It is a
     property that should hold forever, so it is asserted rather than left to a diff."""
-    for user_agent in CARD_CLIENTS + NON_CARD_CLIENTS:
-        for tool in _tools(server, user_agent, era).values():
+    declaration = DECLARES_APPS if era == MODERN else None
+    for user_agent in CARD_VENDOR_CLIENTS + NON_CARD_VENDOR_CLIENTS:
+        for tool in _tools(server, user_agent, era, declaration).values():
             keys = list(tool.get('_meta') or {})
             assert not [k for k in keys if k.startswith('openai/')], (user_agent, tool['name'], keys)
 
@@ -514,7 +566,7 @@ def test_a_card_tools_meta_is_never_the_shared_constant(server):
     corrupts the constant for the life of the process."""
     from lenz_mcp import mcp_card
 
-    tools = _tools(server, CLAUDE, MODERN)
+    tools = _tools(server, CLAUDE, MODERN, DECLARES_APPS)
     carded = [t for t in tools.values() if t.get('_meta', {}).get('ui')]
     assert carded, 'no tool carried card meta — the test would pass vacuously'
     for tool in carded:

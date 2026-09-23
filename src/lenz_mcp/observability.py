@@ -18,7 +18,7 @@ import os
 import sys
 
 # The loggers whose INFO lines are the service's signals.
-INFO_LOGGERS = ('lenz_mcp.oauth', 'lenz_mcp.protocol_log')
+INFO_LOGGERS = ('lenz_mcp.oauth', 'lenz_mcp.protocol_log', 'lenz_mcp.decisions')
 
 
 def configure_logging() -> None:

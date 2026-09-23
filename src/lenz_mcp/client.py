@@ -121,20 +121,267 @@ _UA_UNSAFE = re.compile(r'[^\x20-\x7e]|[()\\]')
 _ORIGIN_UA_MAX = 120
 
 
-# The inbound client's User-Agent, bound per request by lenz_mcp.middleware. A
+# `token`, `token/version`, or either followed by ONE parenthesised suffix, and
+# nothing else. Anything with a tail, a second group or stray text does not match.
+_UA_SHAPE = re.compile(r'^([^/\s()]+)(?:/[^\s()]+)?(?:\s+\(([^()]*)\))?$')
+
+
+def parse_vendor_token(user_agent: str) -> str:
+    """The leading token of a User-Agent, or ''.
+
+    ``Claude-User/1.0`` → ``Claude-User``; ``openai-mcp/1.0.0 (Codex)`` →
+    ``openai-mcp``. Coarse on purpose: it says which VENDOR's client this is,
+    and nothing about what that client can do.
+
+    Unlike `parse_identity` it does NOT fail closed on an unparsable value,
+    because its two readers want exactly the coarse answer: the card's delivery
+    hint (a proxied ChatGPT still needs `message`, or the model contradicts the
+    card in front of the user) and the card's legacy-era exposure fallback.
+    Neither hands a client anything a vendor's own clients do not already get.
+    """
+    return (user_agent or '').split('/', 1)[0].strip()
+
+
+def parse_identity(user_agent: str) -> str:
+    """A User-Agent's leading token plus its parenthesised suffix, or ''.
+
+    ``openai-mcp/1.0.0`` → ``openai-mcp``
+    ``openai-mcp/1.0.0 (Codex)`` → ``openai-mcp (Codex)``
+    ``openai-mcp/1.0.0 (Responses API)`` → ``openai-mcp (Responses API)``
+
+    The suffix is load-bearing and the token alone is a TRAP for anything sized
+    to a client's limits. Measured 2026-09-18: OpenAI's ChatGPT app and its
+    Responses-API MCP connector both send ``openai-mcp``, and their tool-call
+    ceilings are 119.8 s and 59.8 s. Worse, the API connector RETRIES a dropped
+    call once before reporting 504, so a wait tuned for the app would make every
+    slow deep check cost that developer two dropped calls and an error.
+
+    This is the key of the deep-check wait, and of nothing else. The card's two
+    decisions moved OFF it: keyed here, a new suffix on a known app (which is
+    what `openai-mcp/1.0.0 (ChatGPT)` was) silently withdraws the card.
+    """
+    ua = (user_agent or '').strip()
+    if not ua:
+        return ''
+    # Fail CLOSED on a shape we do not recognise. Returning the bare token for
+    # `openai-mcp/1.0.0 (Responses API) proxy/1.0` would hand a proxied
+    # connector the ChatGPT app's 100 s wait — the privileged answer for the
+    # least identifiable client, and the one whose failure is a hard error in
+    # the chat. An unparsed User-Agent is returned verbatim instead: it cannot
+    # match a row in the wait table, so the wait reads it as unknown.
+    match = _UA_SHAPE.match(ua)
+    if not match:
+        return ua
+    token, suffix = match.group(1), (match.group(2) or '').strip()
+    return f'{token} ({suffix})' if suffix else token
+
+
+# ── the client profile ───────────────────────────────────────────────
+# ONE resolved description of the client driving this request, bound once by
+# `lenz_mcp.middleware`, from which every per-client decision is a pure
+# function. Before this there were three: the card gate, the card's delivery
+# hint and the deep-check wait each re-derived the client from a bare
+# User-Agent ContextVar, in three modules, and a fourth reader would have done
+# it a fourth way. They also all keyed on the same string — the full identity —
+# so when OpenAI put a new suffix on the ChatGPT app's User-Agent
+# (`openai-mcp/1.0.0 (ChatGPT)`), all three stopped matching at once.
+#
+# The decisions now read DIFFERENT fields of the profile, each the narrowest
+# fact that answers it, and they live beside the thing they decide:
+#
+#   card exposure  → `declares_apps`, the client's own MCP Apps declaration
+#                    (mcp_card.card_active), with the vendor token as the
+#                    legacy-era and failed-read fallback;
+#   card delivery  → `vendor_token` (mcp_card.card_delivery);
+#   deep-check wait→ `identity` (server._verify_wait_seconds), which stays a
+#                    hand-maintained table because a wait that is too LONG is a
+#                    hard error in the chat, so it must fail closed.
+
+#: A client declares MCP Apps support on this request, and does not.
+DECLARATION_FROM_REQUEST = 'request'
+#: No declaration on this request. Not a failure: the 2025 era declares
+#: capabilities at the handshake, the server is stateless, so every in-session
+#: legacy request carries none. Measured against mcp 2.2.0: on the legacy
+#: `initialize` too, since the connection's capabilities are recorded by the
+#: handler AFTER middleware has run.
+DECLARATION_ABSENT = 'none'
+#: The declaration could not be read (the SDK predicate raised). Distinct from
+#: absent, because it is a bug and it is logged as one.
+DECLARATION_READ_FAILED = 'read_failed'
+
+ERA_MODERN = 'modern'
+ERA_LEGACY = 'legacy'
+
+# The first protocol revision with no handshake, where the client declares its
+# capabilities in every request's `_meta`. Versions are calendar dates, so they
+# compare correctly as text (the same rule `protocol_log._era_requested` uses).
+_FIRST_MODERN_VERSION = '2026-07-28'
+
+
+@dataclass(frozen=True)
+class ClientProfile:
+    """Everything this request says about the client that made it.
+
+    Frozen, and built once per request: a decision reads a field, never the
+    request. That is what makes the three decisions testable with a constructed
+    profile and no request in flight, and what keeps a fourth decision from
+    inventing a fourth way to ask who the client is.
+    """
+
+    #: The raw `User-Agent` header, '' when the client sent none.
+    user_agent: str
+    #: Leading token plus parenthesised suffix, or the raw UA when it does not
+    #: parse. See `parse_identity` for why an unparsed value is kept verbatim.
+    identity: str
+    #: The raw leading token: which VENDOR's client this is. '' with no UA.
+    vendor_token: str
+    #: True/False when this request carried a declaration, None when it did not
+    #: or the read failed — `declaration_source` says which.
+    declares_apps: bool | None
+    declaration_source: str
+    era: str
+    #: The clientInfo NAME, when this request carried one. NOT the User-Agent
+    #: and never a substitute for it: `Claude-User` is sent by both the Claude
+    #: app and Claude Code, which want opposite card answers, and the name is
+    #: the only thing that tells them apart in a log line. Absent on a 2025-era
+    #: in-session request, where the handshake's identity did not survive this
+    #: stateless server. Client-controlled, so logged through `log_token` like
+    #: everything else and READ for nothing.
+    client_name: str = ''
+
+    @classmethod
+    def from_user_agent(
+        cls,
+        user_agent: str,
+        *,
+        declares_apps: bool | None = None,
+        declaration_source: str = DECLARATION_ABSENT,
+        era: str = ERA_LEGACY,
+        client_name: str = '',
+    ) -> ClientProfile:
+        ua = user_agent or ''
+        return cls(
+            user_agent=ua,
+            identity=parse_identity(ua),
+            vendor_token=parse_vendor_token(ua),
+            declares_apps=declares_apps,
+            declaration_source=declaration_source,
+            era=era,
+            client_name=client_name,
+        )
+
+    @property
+    def declared(self) -> str:
+        """One token for the log line: `yes` / `no` / `none` / `read_failed`."""
+        if self.declaration_source != DECLARATION_FROM_REQUEST:
+            return self.declaration_source
+        return 'yes' if self.declares_apps else 'no'
+
+
+@dataclass(frozen=True)
+class KnownIdentity:
+    """An identity we have MEASURED, and what we measured about it.
+
+    The registry below is the ONLY place an identity string is spelled: the
+    wait table's keys, the goldens' client matrix and the probe server's
+    constants are all pinned to it, so an identity can never again be known to
+    one table and unknown to another — which is exactly how a new User-Agent
+    suffix got a card decision and no wait row.
+    """
+
+    identity: str
+    vendor: str
+    #: Which surface of that vendor this is, in plain words.
+    surface: str
+    #: When it was last measured, and where the measurement is written down.
+    measured: str
+    source: str
+    #: What we measured it to declare, for the goldens' declaration axis. None
+    #: where it varies by build or has not been measured.
+    declares_apps: bool | None = None
+
+
+#: Measured client identities. Adding one here is half a change: give it a row
+#: in `config.VERIFY_WAIT_SECONDS_BY_IDENTITY` too, or the pin test fails.
+_PROBE_README = 'scripts/probe/README.md'
+KNOWN_IDENTITIES: dict[str, KnownIdentity] = {
+    entry.identity: entry
+    for entry in (
+        KnownIdentity(
+            identity='Claude-User',
+            vendor='Claude-User',
+            surface='claude.ai, Claude Desktop and the directory connector; also Claude Code',
+            measured='2026-09-18',
+            source=_PROBE_README,
+            # Both of the Claude app's clients declare the extension; Claude
+            # Code sends the same User-Agent and declares no UI at all. One
+            # identity, two capability profiles — which is why the card reads
+            # the declaration and not this string.
+            declares_apps=None,
+        ),
+        KnownIdentity(
+            identity='openai-mcp',
+            vendor='openai-mcp',
+            surface='the ChatGPT app',
+            measured='2026-09-18',
+            source=_PROBE_README,
+            declares_apps=True,
+        ),
+        KnownIdentity(
+            identity='openai-mcp (ChatGPT)',
+            vendor='openai-mcp',
+            surface='the ChatGPT app, which grew this suffix on 2026-09-23',
+            measured='2026-09-23',
+            source=_PROBE_README,
+            declares_apps=True,
+        ),
+        KnownIdentity(
+            identity='openai-mcp (Codex)',
+            vendor='openai-mcp',
+            surface='the ChatGPT app, model-side calls',
+            measured='2026-09-18',
+            source=_PROBE_README,
+            declares_apps=True,
+        ),
+        KnownIdentity(
+            identity='openai-mcp (Responses API)',
+            vendor='openai-mcp',
+            surface="OpenAI's Responses-API MCP connector",
+            measured='2026-09-18',
+            source=_PROBE_README,
+            declares_apps=True,
+        ),
+    )
+}
+
+
+# The inbound client's profile, bound per request by lenz_mcp.middleware. A
 # ContextVar with NO default: "nobody bound one" and "the client sent none" are
 # different facts, and only the first is a bug worth shouting about.
-_INBOUND_USER_AGENT: contextvars.ContextVar[str] = contextvars.ContextVar('lenz_mcp_inbound_user_agent')
+_INBOUND_PROFILE: contextvars.ContextVar[ClientProfile] = contextvars.ContextVar('lenz_mcp_inbound_client_profile')
+
+#: The profile a request with nothing bound reads as. Privileged nowhere: no
+#: identity matches a wait row, no token matches a card vendor.
+UNKNOWN_PROFILE = ClientProfile.from_user_agent('')
 
 #: Unresolved identity reads since the process started. A count, not just a log
 #: line: "every client silently reads as unknown" is only silent if nobody counts.
 identity_unresolved_count = 0
 
 
-def bind_client_user_agent(user_agent: str):
-    """Bind the calling client's User-Agent for this request; returns a reset callable."""
-    token = _INBOUND_USER_AGENT.set(user_agent or '')
-    return lambda: _INBOUND_USER_AGENT.reset(token)
+def bind_client_profile(profile: ClientProfile):
+    """Bind this request's resolved client profile; returns a reset callable."""
+    token = _INBOUND_PROFILE.set(profile)
+    return lambda: _INBOUND_PROFILE.reset(token)
+
+
+def bind_client_user_agent(user_agent: str, **kwargs):
+    """Bind a profile built from a User-Agent alone: no declaration, legacy era.
+
+    The shape a 2025-era in-session request really has, and the one every
+    caller outside the middleware wants. `bind_client_profile` is the full form.
+    """
+    return bind_client_profile(ClientProfile.from_user_agent(user_agent, **kwargs))
 
 
 def _is_decade(count: int) -> bool:
@@ -165,72 +412,43 @@ def note_identity_unresolved(reason: str) -> None:
         )
 
 
-def client_user_agent() -> str:
-    """The User-Agent of the MCP client driving the current request.
+def client_profile() -> ClientProfile:
+    """The resolved profile of the MCP client driving the current request.
 
-    The genuine client identity (``claude-code/2.1.4``, ``openai-mcp/1.0.0``,
-    ``Claude-User``) is only visible on the inbound transport request. It is bound
-    per request by ``lenz_mcp.middleware.bind_client_identity`` and read here, with
-    no SDK import at all: the old read went through ``request_ctx``, which mcp 2.x
-    deleted, inside a swallowed ``except`` — on 2.x that would have returned '' for
-    every client, forever, with nothing in any log.
+    The ONE place a per-client decision asks who the client is. Bound per
+    request by ``lenz_mcp.middleware.bind_client_profile``, with no SDK import
+    here at all: the old read went through ``request_ctx``, which mcp 2.x
+    deleted, inside a swallowed ``except`` — on 2.x that would have returned ''
+    for every client, forever, with nothing in any log.
 
-    Returns '' when the client sent no User-Agent (ordinary) and '' when nothing was
-    bound (a bug, and reported as one).
+    Returns ``UNKNOWN_PROFILE`` when nothing was bound (a bug, and reported as
+    one). A client that simply sent no User-Agent is an ordinary profile whose
+    ``user_agent`` is '' — a different fact, and not an error.
     """
     try:
-        return _INBOUND_USER_AGENT.get()
+        return _INBOUND_PROFILE.get()
     except LookupError:
-        note_identity_unresolved('no user agent bound for this request')
-        return ''
+        note_identity_unresolved('no client profile bound for this request')
+        return UNKNOWN_PROFILE
 
 
-# `token`, `token/version`, or either followed by ONE parenthesised suffix, and
-# nothing else. Anything with a tail, a second group or stray text does not match.
-_UA_SHAPE = re.compile(r'^([^/\s()]+)(?:/[^\s()]+)?(?:\s+\(([^()]*)\))?$')
+def client_user_agent() -> str:
+    """The User-Agent of the MCP client driving the current request, or ''.
+
+    A thin reader of `client_profile()`, kept because the outbound UA builder
+    and the log lines want the raw header and nothing else.
+    """
+    return client_profile().user_agent
 
 
 def client_user_agent_token() -> str:
-    """The leading token of the inbound client's User-Agent, or ''.
-
-    ``Claude-User/1.0`` → ``Claude-User``; ``openai-mcp/1.0.0 (Codex)`` →
-    ``openai-mcp``. Coarse on purpose: it says which VENDOR's client this is.
-    What that client can do is `client_identity()` — the token alone is not
-    enough to decide anything, because one token covers clients with different
-    limits (see below).
-    """
-    return client_user_agent().split('/', 1)[0].strip()
+    """This request's vendor token. A thin reader of `client_profile()`."""
+    return client_profile().vendor_token
 
 
 def client_identity() -> str:
-    """The client's leading token plus its parenthesised suffix, or ''.
-
-    ``openai-mcp/1.0.0`` → ``openai-mcp``
-    ``openai-mcp/1.0.0 (Codex)`` → ``openai-mcp (Codex)``
-    ``openai-mcp/1.0.0 (Responses API)`` → ``openai-mcp (Responses API)``
-
-    The suffix is load-bearing and the token alone is a TRAP. Measured
-    2026-09-18: OpenAI's ChatGPT app and its Responses-API MCP connector both
-    send ``openai-mcp``, and their tool-call ceilings are 119.8 s and 59.8 s.
-    Worse, the API connector RETRIES a dropped call once before reporting 504,
-    so a wait tuned for the app would make every slow deep check cost that
-    developer two dropped calls and an error. This is the ONE identity the
-    deep-check wait, the card gate and the card's delivery hint all read, so a
-    client is never matched one way here and another way there.
-    """
-    ua = client_user_agent().strip()
-    if not ua:
-        return ''
-    # Fail CLOSED on a shape we do not recognise. Returning the bare token for
-    # `openai-mcp/1.0.0 (Responses API) proxy/1.0` would hand a proxied
-    # connector the ChatGPT app's 100 s wait, its card and its paid app-only
-    # tools — the privileged answer for the least identifiable client. An unparsed User-Agent is returned verbatim instead: it
-    # cannot match a row in any table, so every gate reads it as unknown.
-    match = _UA_SHAPE.match(ua)
-    if not match:
-        return ua
-    token, suffix = match.group(1), (match.group(2) or '').strip()
-    return f'{token} ({suffix})' if suffix else token
+    """This request's identity. A thin reader of `client_profile()`."""
+    return client_profile().identity
 
 
 def _user_agent() -> str:

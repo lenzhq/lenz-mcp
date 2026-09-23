@@ -15,8 +15,17 @@ A diff in `tests/goldens/` is the one place a reviewer cannot miss it.
 **Built from the wire**, through `src/lenz_mcp/testing.py`, never from the
 server's in-process objects — per-client tailoring happens in the request
 path, so an in-process read would describe a manifest no client receives.
-Captured in the 2025 era; the 2026 era is asserted EQUAL after normalisation
-rather than stored, so a golden file changes only when wording does.
+
+**Captured in the 2025 era**, and that matters for the card. Who is served one
+is keyed on what the client DECLARES, and only the 2026-07-28 revision carries
+a declaration per request: the 2025 handshake declares once and this server is
+stateless, so nothing survives to the `tools/list` that follows. On the legacy
+era the client's vendor TOKEN decides instead, which is why
+`claude-code__card-on.json` — a client whose `declares_mcp_apps` is false —
+still shows the card-only tools. On the modern era it does not, and that is
+the one place the two eras differ on purpose (`ERA_DIVERGENT`). Everything
+else is asserted EQUAL across the eras after normalisation rather than stored,
+so a golden file changes only when wording does.
 
 Regenerate after an intended change:
 
@@ -33,28 +42,49 @@ from typing import Any
 import pytest
 
 from lenz_mcp.mcp_card import CARD_ONLY_TOOL_NAMES, CARD_URI
-from lenz_mcp.testing import MODERN, assembled_app
+from lenz_mcp.testing import DECLARES_APPS, DECLARES_NO_APPS, MODERN, assembled_app
 
 GOLDEN_DIR = Path(__file__).parent / 'goldens'
 UPDATE = os.environ.get('UPDATE_MCP_GOLDENS') == '1'
 
-# The identities `lenz_mcp.client.client_identity()` distinguishes, with a real
-# User-Agent for each. The suffix is load-bearing: the ChatGPT app and OpenAI's
-# Responses-API connector both send `openai-mcp`, get different manifests, and
-# have tool-call ceilings of 119.8 s and 59.8 s (measured).
-CLIENTS: dict[str, str] = {
-    'claude': 'Claude-User',
-    'chatgpt': 'openai-mcp/1.0.0',
-    'chatgpt-codex': 'openai-mcp/1.0.0 (Codex)',
-    'openai-responses-api': 'openai-mcp/1.0.0 (Responses API)',
-    # Must be treated exactly like any other unknown client: client_identity
-    # fails CLOSED on a suffix it does not recognise.
-    'unknown-suffix': 'openai-mcp/1.0.0 (Something New)',
-    # Also the value the identity read falls back to when it fails.
-    'no-user-agent': '',
+# Every client whose view is committed, as (User-Agent, what it DECLARES).
+#
+# Two axes, because two different things decide what a client is served. The
+# User-Agent carries the identity the deep-check wait keys on, where a suffix
+# is load-bearing: the ChatGPT app and OpenAI's Responses-API connector both
+# send `openai-mcp` and cut a tool call at 119.8 s and 59.8 s. The declaration
+# is what the CARD keys on, and it is the reason one User-Agent can need two
+# rows — `Claude-User` is the Claude app, which declares MCP Apps, and Claude
+# Code, which does not.
+#
+# Generated from `client.KNOWN_IDENTITIES` plus the cases that are deliberately
+# NOT in it, so a measured identity cannot be added to the registry and left
+# without a committed view of what its model sees.
+CLIENTS: dict[str, tuple[str, dict | None]] = {
+    'claude': ('Claude-User', DECLARES_APPS),
+    # The same User-Agent, the opposite capabilities. Under the identity table
+    # this client was served three card-only tools it cannot render.
+    'claude-code': ('Claude-User', DECLARES_NO_APPS),
+    'chatgpt': ('openai-mcp/1.0.0', DECLARES_APPS),
+    # The suffix OpenAI began sending on 2026-09-23, which matched no row.
+    'chatgpt-app': ('openai-mcp/1.0.0 (ChatGPT)', DECLARES_APPS),
+    'chatgpt-codex': ('openai-mcp/1.0.0 (Codex)', DECLARES_APPS),
+    # Declares the extension and renders nothing: served the card, knowingly.
+    'openai-responses-api': ('openai-mcp/1.0.0 (Responses API)', DECLARES_APPS),
+    # An unmeasured suffix is no longer refused the card — it is asked.
+    'unknown-suffix': ('openai-mcp/1.0.0 (Something New)', DECLARES_APPS),
+    # No User-Agent and no declaration: privileged nowhere.
+    'no-user-agent': ('', None),
 }
 FLAGS = (False, True)
 CASES = [(client, flag) for client in CLIENTS for flag in FLAGS]
+
+# A client whose User-Agent is a card vendor's but which declares nothing gets
+# DIFFERENT answers in the two eras, by design: the modern era reads its
+# declaration and closes the card, the legacy era has none to read and falls
+# back to the vendor token. Claude Code is the case. Everything else must still
+# be identical across the eras, which is what the equality test is for.
+ERA_DIVERGENT = {'claude-code'}
 
 # What the 2026-07-28 revision adds to every result and the 2025 one lacks.
 # Envelope, not wording: stripped before the two eras are compared. Named here,
@@ -152,9 +182,22 @@ def _card_resource(wire, *, era: str | None = None) -> dict[str, Any] | None:
     return {'uri': CARD_URI, 'mimeTypes': sorted({c.get('mimeType', '') for c in contents})}
 
 
-def _capture(user_agent: str, card: bool, *, era: str | None = None, raw: dict | None = None) -> dict[str, Any]:
+def _capture(
+    user_agent: str,
+    card: bool,
+    *,
+    era: str | None = None,
+    raw: dict | None = None,
+    capabilities: dict | None = None,
+) -> dict[str, Any]:
+    """What this client is served. `capabilities` is what it DECLARES.
+
+    Only the 2026-07-28 era carries a declaration — the 2025 handshake declares
+    once and this server is stateless — so the legacy capture ignores it and
+    falls back to the vendor token, exactly as production does.
+    """
     with assembled_app(MCP_OAUTH_ENABLED=False, MCP_CARD_ENABLED=card) as harness:
-        wire = harness.wire(user_agent=user_agent)
+        wire = harness.wire(user_agent=user_agent, capabilities=capabilities)
         if era == MODERN:
             # No handshake in the 2026 era: the instructions come from discovery.
             instructions = wire.call('server/discover', era=MODERN).get('instructions')
@@ -180,8 +223,23 @@ def _capture(user_agent: str, card: bool, *, era: str | None = None, raw: dict |
     }
 
 
+def _capture_client(name: str, card: bool, **kwargs) -> dict[str, Any]:
+    """`_capture` for a named row of CLIENTS, declaration included."""
+    user_agent, capabilities = CLIENTS[name]
+    return _capture(user_agent, card, capabilities=capabilities, **kwargs)
+
+
 def _record(client: str, card: bool, view: dict[str, Any]) -> dict[str, Any]:
-    return {'client': client, 'user_agent': CLIENTS[client], 'card_enabled': card, **view}
+    user_agent, capabilities = CLIENTS[client]
+    return {
+        'client': client,
+        'user_agent': user_agent,
+        # What this client DECLARES, which is what the card is keyed on.
+        # Committed beside the view so a golden says WHY it looks like this.
+        'declares_mcp_apps': capabilities == DECLARES_APPS,
+        'card_enabled': card,
+        **view,
+    }
 
 
 # ── the goldens ──────────────────────────────────────────────────────────────
@@ -189,7 +247,7 @@ def _record(client: str, card: bool, view: dict[str, Any]) -> dict[str, Any]:
 
 @pytest.mark.parametrize(('client', 'card'), CASES)
 def test_the_model_sees_what_the_golden_says(client, card):
-    view = _record(client, card, _capture(CLIENTS[client], card))
+    view = _record(client, card, _capture_client(client, card))
     path = _golden_path(client, card)
 
     if UPDATE:
@@ -214,19 +272,37 @@ def test_the_model_sees_what_the_golden_says(client, card):
 def test_both_protocol_eras_give_the_model_the_same_view(client, card):
     legacy_raw: dict = {}
     modern_raw: dict = {}
-    legacy = _capture(CLIENTS[client], card, raw=legacy_raw)
-    modern = _capture(CLIENTS[client], card, era=MODERN, raw=modern_raw)
+    legacy = _capture_client(client, card, raw=legacy_raw)
+    modern = _capture_client(client, card, era=MODERN, raw=modern_raw)
     # Proved on the very responses being compared, not on a separate request:
     # an equality between two captures that were secretly both legacy would
     # pass for the wrong reason. `resultType` is the 2026 discriminator.
     assert 'resultType' in modern_raw['tools/list'], 'the "modern" capture was not a 2026-era response'
     assert 'resultType' not in legacy_raw['tools/list'], 'the "legacy" capture carried a 2026 envelope'
+
+    if client in ERA_DIVERGENT and card:
+        # The one divergence the design accepts, asserted in BOTH directions so
+        # it cannot quietly become an equality again. `Claude-User` that
+        # declares no MCP Apps support is Claude Code: the modern era reads
+        # that declaration and closes the card; the legacy era has none to
+        # read, so the vendor token decides and it keeps today's answer. Claude
+        # Code speaks the modern era in production, so the closed one is what
+        # it gets and the legacy leg is only a compatibility floor.
+        modern_tools = {t['name'] for t in modern['tools']}
+        legacy_tools = {t['name'] for t in legacy['tools']}
+        assert not (CARD_ONLY_TOOL_NAMES & modern_tools), 'a declared no must close the card on the modern era'
+        assert CARD_ONLY_TOOL_NAMES <= legacy_tools, 'the legacy era has no declaration and keeps the fallback'
+        assert modern != legacy, 'this row is listed as era-divergent but the two eras agree'
+        return
+
     assert modern == legacy, (
         f'\nThe 2026-07-28 manifest differs from the 2025 one for {client} '
         f'(card {"on" if card else "off"}), AFTER the envelope was stripped.\n'
         'Do NOT normalise this away. The tool payloads are supposed to be identical\n'
         'across protocol eras, and test_dual_era asserts they are, so a\n'
         'difference here is evidence about the MCP SDK, not about this file.\n'
+        f'If it is a per-client DECISION that legitimately differs by era, add {client!r}\n'
+        'to ERA_DIVERGENT with the reason, rather than relaxing this assertion.\n'
     )
 
 
@@ -257,30 +333,43 @@ def test_every_client_is_offered_the_core_tools(client, card):
     An empty capture that matched an empty golden would be the same failure as
     a test suite that runs zero tests and reports success.
     """
-    view = _capture(CLIENTS[client], card)
+    view = _capture_client(client, card)
     names = {t['name'] for t in view['tools']}
     assert {'assess_claim', 'check_usage'} <= names, names
     assert view['instructions'], 'the server sent no instructions'
 
 
 @pytest.mark.parametrize('card', FLAGS)
-def test_the_responses_api_connector_is_never_offered_a_tool_it_cannot_render(card):
-    """OpenAI's Responses-API connector ignores `ui.visibility` (measured).
+def test_a_client_that_says_it_renders_no_card_is_never_offered_a_card_only_tool(card):
+    """`ui.visibility: ['app']` is a client-honored HINT, not server enforcement.
 
-    So a card-only tool listed to it is one the model can see and call, with
-    no card to put the result in — the model gets a payload shaped for a frame
-    that never renders, and the user gets nothing useful. These tools are also
-    paid.
+    OpenAI's Responses-API connector ignores it and lists every tool to its
+    model (measured 2026-09-18), so a card-only tool listed to a client that
+    renders no card is one the model can see and call with nowhere to put the
+    result — and two of the three start paid checks. Stripping server-side is
+    what actually withholds them.
+
+    Keyed on what the client SAYS, which is the reversal this release makes: an
+    unmeasured suffix is no longer refused the card, it is asked. The Responses
+    API connector declares the extension and is now served one, knowingly
+    (tests/test_card.py::test_a_declaring_client_that_renders_nothing_is_accepted).
+    What must never happen is a client that answered "no" being served one.
     """
-    view = _capture(CLIENTS['openai-responses-api'], card)
+    user_agent, capabilities = CLIENTS['claude-code']
+    assert capabilities != DECLARES_APPS, 'the test would pass vacuously against a declaring client'
+    # The MODERN era: it is the only one that carries a declaration, and it is
+    # what Claude Code speaks. The legacy capture of the same client keeps the
+    # vendor-token fallback, which is the divergence
+    # `test_both_protocol_eras_give_the_model_the_same_view` pins.
+    view = _capture(user_agent, card, era=MODERN, capabilities=capabilities)
     offered = {t['name'] for t in view['tools']} & CARD_ONLY_TOOL_NAMES
-    assert not offered, f'the Responses-API connector is offered card-only tools: {sorted(offered)}'
+    assert not offered, f'a client that declares no MCP Apps support was offered: {sorted(offered)}'
 
 
 @pytest.mark.parametrize(('client', 'card'), CASES)
 def test_no_client_is_shown_an_openai_namespaced_meta_key(client, card):
     """No TOOL declares an `openai/`-namespaced `_meta` key, for anyone."""
-    view = _capture(CLIENTS[client], card)
+    view = _capture_client(client, card)
     stray = [(t['name'], k) for t in view['tools'] for k in t['meta_keys'] if k.startswith('openai/')]
     assert not stray, stray
 
@@ -291,8 +380,8 @@ def test_every_client_is_told_the_same_thing_about_the_tools_it_can_see(card):
     change what a tool SAYS, or a case measured on one client stops describing
     another — and the tool-choice eval measures on one client."""
     by_name: dict[str, dict[str, Any]] = {}
-    for client, user_agent in CLIENTS.items():
-        for tool in _capture(user_agent, card)['tools']:
+    for client in CLIENTS:
+        for tool in _capture_client(client, card)['tools']:
             # Everything the model reads, not three hand-picked fields: the first
             # version skipped `outputSchema` and `annotations`, so a client-specific
             # output description could pass here and survive every regeneration
