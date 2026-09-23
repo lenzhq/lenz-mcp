@@ -147,8 +147,8 @@ ASK_TIMEOUT = 60.0
 #   sending `(ChatGPT)`; its model-side calls carry `(Codex)`: 100 s.
 #   The `(ChatGPT)` row is the SAME app and carries the same number, but its
 #   ceiling is UNMEASURED on that build: 119.8 s was measured 2026-09-18 on the
-#   previous one. Watch a deep check from it complete before trusting the row
-#   (the release's post-deploy checks say how).
+#   previous one. Watch a deep check from it complete before trusting the row;
+#   `scripts/probe/` is how a ceiling gets measured.
 #   Measured 2026-09-18 with the dev probe connector: ChatGPT drops a tool call
 #   at 119.8 s and shows the user "HTTP 504"; 100 s completes; progress
 #   notifications do NOT extend it (the same as Claude). The whole tool call —

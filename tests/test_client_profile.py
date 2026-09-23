@@ -157,18 +157,26 @@ def test_the_profile_is_reset_on_the_ORDINARY_path():
     gives each HTTP request its own task and a ContextVar set in one task is
     invisible to the next — which is exactly why a missing reset would pass
     every other test here. It becomes a real leak the day two requests share a
-    task (the SDK's session loop, stdio). So the reset is asserted directly,
-    in the same task, rather than inferred from isolation that is doing the
-    work for it.
+    task (the SDK's session loop, stdio). So the reset is asserted directly
+    rather than inferred from isolation that is doing the work for it.
+
+    The assertion has to run INSIDE the same task, after the middleware
+    returns. Made from the test body it passes either way: `asyncio.run`
+    executes the coroutine in a fresh task with a COPIED context, so the
+    binding never reaches the caller's context whether or not it was reset.
     """
 
     async def _ok(ctx):
         assert client.client_identity() == 'Claude-User', 'bound while the handler runs'
         return {'tools': []}
 
-    asyncio.run(middleware.lenz_middleware(_Ctx(user_agent='Claude-User'), _ok))
-    with pytest.raises(LookupError):
-        client._INBOUND_PROFILE.get()
+    async def _go():
+        await middleware.lenz_middleware(_Ctx(user_agent='Claude-User'), _ok)
+        # Same task, same context as the middleware ran in.
+        with pytest.raises(LookupError):
+            client._INBOUND_PROFILE.get()
+
+    asyncio.run(_go())
 
 
 def test_the_profile_is_reset_even_when_the_handler_raises():
@@ -476,6 +484,70 @@ def test_the_decisions_logger_is_configured_to_emit():
     from lenz_mcp import observability
 
     assert decisions.logger.name in observability.INFO_LOGGERS
+
+
+def test_the_line_reports_the_manifest_that_went_out_not_the_rule(monkeypatch):
+    """`card=` is read off the SENT tool list, not re-derived.
+
+    A line that re-asked the decision would faithfully report `card=on` for a
+    client the tailoring gave nothing to — the silent failure this whole
+    release exists to make visible, reproduced by the thing meant to reveal it.
+    Driven with a decision that says ON against a list with no card-only tool,
+    which is what the fail-closed tailoring path produces.
+    """
+    monkeypatch.setattr(config, 'CARD_ENABLED', True)
+    reset = client.bind_client_user_agent('Claude-User')
+    try:
+        with _collecting() as messages:
+            middleware.log_manifest_decision({'tools': [{'name': 'assess_claim'}]})
+    finally:
+        reset()
+    fields = _fields(_lines(messages, 'mcp_manifest ')[0])
+    assert fields['card'] == 'off', 'the line must describe the manifest, not the decision'
+    assert fields['reason'].endswith('_mismatch'), fields['reason']
+
+
+def test_a_card_client_served_the_card_reports_it(monkeypatch):
+    """The other half, or the test above is satisfied by always saying `off`."""
+    monkeypatch.setattr(config, 'CARD_ENABLED', True)
+    reset = client.bind_client_user_agent('Claude-User')
+    try:
+        with _collecting() as messages:
+            middleware.log_manifest_decision(
+                {'tools': [{'name': 'assess_claim'}, {'name': 'start_verification_widget'}]}
+            )
+    finally:
+        reset()
+    fields = _fields(_lines(messages, 'mcp_manifest ')[0])
+    assert fields['card'] == 'on'
+    assert not fields['reason'].endswith('_mismatch'), fields['reason']
+
+
+def test_a_mismatch_is_also_an_error_line(monkeypatch, caplog):
+    """The `_mismatch` reason rides a log line a reader may never filter for.
+    The ERROR beside it is what reaches Sentry."""
+    monkeypatch.setattr(config, 'CARD_ENABLED', True)
+    reset = client.bind_client_user_agent('Claude-User')
+    try:
+        with caplog.at_level(logging.ERROR, logger='lenz_mcp.middleware'):
+            middleware.log_manifest_decision({'tools': [{'name': 'assess_claim'}]})
+    finally:
+        reset()
+    assert any('mcp_manifest_mismatch' in r.getMessage() for r in caplog.records), caplog.records
+
+
+def test_a_result_with_no_readable_tool_list_falls_back_to_the_decision(monkeypatch):
+    """A shape we cannot read is not evidence that the card was withheld."""
+    monkeypatch.setattr(config, 'CARD_ENABLED', True)
+    reset = client.bind_client_user_agent('Claude-User')
+    try:
+        with _collecting() as messages:
+            middleware.log_manifest_decision({'tools': 'not-a-list'})
+    finally:
+        reset()
+    fields = _fields(_lines(messages, 'mcp_manifest ')[0])
+    assert fields['card'] == 'on', 'unreadable is not "off"'
+    assert not fields['reason'].endswith('_mismatch'), fields['reason']
 
 
 def test_a_broken_decision_line_never_costs_a_client_its_manifest(monkeypatch, caplog):

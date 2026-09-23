@@ -64,7 +64,7 @@ async def lenz_middleware(ctx, call_next):
             return await _logged_resource_read(ctx, call_next)
         result = await call_next(ctx)
         if ctx.method == 'tools/list':
-            return log_manifest_decision(tailor_tool_list(result))
+            return tailor_and_log(result)
         if ctx.method == 'resources/list':
             return tailor_resource_list(result)
         return result
@@ -158,7 +158,25 @@ def _reads_the_apps_declaration(ctx) -> tuple[bool | None, str]:
         return None, client.DECLARATION_READ_FAILED
 
 
-def tailor_tool_list(result: Any) -> Any:
+def tailor_and_log(result: Any) -> Any:
+    """Tailor the tool list, then state what went out. ONE decision for both.
+
+    Asking `card_decision` twice per request was not just wasted work: its
+    error branch logs, so a failing decision wrote its traceback twice per
+    `tools/list` — and the count of those lines is what the runbook says to
+    read.
+    """
+    decision = None
+    try:
+        from lenz_mcp import client, mcp_card
+
+        decision = mcp_card.card_decision(client.client_profile())
+    except Exception:  # noqa: BLE001 — tailoring decides for itself below
+        logger.exception('the card decision could not be made before tailoring')
+    return log_manifest_decision(tailor_tool_list(result, decision), decision)
+
+
+def tailor_tool_list(result: Any, decision: tuple[bool, str] | None = None) -> Any:
     """What this client may see in `tools/list`.
 
     A client we serve the card to gets the card meta on the card tools and keeps
@@ -184,7 +202,8 @@ def tailor_tool_list(result: Any) -> Any:
         return result
 
     try:
-        if mcp_card.card_active():
+        card_on = mcp_card.card_active() if decision is None else decision[0]
+        if card_on:
             tailored = []
             for tool in tools:
                 tool = copy.deepcopy(tool)
@@ -207,7 +226,7 @@ def tailor_tool_list(result: Any) -> Any:
     return result
 
 
-def log_manifest_decision(result: Any) -> Any:
+def log_manifest_decision(result: Any, decision: tuple[bool, str] | None = None) -> Any:
     """State what this client was just served, and why. Returns `result` untouched.
 
     `card` is read off the MANIFEST, not re-derived from the profile. The two
@@ -226,7 +245,7 @@ def log_manifest_decision(result: Any) -> Any:
         from lenz_mcp import client, config, decisions, mcp_card
 
         profile = client.client_profile()
-        decided, reason = mcp_card.card_decision(profile)
+        decided, reason = mcp_card.card_decision(profile) if decision is None else decision
         card_on = _manifest_carries_the_card(result)
         if card_on is not None and card_on != decided:
             logger.error(
