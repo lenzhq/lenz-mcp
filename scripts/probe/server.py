@@ -28,6 +28,7 @@ import asyncio
 import contextvars
 import json
 import os
+import re
 import secrets
 import sys
 import time
@@ -357,8 +358,13 @@ def bind_user_agent(user_agent: str):
     return lambda: _REQUEST_USER_AGENT.reset(token)
 
 
+# Stops at whitespace as well as `/`: a version is optional and a suffix is
+# not tied to one, so `openai-mcp (Codex)` is a shape a host can send.
+_UA_TOKEN_END = re.compile(r'[/\s()]')
+
+
 def _vendor_token() -> str:
-    return _REQUEST_USER_AGENT.get().split('/', 1)[0].strip()
+    return _UA_TOKEN_END.split(_REQUEST_USER_AGENT.get().strip(), 1)[0]
 
 
 def _bind_from(ctx: Context | None) -> None:

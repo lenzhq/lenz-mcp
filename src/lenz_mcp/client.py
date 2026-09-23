@@ -121,6 +121,12 @@ _UA_UNSAFE = re.compile(r'[^\x20-\x7e]|[()\\]')
 _ORIGIN_UA_MAX = 120
 
 
+# The characters a leading product token may NOT contain: the `/` before a
+# version, whitespace before a suffix, and the parentheses that delimit one.
+# `_UA_SHAPE`'s first group is the same class, so the token and the identity
+# always agree about where the token ends.
+_UA_TOKEN_END = re.compile(r'[/\s()]')
+
 # `token`, `token/version`, or either followed by ONE parenthesised suffix, and
 # nothing else. Anything with a tail, a second group or stray text does not match.
 _UA_SHAPE = re.compile(r'^([^/\s()]+)(?:/[^\s()]+)?(?:\s+\(([^()]*)\))?$')
@@ -133,13 +139,20 @@ def parse_vendor_token(user_agent: str) -> str:
     ``openai-mcp``. Coarse on purpose: it says which VENDOR's client this is,
     and nothing about what that client can do.
 
+    It stops at WHITESPACE as well as `/`, because a version is optional and a
+    suffix is not tied to one: `Claude-User` ships versionless today, so
+    `openai-mcp (Codex)` is a shape a host can send. Splitting on `/` alone
+    returned that whole string, which matches no vendor — the card would go
+    away on its legacy requests and its delivery hint would flip to the silent
+    push, which is the exact failure this release exists to prevent.
+
     Unlike `parse_identity` it does NOT fail closed on an unparsable value,
     because its two readers want exactly the coarse answer: the card's delivery
     hint (a proxied ChatGPT still needs `message`, or the model contradicts the
     card in front of the user) and the card's legacy-era exposure fallback.
     Neither hands a client anything a vendor's own clients do not already get.
     """
-    return (user_agent or '').split('/', 1)[0].strip()
+    return _UA_TOKEN_END.split((user_agent or '').strip(), 1)[0]
 
 
 def parse_identity(user_agent: str) -> str:

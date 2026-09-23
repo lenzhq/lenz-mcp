@@ -218,6 +218,50 @@ def test_every_measured_identity_has_a_wait_row():
     assert not missing, f'measured identities with no wait row: {sorted(missing)}'
 
 
+@pytest.mark.parametrize(
+    ('user_agent', 'vendor', 'identity'),
+    [
+        ('Claude-User', 'Claude-User', 'Claude-User'),
+        ('Claude-User/1.0', 'Claude-User', 'Claude-User'),
+        ('openai-mcp/1.0.0', 'openai-mcp', 'openai-mcp'),
+        ('openai-mcp/1.0.0 (Codex)', 'openai-mcp', 'openai-mcp (Codex)'),
+        ('openai-mcp/1.0.0 (ChatGPT)', 'openai-mcp', 'openai-mcp (ChatGPT)'),
+        # VERSIONLESS with a suffix. `Claude-User` already ships versionless, so
+        # this is a shape a host can send tomorrow — and a token reader that
+        # split on `/` alone returned the whole string, matching no vendor. The
+        # card would have gone away on that client's legacy requests and its
+        # delivery hint would have flipped to the silent push: the exact
+        # failure this release exists to prevent, reintroduced by the fix for
+        # it (found by review, 2026-09-23).
+        ('openai-mcp (Codex)', 'openai-mcp', 'openai-mcp (Codex)'),
+        ('Claude-User (Desktop)', 'Claude-User', 'Claude-User (Desktop)'),
+        # Unparsable: the identity keeps it verbatim so it matches no wait row,
+        # while the token still names the vendor so the card's hint is right.
+        ('openai-mcp/1.0.0 (a) (b)', 'openai-mcp', 'openai-mcp/1.0.0 (a) (b)'),
+        ('', '', ''),
+        ('   ', '', ''),
+    ],
+)
+def test_the_token_and_the_identity_agree_on_where_the_token_ends(user_agent, vendor, identity):
+    assert client.parse_vendor_token(user_agent) == vendor, user_agent
+    assert client.parse_identity(user_agent) == identity, user_agent
+    # And a parsable identity always STARTS with its own vendor token, which is
+    # what makes "same vendor, new suffix" a thing the card can rely on.
+    if identity and identity == client.parse_identity(identity):
+        assert identity.startswith(vendor), user_agent
+
+
+def test_a_versionless_suffixed_chatgpt_still_gets_the_message_hint(monkeypatch):
+    """The delivery hint is what a wrong vendor token costs a user directly:
+    a card showing a sourced verdict beside a model saying no check was run."""
+    monkeypatch.setattr(
+        client,
+        'client_profile',
+        lambda: client.ClientProfile.from_user_agent('openai-mcp (Codex)'),
+    )
+    assert mcp_card.card_delivery() == mcp_card.DELIVER_BY_MESSAGE
+
+
 def test_the_registry_describes_what_it_measured():
     for identity, entry in client.KNOWN_IDENTITIES.items():
         assert entry.identity == identity, 'the key and the entry must name the same identity'
