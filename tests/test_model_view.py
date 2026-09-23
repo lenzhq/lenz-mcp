@@ -57,9 +57,11 @@ UPDATE = os.environ.get('UPDATE_MCP_GOLDENS') == '1'
 # rows — `Claude-User` is the Claude app, which declares MCP Apps, and Claude
 # Code, which does not.
 #
-# Generated from `client.KNOWN_IDENTITIES` plus the cases that are deliberately
-# NOT in it, so a measured identity cannot be added to the registry and left
-# without a committed view of what its model sees.
+# Every measured identity in `client.KNOWN_IDENTITIES` must appear here, plus
+# the cases that are deliberately NOT in it. Pinned by
+# `test_every_measured_identity_has_a_committed_view`, so an identity cannot be
+# added to the registry and left with no committed view of what its model sees
+# — which is the half-fix this whole change exists to make impossible.
 CLIENTS: dict[str, tuple[str, dict | None]] = {
     'claude': ('Claude-User', DECLARES_APPS),
     # The same User-Agent, the opposite capabilities. Under the identity table
@@ -286,8 +288,8 @@ def test_both_protocol_eras_give_the_model_the_same_view(client, card):
         # declares no MCP Apps support is Claude Code: the modern era reads
         # that declaration and closes the card; the legacy era has none to
         # read, so the vendor token decides and it keeps today's answer. Claude
-        # Code speaks the modern era in production, so the closed one is what
-        # it gets and the legacy leg is only a compatibility floor.
+        # Code speaks the modern era, so the closed one is what it gets and
+        # the legacy leg is only a compatibility floor.
         modern_tools = {t['name'] for t in modern['tools']}
         legacy_tools = {t['name'] for t in legacy['tools']}
         assert not (CARD_ONLY_TOOL_NAMES & modern_tools), 'a declared no must close the card on the modern era'
@@ -304,6 +306,35 @@ def test_both_protocol_eras_give_the_model_the_same_view(client, card):
         f'If it is a per-client DECISION that legitimately differs by era, add {client!r}\n'
         'to ERA_DIVERGENT with the reason, rather than relaxing this assertion.\n'
     )
+
+
+def test_every_measured_identity_has_a_committed_view():
+    """A registry entry with no golden is an identity nobody can review.
+
+    The registry is the one place an identity is spelled, and every table that
+    keys on one is pinned to it. This is that pin for the goldens: add
+    `openai-mcp (Brand New Surface)` to the registry and a wait row beside it,
+    and without this the whole suite stays green while no file records what
+    that client's model would see.
+    """
+    from lenz_mcp import client
+
+    committed = {client.parse_identity(user_agent) for user_agent, _ in CLIENTS.values()}
+    missing = set(client.KNOWN_IDENTITIES) - committed
+    assert not missing, (
+        f'measured identities with no row in CLIENTS: {sorted(missing)}. '
+        'Add one (with the capabilities that client declares) and regenerate: '
+        'UPDATE_MCP_GOLDENS=1 uv run pytest tests/test_model_view.py --no-cov'
+    )
+
+
+def test_every_committed_view_has_a_golden_on_disk():
+    """The other half: a row in CLIENTS whose file was never generated would
+    otherwise only fail on the one parametrized case that reads it."""
+    for name in CLIENTS:
+        for card in FLAGS:
+            path = _golden_path(name, card)
+            assert path.exists(), f'no golden for {name} (card {"on" if card else "off"}): {path}'
 
 
 def test_the_modern_envelope_really_is_there_and_really_is_dropped():

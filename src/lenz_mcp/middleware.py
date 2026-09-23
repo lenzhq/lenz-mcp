@@ -210,24 +210,57 @@ def tailor_tool_list(result: Any) -> Any:
 def log_manifest_decision(result: Any) -> Any:
     """State what this client was just served, and why. Returns `result` untouched.
 
-    After tailoring, not before: the line must describe the manifest that went
-    out. Wrapped like every other step here — a decision that cannot be logged
-    is still a decision, and discovery is not a courtesy.
+    `card` is read off the MANIFEST, not re-derived from the profile. The two
+    should always agree, and the whole point of this line is to be believed
+    when something has gone wrong — a line that re-asks the decision would
+    faithfully report `card=on` for a client the tailoring gave nothing to,
+    which is the silent-failure class this release exists to make visible.
+    Anything between the decision and the tailoring (the fail-closed fallback
+    above, a future ordering change) shows up here instead of hiding.
+
+    The REASON still comes from the decision, since only the decision knows it.
+    When the two disagree the reason says so and it is logged at ERROR: that
+    combination is a bug of ours and nothing else on the line would show it.
     """
     try:
         from lenz_mcp import client, config, decisions, mcp_card
 
         profile = client.client_profile()
-        card_on, reason = mcp_card.card_decision(profile)
+        decided, reason = mcp_card.card_decision(profile)
+        card_on = _manifest_carries_the_card(result)
+        if card_on is not None and card_on != decided:
+            logger.error(
+                'mcp_manifest_mismatch decided=%s served=%s reason=%s — the tool list does not match the '
+                'card decision that produced it',
+                decided,
+                card_on,
+                reason,
+            )
+            reason = f'{reason}_mismatch'
         decisions.log_manifest(
             profile,
-            card_on=card_on,
+            card_on=decided if card_on is None else card_on,
             reason=reason,
             wait=config.verify_wait_seconds(profile.identity),
         )
     except Exception:  # noqa: BLE001 — never break discovery over a log line
         logger.exception('the manifest decision could not be logged')
     return result
+
+
+def _manifest_carries_the_card(result: Any) -> bool | None:
+    """Whether the tool list going out actually has the card in it.
+
+    Read from the answer, not from the rule that produced it. `None` when the
+    result is not a shape we can read, so the line falls back to the decision
+    rather than reporting a guess.
+    """
+    from lenz_mcp import mcp_card
+
+    tools = result.get('tools') if isinstance(result, dict) else None
+    if not isinstance(tools, list):
+        return None
+    return any(isinstance(tool, dict) and tool.get('name') in mcp_card.CARD_ONLY_TOOL_NAMES for tool in tools)
 
 
 def tailor_resource_list(result: Any) -> Any:

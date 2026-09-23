@@ -769,6 +769,60 @@ def test_claude_still_running_names_the_wait_it_got(monkeypatch):
     assert out['message'].startswith('Still running after 2 seconds.')
 
 
+def test_an_exhausted_wait_is_reported_from_the_wait_itself(monkeypatch):
+    """The signal, driven through the REAL loop — not by calling the emitter.
+
+    `mcp_verify_wait_exhausted` is the one line saying a client's wait is too
+    short, and the runbook's first symptom. A test that calls
+    `decisions.log_wait_exhausted` directly proves the line's shape and nothing
+    about whether `_await_verification` ever reaches it: deleting the call from
+    the loop left the whole suite green. So this drives `verify_claim` — the
+    tool whose wait matters most, and NOT one of the callers that writes a
+    still-running message — until the budget runs out, and reads the collector.
+
+    It pins the tool NAME too: that is what tells a constant stream from one
+    surface apart from ordinary ceiling hits spread across all three tools.
+    """
+    import contextlib
+    import logging
+
+    messages: list[str] = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record):
+            messages.append(record.getMessage())
+
+    @contextlib.contextmanager
+    def _collecting():
+        # At the logger: `lenz_mcp.decisions` is in `observability.INFO_LOGGERS`
+        # and so does not propagate to caplog's root handler.
+        log = logging.getLogger('lenz_mcp.decisions')
+        handler = _Collect(level=logging.INFO)
+        previous = log.level
+        log.setLevel(logging.INFO)
+        log.addHandler(handler)
+        try:
+            yield
+        finally:
+            log.removeHandler(handler)
+            log.setLevel(previous)
+
+    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_IDENTITY', {'Claude-User': 5.0})
+    _as_client(monkeypatch, 'Claude-User')
+    _patch_api(monkeypatch, 'verify', ApiResponse(status=202, data={'task_id': _TASK_ID}))
+    # Never finishes, so the budget is what ends the call.
+    _simulated_clock(monkeypatch, [], finish_at=10_000)
+
+    with _collecting():
+        out = _run(server.verify_claim('The claim.', _ctx()))
+
+    assert out['status'] == 'submitted', out
+    lines = [m for m in messages if m.startswith('mcp_verify_wait_exhausted ')]
+    assert len(lines) == 1, messages
+    fields = dict(part.split('=', 1) for part in lines[0].split(' ')[1:])
+    assert fields == {'identity': 'Claude-User', 'wait': '5', 'tool': 'verify_claim'}
+
+
 def test_no_model_facing_text_hard_codes_the_wait():
     # The per-client verify description went with the skybridge widget, so the
     # instructions and the tool docstrings are the whole model-facing surface.

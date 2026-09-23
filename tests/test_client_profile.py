@@ -150,6 +150,27 @@ def test_nothing_bound_reads_as_unknown_and_is_counted(monkeypatch):
 # ── the profile never leaks between requests ─────────────────────────
 
 
+def test_the_profile_is_reset_on_the_ORDINARY_path():
+    """The normal return, not just the raising one.
+
+    Today nothing leaks even without the reset, because `stateless_http=True`
+    gives each HTTP request its own task and a ContextVar set in one task is
+    invisible to the next — which is exactly why a missing reset would pass
+    every other test here. It becomes a real leak the day two requests share a
+    task (the SDK's session loop, stdio). So the reset is asserted directly,
+    in the same task, rather than inferred from isolation that is doing the
+    work for it.
+    """
+
+    async def _ok(ctx):
+        assert client.client_identity() == 'Claude-User', 'bound while the handler runs'
+        return {'tools': []}
+
+    asyncio.run(middleware.lenz_middleware(_Ctx(user_agent='Claude-User'), _ok))
+    with pytest.raises(LookupError):
+        client._INBOUND_PROFILE.get()
+
+
 def test_the_profile_is_reset_even_when_the_handler_raises():
     async def _boom(ctx):
         raise RuntimeError('handler exploded')
@@ -384,8 +405,8 @@ def test_the_manifest_decision_is_logged_with_its_reason():
 
 def test_the_manifest_line_says_which_branch_closed_the_card():
     """`card=off` alone cannot tell a client that told us it renders no cards
-    from one whose row somebody forgot. The reason is what the host watch
-    reads, so it is asserted per branch."""
+    from one whose row somebody forgot. The reason is what a reader acts on,
+    so it is asserted per branch."""
     with assembled_app(MCP_OAUTH_ENABLED=False, MCP_CARD_ENABLED=True) as harness, _collecting() as messages:
         wire = harness.wire(user_agent='Claude-User', capabilities=DECLARES_NO_APPS)
         wire.call('tools/list', era=MODERN, name='tools/list', client_name='claude-code')
@@ -450,8 +471,8 @@ def test_no_decision_line_can_carry_a_raw_client_value():
 
 def test_the_decisions_logger_is_configured_to_emit():
     """A module whose success signal is an INFO line and no entry here emits
-    nothing at all in production, where the floor for app loggers is WARNING.
-    The host watch lost its first prod seed to exactly this."""
+    nothing at all wherever the floor for app loggers is WARNING, which is a
+    common default."""
     from lenz_mcp import observability
 
     assert decisions.logger.name in observability.INFO_LOGGERS

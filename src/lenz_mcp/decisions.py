@@ -11,7 +11,7 @@ So every decision states itself:
 
 - ``mcp_manifest``, once per answered ``tools/list``: who asked, what it
   declared, whether it got the card and WHY, and the deep-check wait it would
-  get. About a hundred lines a day.
+  get. One line per answered `tools/list`.
 - ``mcp_card_delivery``, once per card-only tool call.
 - ``mcp_verify_wait_exhausted``, when a deep check outlasts the wait — the
   symptom of a wait that is too short, which otherwise reads only as a user
@@ -27,7 +27,7 @@ second record a reader could not tell from one of ours.
 The logger is ``lenz_mcp.decisions`` and is named in
 ``observability.INFO_LOGGERS``, because a deployment's floor for app loggers is
 WARNING — a module whose success signal is an INFO line and no entry there
-produces nothing at all, which is how the host watch lost its first seed.
+produces nothing at all, however carefully it was written.
 """
 
 from __future__ import annotations
@@ -58,8 +58,8 @@ def log_manifest(profile, *, card_on: bool, reason: str, wait: float) -> None:
     ``client`` is the clientInfo NAME, not the User-Agent: one User-Agent can
     cover clients with opposite capabilities (``Claude-User`` is the Claude app
     and Claude Code, and only the first renders cards), so the name is what
-    makes a line about "claude-code" legible — and it is what the host watch
-    keys its once-per-client alert on.
+    makes a line about "claude-code" legible — and it is the right key for
+    anything that wants to report each client once.
     """
     _emit(
         'mcp_manifest '

@@ -222,7 +222,7 @@ def card_enabled() -> bool:
 
 
 # Why a request was or was not offered the card. The log line carries it, and
-# the host watch reads it: `card=off` alone cannot tell a client that told us
+# a reader of the log needs it: `card=off` alone cannot tell a client that told us
 # it renders no cards from one whose table row we forgot.
 REASON_FLAG_OFF = 'flag_off'
 #: The request declared MCP Apps support. The card is on because the client
@@ -235,7 +235,7 @@ REASON_NO_DECLARATION = 'no_declaration'
 #: decided by the vendor token.
 # noqa on both: ruff reads a name ending in _TOKEN as a credential. These
 # are log vocabulary — the vendor TOKEN of a User-Agent — and the strings
-# are a wire format the host watch matches on, so they are not renamed.
+# are a wire format log tooling matches on, so they are not renamed.
 REASON_LEGACY_TOKEN = 'legacy_token'  # noqa: S105
 #: The declaration could not be read: decided by the vendor token, as it was
 #: before this request's declaration existed. Never silently worse than that.

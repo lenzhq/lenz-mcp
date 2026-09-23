@@ -378,6 +378,30 @@ def test_a_client_that_cannot_render_a_card_never_sees_a_card_only_tool(server, 
     assert not (mcp_card.CARD_ONLY_TOOL_NAMES & set(tools)), f'{user_agent} was served a card-only tool'
 
 
+@pytest.mark.parametrize(
+    ('user_agent', 'capabilities', 'carded'),
+    [
+        # The CROSS terms, where the vendor token and the declaration DISAGREE.
+        # Without them the two tests above are satisfied by the token alone —
+        # they pair card vendors with DECLARES_APPS and non-vendors with
+        # DECLARES_NO_APPS, so a `card_decision` that ignored the declaration
+        # entirely passed every leg of both.
+        (CHATGPT_APP, DECLARES_NO_APPS, False),
+        (CLAUDE, DECLARES_NO_APPS, False),
+        ('brand-new-host/9', DECLARES_APPS, True),
+        ('python-httpx/0.28', DECLARES_APPS, True),
+    ],
+)
+def test_on_the_modern_era_the_declaration_outranks_the_user_agent(server, user_agent, capabilities, carded):
+    """A card vendor that declares NO card is served none; a stranger that
+    declares one is served it. That reversal is the release."""
+    from lenz_mcp import mcp_card
+
+    tools = _tools(server, user_agent, MODERN, capabilities)
+    served = bool(mcp_card.CARD_ONLY_TOOL_NAMES & set(tools))
+    assert served is carded, f'{user_agent} declaring {"apps" if carded else "no apps"}'
+
+
 def test_the_two_eras_agree_only_where_the_rules_do(server):
     """`Claude-User` that declares NOTHING: closed on modern, open on legacy.
 
@@ -386,8 +410,8 @@ def test_the_two_eras_agree_only_where_the_rules_do(server):
     era its own declaration closes it out, which is the regression this change
     was allowed to cause. On the legacy era there is no declaration to read, so
     the vendor token decides and it keeps today's answer. It speaks the modern
-    era in production, so the legacy leg is the compatibility floor and not the
-    behaviour anyone gets.
+    era, so the legacy leg is a compatibility floor rather than the behaviour
+    it actually gets.
     """
     from lenz_mcp import mcp_card
 

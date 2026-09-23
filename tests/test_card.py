@@ -72,7 +72,7 @@ def _wire(harness, ua, *, capabilities=None, era=LEGACY):
     (the 2025 handshake declares once and this server is stateless). The card
     is keyed on that declaration, so a card client here is one that passes
     `DECLARES_APPS` — a User-Agent alone does not make one, in this harness any
-    more than in production.
+    more than anywhere else.
     """
     wire = harness.wire(user_agent=ua, authorization=KEY, capabilities=capabilities)
     if era == LEGACY:
@@ -235,8 +235,8 @@ def test_a_declaring_client_that_renders_nothing_is_accepted():
     2026-09-17/18), renders no card, and ignores `ui.visibility: ['app']`, so
     its model can see three card-only tools. That is accepted: the alternative
     is a second allow-list keyed on the same kind of host-controlled string
-    that just broke, and what it would manage is not a UX risk. The connector
-    has never been seen in production. This test is where to come back to.
+    that just broke, and what it would manage is not a UX risk. This test is
+    where to come back to if it ever confuses anyone.
     """
     with _app(card=True) as harness:
         tools = _tools(harness, 'openai-mcp/1.0.0 (Responses API)', capabilities=DECLARES_APPS, era=MODERN)
