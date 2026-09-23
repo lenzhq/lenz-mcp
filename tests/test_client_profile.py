@@ -289,6 +289,24 @@ def test_the_chatgpt_apps_new_suffix_is_a_first_class_identity():
     assert config.verify_wait_seconds(identity) != config.VERIFY_WAIT_SECONDS
 
 
+def test_every_vendor_token_we_act_on_belongs_to_a_measured_client():
+    """The registry pins the wait table's identities. These pin the tokens.
+
+    `CARD_VENDOR_TOKENS` and `MESSAGE_DELIVERY_VENDOR_TOKENS` are the other two
+    places a client string decides something, and a token invented here — a
+    typo, a vendor nobody measured — would fail open silently: the card would
+    go to a host nobody has watched it render in. Every one must be the vendor
+    of a client in the registry.
+    """
+    measured = {entry.vendor for entry in client.KNOWN_IDENTITIES.values()}
+    for name, tokens in [
+        ('CARD_VENDOR_TOKENS', mcp_card.CARD_VENDOR_TOKENS),
+        ('MESSAGE_DELIVERY_VENDOR_TOKENS', mcp_card.MESSAGE_DELIVERY_VENDOR_TOKENS),
+    ]:
+        stray = set(tokens) - measured
+        assert not stray, f'{name} names vendors no registry entry describes: {sorted(stray)}'
+
+
 def test_the_probe_server_carries_the_same_delivery_rule():
     import importlib.util
     import sys
