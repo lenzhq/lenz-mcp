@@ -15,7 +15,7 @@ app or API connector — and it has three readers: two WITHHOLD an upgrade link
 (``server._quota_exhausted`` and the rate-limit branch of ``server._error_result``)
 and one labels a failed resource read in the log (``middleware.py``). Withholding a payment link from the wrong OpenAI
 surface is safe; granting anything is not, which is why every gate that gives a
-client something reads ``client.client_identity()`` instead.
+client something reads the resolved ``client.ClientProfile`` instead.
 """
 
 from __future__ import annotations
@@ -35,13 +35,14 @@ def request_is_chatgpt() -> bool:
     a user to an external payment page, and withholding a
     link is the safe direction for every OpenAI surface, measured or not.
 
-    Anything that GIVES a client something — the card, its tools, the long
-    deep-check wait — must use ``mcp_card.request_is_chatgpt_app()`` or
-    ``client.client_identity()`` instead. The two OpenAI clients share this
-    token and do not share their limits: measured 2026-09-18 the API connector
-    cuts a tool call at 59.8 s against the app's 119.8 s, and it lists app-only
-    tools to its model where the app hides them. Coarse is right for taking a
-    link away and wrong for handing over a tool that spends money.
+    Anything that GIVES a client something reads the resolved profile instead
+    (``client.client_profile()``), and the field that answers its own question:
+    the card follows what the client DECLARES (``mcp_card.card_decision``), the
+    deep-check wait the full identity. The two OpenAI clients share this token
+    and do not share their limits — measured 2026-09-18, the API connector cuts
+    a tool call at 59.8 s against the app's 119.8 s — so the wait in particular
+    must never be keyed on it. Coarse is right for taking a link away and wrong
+    for sizing a budget somebody waits on.
     """
     try:
         from lenz_mcp.client import client_user_agent

@@ -340,12 +340,16 @@ _CANNED_RUNS: dict[str, float] = {}
 
 
 # The card's delivery hint, stamped as lenz-mcp stamps it (mcp_card.py
-# card_delivery, keyed on client.py client_identity). Without it the real card
-# in ChatGPT takes the silent `ui/update-model-context` route, which ChatGPT
+# card_delivery, keyed on the VENDOR token). Without it the real card in
+# ChatGPT takes the silent `ui/update-model-context` route, which ChatGPT
 # accepts and drops (measured 2026-09-18). A copy, not an import: this probe
 # runs standalone. The connector's probe-server test pins it to lenz-mcp's rule.
-CHATGPT_APP_IDENTITIES = frozenset({'openai-mcp', 'openai-mcp (Codex)'})
-_UA_SHAPE = re.compile(r'^([^/\s()]+)(?:/[^\s()]+)?(?:\s+\(([^()]*)\))?$')
+#
+# The token, not the full identity: a new parenthesised suffix on a vendor's
+# own client must not change how its card reaches the model. One did
+# (`openai-mcp/1.0.0 (ChatGPT)`, 2026-09-23), and under an identity table the
+# card would have gone silent in the app it was measured in.
+MESSAGE_DELIVERY_VENDOR_TOKENS = frozenset({'openai-mcp'})
 _REQUEST_USER_AGENT: contextvars.ContextVar[str] = contextvars.ContextVar('probe_user_agent', default='')
 
 
@@ -354,13 +358,13 @@ def bind_user_agent(user_agent: str):
     return lambda: _REQUEST_USER_AGENT.reset(token)
 
 
-def _client_identity() -> str:
-    ua = _REQUEST_USER_AGENT.get().strip()
-    match = _UA_SHAPE.match(ua) if ua else None
-    if not match:
-        return ua
-    token, suffix = match.group(1), (match.group(2) or '').strip()
-    return f'{token} ({suffix})' if suffix else token
+# Stops at whitespace as well as `/`: a version is optional and a suffix is
+# not tied to one, so `openai-mcp (Codex)` is a shape a host can send.
+_UA_TOKEN_END = re.compile(r'[/\s()]')
+
+
+def _vendor_token() -> str:
+    return _UA_TOKEN_END.split(_REQUEST_USER_AGENT.get().strip(), 1)[0]
 
 
 def _bind_from(ctx: Context | None) -> None:
@@ -376,7 +380,7 @@ def _bind_from(ctx: Context | None) -> None:
 
 
 def _with_delivery(result: dict[str, Any]) -> dict[str, Any]:
-    deliver = 'message' if _client_identity() in CHATGPT_APP_IDENTITIES else 'context'
+    deliver = 'message' if _vendor_token() in MESSAGE_DELIVERY_VENDOR_TOKENS else 'context'
     return {**result, '_card': {'deliver': deliver}}
 
 

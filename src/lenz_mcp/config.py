@@ -104,8 +104,26 @@ ASK_TIMEOUT = 60.0
 # timeout: a call still waiting when the client hangs up is an error to the
 # user, where returning early hands back a task_id that `get_verification`
 # picks up. The key is the client's IDENTITY, its User-Agent token plus any
-# parenthesised suffix (`client.client_identity()`); a client with no row gets
-# VERIFY_WAIT_SECONDS.
+# parenthesised suffix (`client.ClientProfile.identity`); a client with no row
+# gets VERIFY_WAIT_SECONDS.
+#
+# This is the one per-client decision still keyed on a hand-maintained table of
+# identity strings, and it stays that way deliberately (the card's two
+# decisions moved off it in 2026-09). The failures are not symmetric. A wait
+# that is too LONG is a hard error in the chat — "HTTP 504" — and for OpenAI's
+# API connector a silent retry that costs the developer's user about two
+# minutes of dead time first. A wait that is too SHORT is a recoverable
+# `status: submitted` and a task_id `get_verification` collects. So an
+# identity in no row falls to the SHORT default rather than inheriting its
+# vendor's longer row, and a new suffix on a known app costs its users a
+# slower answer, never an error. What makes that safe to live with is that it
+# is now ANNOUNCED: the manifest decision line carries the wait, and the host
+# watch says within the hour that a known vendor is on the default.
+#
+# Every key must be a `client.KNOWN_IDENTITIES` member
+# (`tests/test_first_check.py`), so an identity can never again be known to
+# the card and unknown to the wait — which is exactly what happened when the
+# ChatGPT app grew its `(ChatGPT)` suffix.
 #
 # - `Claude-User` (claude.ai, Claude Desktop, the directory connector): 130 s.
 #   Claude's cut depends on the PROTOCOL it negotiates, and the dev probe
@@ -124,8 +142,13 @@ ASK_TIMEOUT = 60.0
 #   complete. A longer wait, right for legacy, would turn every deep check
 #   past the modern ceiling into a hard timeout instead of `status: submitted`
 #   and a task_id that `get_verification` collects.
-# - `openai-mcp` and `openai-mcp (Codex)` — the ChatGPT APP, whose model-side
-#   calls carry the Codex suffix: 100 s.
+# - `openai-mcp`, `openai-mcp (ChatGPT)` and `openai-mcp (Codex)` — the ChatGPT
+#   APP. It sent the bare token until 2026-09-23, when a new build began
+#   sending `(ChatGPT)`; its model-side calls carry `(Codex)`: 100 s.
+#   The `(ChatGPT)` row is the SAME app and carries the same number, but its
+#   ceiling is UNMEASURED on that build: 119.8 s was measured 2026-09-18 on the
+#   previous one. Watch a deep check from it complete before trusting the row;
+#   `scripts/probe/` is how a ceiling gets measured.
 #   Measured 2026-09-18 with the dev probe connector: ChatGPT drops a tool call
 #   at 119.8 s and shows the user "HTTP 504"; 100 s completes; progress
 #   notifications do NOT extend it (the same as Claude). The whole tool call —
@@ -146,24 +169,36 @@ ASK_TIMEOUT = 60.0
 #   today and it works, and the retry means an overrun costs them two dropped
 #   calls, not one. A deep check that outlasts the budget hands the caller a
 #   task_id to poll, which is the documented path.
-#   The KEY is the identity, not the token (client.client_identity), and an
-#   UNRECOGNISED suffix falls to the default rather than to its token's row: a
-#   future `openai-mcp (Something)` must never inherit the app's 100 s.
+#   The KEY is the identity, not the token, and an UNRECOGNISED suffix falls to
+#   the default rather than to its token's row: a future `openai-mcp
+#   (Something)` must never inherit the app's 100 s.
 # - Everyone else: 45 s, unmeasured. The TypeScript MCP SDK many clients use
 #   defaults to 60 s.
 #
 # A waiting call holds one of the server's concurrent request slots for its
 # duration, and polls about 20 times a minute.
 VERIFY_WAIT_SECONDS = 45.0
-VERIFY_WAIT_SECONDS_BY_USER_AGENT: dict[str, float] = {
+VERIFY_WAIT_SECONDS_BY_IDENTITY: dict[str, float] = {
     'Claude-User': 130.0,  # modern path: 150 s proven, 210 s cut (2026-09-18), see above
     'openai-mcp': 100.0,  # the ChatGPT app; measured 2026-09-18, cut at 119.8 s
+    'openai-mcp (ChatGPT)': 100.0,  # the same app, from the build first seen 2026-09-23
     'openai-mcp (Codex)': 100.0,  # the same app, model-side calls
     # Named explicitly at the default, so it reads as a decision and not as an
     # omission: OpenAI's API connector cuts at 59.8 s and retries once.
     'openai-mcp (Responses API)': 45.0,
 }
 VERIFY_POLL_INTERVAL = 3.0
+
+
+def verify_wait_seconds(identity: str) -> float:
+    """How long a deep check may wait inside one tool call from `identity`.
+
+    Read by the wait itself (`server._verify_wait_seconds`) and by the manifest
+    decision line, so the number an operator reads in the log is the number the
+    next deep check will actually get — not a second lookup that could differ.
+    """
+    return VERIFY_WAIT_SECONDS_BY_IDENTITY.get(identity, VERIFY_WAIT_SECONDS)
+
 
 # ── Claude verdict card (MCP Apps) kill-switch ───────────────────────
 # Off = today's manifest for every client.

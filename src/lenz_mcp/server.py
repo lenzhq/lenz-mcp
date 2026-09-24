@@ -937,19 +937,21 @@ def _verify_wait_seconds() -> float:
     """How long one tool call may wait for a deep check, for the client making it.
 
     Keyed on the client's IDENTITY — its User-Agent token plus any
-    parenthesised suffix (``client.client_identity``) — never the token alone.
-    One token can cover clients with different ceilings: OpenAI's ChatGPT app
-    and its Responses-API connector both send ``openai-mcp`` and cut at 119.8 s
-    and 59.8 s respectively. A client whose tool-call timeout was never
-    measured gets the short default, and an unrecognised suffix does NOT
-    inherit its token's row. Table and measurements:
-    config.VERIFY_WAIT_SECONDS_BY_USER_AGENT.
+    parenthesised suffix (``client.ClientProfile.identity``) — never the token
+    alone. One token can cover clients with different ceilings: OpenAI's
+    ChatGPT app and its Responses-API connector both send ``openai-mcp`` and
+    cut at 119.8 s and 59.8 s respectively. A client whose tool-call timeout
+    was never measured gets the short default, and an unrecognised suffix does
+    NOT inherit its token's row. Table, measurements, and why this one decision
+    still keys on a hand-maintained table of client strings where the card's
+    two do not: config.VERIFY_WAIT_SECONDS_BY_IDENTITY.
     """
-    identity = client.client_identity()
-    return config.VERIFY_WAIT_SECONDS_BY_USER_AGENT.get(identity, config.VERIFY_WAIT_SECONDS)
+    return config.verify_wait_seconds(client.client_profile().identity)
 
 
-async def _await_verification(ctx: Context, task_id: str, *, started_at: float | None = None) -> dict[str, Any]:
+async def _await_verification(
+    ctx: Context, task_id: str, *, started_at: float | None = None, tool: str = ''
+) -> dict[str, Any]:
     """Poll a run server-side until it leaves ``processing`` or the wait budget ends.
 
     The bounded long-poll that lets one tool call carry the answer when it can:
@@ -973,7 +975,8 @@ async def _await_verification(ctx: Context, task_id: str, *, started_at: float |
     # last poll took `verify_claim` to ~128 s against the ChatGPT app's
     # measured 119.8 s cut. From entry, the worst case is
     # the wait plus one final poll.
-    deadline = (started_at if started_at is not None else time.monotonic()) + _verify_wait_seconds()
+    wait = _verify_wait_seconds()
+    deadline = (started_at if started_at is not None else time.monotonic()) + wait
     # The first poll always runs, even when a submission alone spent the
     # budget: it is what carries a cache hit or the claim picker back in the
     # same call, and a submit to our own API outlasting a 45-130 s budget is
@@ -991,8 +994,28 @@ async def _await_verification(ctx: Context, task_id: str, *, started_at: float |
             return out
         remaining = deadline - time.monotonic()
         if remaining <= 0:
+            # The one place all three waiting tools converge, so the signal is
+            # emitted here rather than at each caller's still-running message:
+            # `verify_claim` is the call whose wait matters most, and it is not
+            # one of the callers that writes such a message.
+            _note_wait_exhausted(wait, tool)
             return out
         await _sleep(min(config.VERIFY_POLL_INTERVAL, remaining))
+
+
+def _note_wait_exhausted(wait: float, tool: str) -> None:
+    """Say that a deep check outlasted this client's wait. Never raises.
+
+    Ordinary at the ceiling — the caller gets a task_id and `get_verification`
+    collects the result. It is evidence when it is CONSTANT for one identity,
+    which is what a missing or undersized wait row looks like from outside.
+    """
+    try:
+        from lenz_mcp import decisions
+
+        decisions.log_wait_exhausted(wait=wait, tool=tool)
+    except Exception:  # noqa: BLE001 — a measurement never fails a tool call
+        logger.exception('the exhausted deep-check wait could not be logged')
 
 
 def _verify_outcome(
@@ -1105,7 +1128,7 @@ async def verify_claim(
     # The answer rides in THIS result whenever the run finishes inside the
     # client's wait: in Claude most runs, elsewhere a cache hit,
     # needs_input or a short run (config, VERIFY_WAIT_SECONDS_BY_USER_AGENT).
-    out = await _await_verification(ctx, task_id, started_at=started_at)
+    out = await _await_verification(ctx, task_id, started_at=started_at, tool='verify_claim')
     return _verify_outcome(out, task_id, already_running=already_running, depth=depth, claim=claim)
 
 
@@ -1165,7 +1188,7 @@ async def select_claims(
     # the NEW task_id — the parent stays needs_input forever.
     if len(started) == 1 and started[0]['task_id'] and not partial:
         new_task_id = started[0]['task_id']
-        awaited = await _await_verification(ctx, new_task_id, started_at=started_at)
+        awaited = await _await_verification(ctx, new_task_id, started_at=started_at, tool='select_claims')
         out = _verify_outcome(awaited, new_task_id)
         out['claim'] = out.get('claim') or started[0]['claim']
         out['batch_id'] = resp.data.get('batch_id')
@@ -1330,7 +1353,7 @@ async def get_verification(
         if not resp.ok:
             return _error_result(resp)
         return _completed_result(resp.data)
-    out = await _await_verification(ctx, ident, started_at=started_at)
+    out = await _await_verification(ctx, ident, started_at=started_at, tool='get_verification')
     if out.get('status') == 'processing':
         out['task_id'] = ident
         out['message'] = STILL_RUNNING_AFTER_WAIT.format(seconds=int(_verify_wait_seconds()))

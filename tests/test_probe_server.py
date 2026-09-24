@@ -188,10 +188,13 @@ def test_prod_has_no_fixture_card_and_its_card_tools_are_the_real_ones():
     [
         ('openai-mcp/1.0.0', 'message'),
         ('openai-mcp/1.0.0 (Codex)', 'message'),
-        ('openai-mcp/1.0.0 (Responses API)', 'context'),
+        ('openai-mcp/1.0.0 (ChatGPT)', 'message'),
+        # Same vendor, so the same hint: it is keyed on the token, and an
+        # OpenAI card must never be told to push silently.
+        ('openai-mcp/1.0.0 (Responses API)', 'message'),
+        ('openai-mcp/1.0.0 (Responses API) proxy/1.0', 'message'),
         ('Claude-User', 'context'),
         ('', 'context'),
-        ('openai-mcp/1.0.0 (Responses API) proxy/1.0', 'context'),
     ],
 )
 def test_the_fake_card_tools_stamp_delivery_as_lenz_mcp_does(probe, user_agent, deliver):
@@ -209,7 +212,7 @@ def test_the_fake_card_tools_stamp_delivery_as_lenz_mcp_does(probe, user_agent, 
         reset()
     for result in (started, polled, missing):
         assert result[mcp_card.CARD_RESULT_NAMESPACE] == {'deliver': deliver}, result
-    assert probe.CHATGPT_APP_IDENTITIES == mcp_card.CHATGPT_APP_IDENTITIES
+    assert probe.MESSAGE_DELIVERY_VENDOR_TOKENS == mcp_card.MESSAGE_DELIVERY_VENDOR_TOKENS
 
 
 def test_the_delivery_stamp_reads_the_caller_over_the_transport(probe):

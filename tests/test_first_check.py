@@ -30,7 +30,7 @@ def _no_wait(monkeypatch):
 
     monkeypatch.setattr(server, '_sleep', _instant)
     monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS', 0.05)
-    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_USER_AGENT', {'Claude-User': 0.05})
+    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_IDENTITY', {'Claude-User': 0.05})
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +38,16 @@ def _reset_shared_http_client():
     client._http_client = None
     yield
     client._http_client = None
+
+
+def _as_client(monkeypatch, user_agent, **kwargs):
+    """Put a request from `user_agent` in scope, the way the middleware does.
+
+    ONE seam: every per-client decision reads `client.client_profile()`, so a
+    patch here moves the wait, the card and its delivery hint together. Patching
+    the User-Agent reader alone used to move some and not others.
+    """
+    monkeypatch.setattr(client, 'client_profile', lambda: client.ClientProfile.from_user_agent(user_agent, **kwargs))
 
 
 def _ctx(auth='Bearer lenz_testkey'):
@@ -628,9 +638,13 @@ def _fresh_config():
 
 def test_the_wait_defaults():
     fresh = _fresh_config()
-    assert fresh.VERIFY_WAIT_SECONDS_BY_USER_AGENT == {
+    assert fresh.VERIFY_WAIT_SECONDS_BY_IDENTITY == {
         'Claude-User': 130,
         'openai-mcp': 100,
+        # The same ChatGPT app, from the build that began sending this suffix
+        # on 2026-09-23. Under the identity key it matched no row and fell to
+        # the 45 s default, which is the bug this row closes.
+        'openai-mcp (ChatGPT)': 100,
         'openai-mcp (Codex)': 100,
         'openai-mcp (Responses API)': 45,
     }
@@ -644,11 +658,11 @@ def test_every_measured_wait_stays_under_the_cut():
     fresh = _fresh_config()
     # Claude's whole call (the wait plus one last poll, 15 s at worst) must end
     # inside the longest call seen to complete on the modern protocol.
-    assert fresh.VERIFY_WAIT_SECONDS_BY_USER_AGENT['Claude-User'] <= CLAUDE_MODERN_PROVEN_SECONDS - 15
+    assert fresh.VERIFY_WAIT_SECONDS_BY_IDENTITY['Claude-User'] <= CLAUDE_MODERN_PROVEN_SECONDS - 15
     # ChatGPT's cut is much tighter, and it showed the user a 504 rather than a
     # late answer: the whole call must end under ~110 s, with margin for
     # the last poll and the HTTP hop.
-    assert fresh.VERIFY_WAIT_SECONDS_BY_USER_AGENT['openai-mcp'] <= CHATGPT_TOOL_CALL_CUT_SECONDS - 15
+    assert fresh.VERIFY_WAIT_SECONDS_BY_IDENTITY['openai-mcp'] <= CHATGPT_TOOL_CALL_CUT_SECONDS - 15
 
 
 @pytest.mark.parametrize(
@@ -665,8 +679,8 @@ def test_every_measured_wait_stays_under_the_cut():
 def test_only_the_measured_client_gets_the_long_wait(monkeypatch, user_agent, claude):
     """ChatGPT's timeout is reported at ~60 s and the TypeScript SDK's default
     is 60 s: an unknown or absent User-Agent keeps the short wait."""
-    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_USER_AGENT', {'Claude-User': 210.0})
-    monkeypatch.setattr(client, 'client_user_agent', lambda: user_agent)
+    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_IDENTITY', {'Claude-User': 210.0})
+    _as_client(monkeypatch, user_agent)
     assert server._verify_wait_seconds() == (210.0 if claude else config.VERIFY_WAIT_SECONDS)
 
 
@@ -699,7 +713,7 @@ def test_the_wait_is_read_through_the_real_request_context(monkeypatch, user_age
     """
     monkeypatch.setattr(
         config,
-        'VERIFY_WAIT_SECONDS_BY_USER_AGENT',
+        'VERIFY_WAIT_SECONDS_BY_IDENTITY',
         {'Claude-User': 210.0, 'openai-mcp': 100.0, 'openai-mcp (Codex)': 100.0, 'openai-mcp (Responses API)': 45.0},
     )
     monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS', 45.0)
@@ -738,8 +752,8 @@ def _simulated_clock(monkeypatch, polls, *, finish_at, credential_ok=None):
 
 
 def test_an_api_key_wait_forwards_the_key_on_every_poll(monkeypatch):
-    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_USER_AGENT', {'Claude-User': 210.0})
-    monkeypatch.setattr(client, 'client_user_agent', lambda: 'Claude-User')
+    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_IDENTITY', {'Claude-User': 210.0})
+    _as_client(monkeypatch, 'Claude-User')
     polls = []
     _simulated_clock(monkeypatch, polls, finish_at=150)
     out = _run(server.get_verification(_TASK_ID, _ctx(auth='Bearer lenz_testkey')))
@@ -748,11 +762,65 @@ def test_an_api_key_wait_forwards_the_key_on_every_poll(monkeypatch):
 
 
 def test_claude_still_running_names_the_wait_it_got(monkeypatch):
-    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_USER_AGENT', {'Claude-User': 2.5})
-    monkeypatch.setattr(client, 'client_user_agent', lambda: 'Claude-User')
+    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_IDENTITY', {'Claude-User': 2.5})
+    _as_client(monkeypatch, 'Claude-User')
     _patch_api(monkeypatch, 'verify_status', ApiResponse(status=200, data=_STATUS_PROCESSING))
     out = _run(server.get_verification(_TASK_ID, _ctx()))
     assert out['message'].startswith('Still running after 2 seconds.')
+
+
+def test_an_exhausted_wait_is_reported_from_the_wait_itself(monkeypatch):
+    """The signal, driven through the REAL loop — not by calling the emitter.
+
+    `mcp_verify_wait_exhausted` is the one line saying a client's wait is too
+    short, and the runbook's first symptom. A test that calls
+    `decisions.log_wait_exhausted` directly proves the line's shape and nothing
+    about whether `_await_verification` ever reaches it: deleting the call from
+    the loop left the whole suite green. So this drives `verify_claim` — the
+    tool whose wait matters most, and NOT one of the callers that writes a
+    still-running message — until the budget runs out, and reads the collector.
+
+    It pins the tool NAME too: that is what tells a constant stream from one
+    surface apart from ordinary ceiling hits spread across all three tools.
+    """
+    import contextlib
+    import logging
+
+    messages: list[str] = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record):
+            messages.append(record.getMessage())
+
+    @contextlib.contextmanager
+    def _collecting():
+        # At the logger: `lenz_mcp.decisions` is in `observability.INFO_LOGGERS`
+        # and so does not propagate to caplog's root handler.
+        log = logging.getLogger('lenz_mcp.decisions')
+        handler = _Collect(level=logging.INFO)
+        previous = log.level
+        log.setLevel(logging.INFO)
+        log.addHandler(handler)
+        try:
+            yield
+        finally:
+            log.removeHandler(handler)
+            log.setLevel(previous)
+
+    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_IDENTITY', {'Claude-User': 5.0})
+    _as_client(monkeypatch, 'Claude-User')
+    _patch_api(monkeypatch, 'verify', ApiResponse(status=202, data={'task_id': _TASK_ID}))
+    # Never finishes, so the budget is what ends the call.
+    _simulated_clock(monkeypatch, [], finish_at=10_000)
+
+    with _collecting():
+        out = _run(server.verify_claim('The claim.', _ctx()))
+
+    assert out['status'] == 'submitted', out
+    lines = [m for m in messages if m.startswith('mcp_verify_wait_exhausted ')]
+    assert len(lines) == 1, messages
+    fields = dict(part.split('=', 1) for part in lines[0].split(' ')[1:])
+    assert fields == {'identity': 'Claude-User', 'wait': '5', 'tool': 'verify_claim'}
 
 
 def test_no_model_facing_text_hard_codes_the_wait():
@@ -1000,13 +1068,13 @@ def test_a_waiting_call_ends_inside_the_cut_even_when_the_api_is_slow(monkeypatc
     # The REAL waits: the suite shrinks them to keep tests fast, which would
     # make this test measure nothing.
     fresh = _fresh_config()
-    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_USER_AGENT', dict(fresh.VERIFY_WAIT_SECONDS_BY_USER_AGENT))
+    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_IDENTITY', dict(fresh.VERIFY_WAIT_SECONDS_BY_IDENTITY))
     monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS', fresh.VERIFY_WAIT_SECONDS)
     monkeypatch.setattr(config, 'VERIFY_POLL_INTERVAL', fresh.VERIFY_POLL_INTERVAL)
     clock = _slow_api_clock(monkeypatch)
     reset = client.bind_client_user_agent(user_agent)
     wait = server._verify_wait_seconds()
-    assert wait == fresh.VERIFY_WAIT_SECONDS_BY_USER_AGENT[client.client_identity()], 'the real wait'
+    assert wait == fresh.VERIFY_WAIT_SECONDS_BY_IDENTITY[client.client_identity()], 'the real wait'
     entered = clock['now']
 
     async def _slow_submit(*args, **kwargs):
@@ -1066,7 +1134,7 @@ def test_a_slow_last_poll_at_the_deadline_still_lands_inside_the_cut(monkeypatch
     # The boundary: quick polls until the deadline, then one last poll that
     # starts at the deadline and takes the client's full 15 s timeout.
     fresh = _fresh_config()
-    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_USER_AGENT', dict(fresh.VERIFY_WAIT_SECONDS_BY_USER_AGENT))
+    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_IDENTITY', dict(fresh.VERIFY_WAIT_SECONDS_BY_IDENTITY))
     monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS', fresh.VERIFY_WAIT_SECONDS)
     monkeypatch.setattr(config, 'VERIFY_POLL_INTERVAL', fresh.VERIFY_POLL_INTERVAL)
     clock = _slow_api_clock(monkeypatch)

@@ -8,12 +8,15 @@ dict.
 
 Three things happen here, and all three are per request:
 
-- **the client identity is bound** (`bind_client_identity`), because 2.x has no
-  `request_ctx` contextvar to read it from. Losing it is not cosmetic: the
-  deep-check wait, the card gate and the card's delivery hint all key on the
-  identity derived from it, and a silent `''` would put every client on the short
-  wait with no card and no client recorded by the API;
-- **`tools/list` is tailored** to what this client may see;
+- **the client profile is bound** (`bind_client_profile`), because 2.x has no
+  `request_ctx` contextvar to read it from. This is the ONE place a request is
+  read to decide who the client is; every per-client decision is then a pure
+  function of the profile (`client.ClientProfile`). Losing it is not cosmetic:
+  the deep-check wait, the card gate and the card's delivery hint all read it,
+  and a silent blank would put every client on the short wait with no card and
+  no client recorded by the API;
+- **`tools/list` is tailored** to what this client may see, and the decision is
+  logged (`mcp_manifest`);
 - **`resources/list` is filtered**, and `resources/read` is logged.
 
 Two rules, both learned the hard way:
@@ -43,8 +46,8 @@ logger = logging.getLogger(__name__)
 
 
 async def lenz_middleware(ctx, call_next):
-    """Bind the caller's identity, then tailor what it is served."""
-    reset = bind_client_identity(ctx)
+    """Bind the caller's profile, then tailor what it is served."""
+    reset = bind_client_profile(ctx)
     try:
         # `request_id is None` is the SDK's own marker for a NOTIFICATION, and the
         # chain wraps notifications too. Nothing below applies to one: `call_next`
@@ -61,7 +64,7 @@ async def lenz_middleware(ctx, call_next):
             return await _logged_resource_read(ctx, call_next)
         result = await call_next(ctx)
         if ctx.method == 'tools/list':
-            return tailor_tool_list(result)
+            return tailor_and_log(result)
         if ctx.method == 'resources/list':
             return tailor_resource_list(result)
         return result
@@ -70,8 +73,8 @@ async def lenz_middleware(ctx, call_next):
             reset()
 
 
-def bind_client_identity(ctx):
-    """Put this request's User-Agent where `lenz_mcp.client` can read it.
+def bind_client_profile(ctx):
+    """Resolve this request's client into one profile `lenz_mcp.client` serves.
 
     `ctx.request` is the Starlette request in both protocol eras (verified against
     2.2.0 on the legacy `initialize` path and the 2026 header path). A request that
@@ -84,11 +87,96 @@ def bind_client_identity(ctx):
     request = getattr(ctx, 'request', None)
     if request is None:
         client.note_identity_unresolved('no request on the middleware context')
-        return client.bind_client_user_agent('')
-    return client.bind_client_user_agent(request.headers.get('user-agent', ''))
+        user_agent = ''
+    else:
+        user_agent = request.headers.get('user-agent', '')
+    declares_apps, source = _reads_the_apps_declaration(ctx)
+    return client.bind_client_profile(
+        client.ClientProfile.from_user_agent(
+            user_agent,
+            declares_apps=declares_apps,
+            declaration_source=source,
+            era=_era(ctx),
+            client_name=_client_name(ctx),
+        )
+    )
 
 
-def tailor_tool_list(result: Any) -> Any:
+def _client_name(ctx) -> str:
+    """The clientInfo NAME this request carried, or ''. Never raises."""
+    try:
+        session = getattr(ctx, 'session', None)
+        info = getattr(getattr(session, 'client_params', None), 'client_info', None)
+        return str(getattr(info, 'name', '') or '')
+    except Exception:  # noqa: BLE001 — a name for a log line is never worth a request
+        return ''
+
+
+def _era(ctx) -> str:
+    """Which protocol era this request speaks, from its negotiated version."""
+    from lenz_mcp import client
+
+    version = getattr(ctx, 'protocol_version', '') or ''
+    return client.ERA_MODERN if version >= client._FIRST_MODERN_VERSION else client.ERA_LEGACY
+
+
+def _reads_the_apps_declaration(ctx) -> tuple[bool | None, str]:
+    """Whether this request DECLARES MCP Apps support — the card's key.
+
+    Three answers, because the middle one is ordinary and the last one is a bug:
+
+    - a declaration on this request: the SDK's own predicate, which is the
+      definition of the thing (`mcp.server.apps.client_supports_apps`: the
+      extension declared AND `text/html;profile=mcp-app` among its
+      `mimeTypes`). Not reimplemented here — a second copy of somebody else's
+      protocol rule drifts from it;
+    - NO declaration, which is not a failure: the 2026-07-28 revision puts the
+      client's capabilities in every request's `_meta`, but the 2025 era
+      declares them once at the handshake, and this server is
+      `stateless_http=True` (`asgi.py`), so nothing survives to the next
+      request. Measured against mcp 2.2.0: on the legacy `initialize` itself
+      too, since the connection records the handshake's capabilities after
+      middleware has already run. So on the legacy era this is EVERY request;
+    - the read raised, which is ours to fix and is logged at ERROR.
+
+    The SDK predicate answers False for "declared nothing", so the `None` case
+    is told apart here, before asking it — otherwise every legacy request would
+    read as a client that positively does not support cards, and the whole
+    2025 era would lose the card in silence.
+    """
+    from lenz_mcp import client
+
+    try:
+        session = getattr(ctx, 'session', None)
+        if session is None or getattr(session, 'client_capabilities', None) is None:
+            return None, client.DECLARATION_ABSENT
+        from mcp.server.apps import client_supports_apps
+
+        return bool(client_supports_apps(ctx)), client.DECLARATION_FROM_REQUEST
+    except Exception:  # noqa: BLE001 — a card is a courtesy, never a reason to break a request
+        logger.exception('the client MCP Apps declaration could not be read; falling back to the vendor token')
+        return None, client.DECLARATION_READ_FAILED
+
+
+def tailor_and_log(result: Any) -> Any:
+    """Tailor the tool list, then state what went out. ONE decision for both.
+
+    Asking `card_decision` twice per request was not just wasted work: its
+    error branch logs, so a failing decision wrote its traceback twice per
+    `tools/list` — and the count of those lines is what the runbook says to
+    read.
+    """
+    decision = None
+    try:
+        from lenz_mcp import client, mcp_card
+
+        decision = mcp_card.card_decision(client.client_profile())
+    except Exception:  # noqa: BLE001 — tailoring decides for itself below
+        logger.exception('the card decision could not be made before tailoring')
+    return log_manifest_decision(tailor_tool_list(result, decision), decision)
+
+
+def tailor_tool_list(result: Any, decision: tuple[bool, str] | None = None) -> Any:
     """What this client may see in `tools/list`.
 
     A client we serve the card to gets the card meta on the card tools and keeps
@@ -114,7 +202,8 @@ def tailor_tool_list(result: Any) -> Any:
         return result
 
     try:
-        if mcp_card.card_active():
+        card_on = mcp_card.card_active() if decision is None else decision[0]
+        if card_on:
             tailored = []
             for tool in tools:
                 tool = copy.deepcopy(tool)
@@ -135,6 +224,62 @@ def tailor_tool_list(result: Any) -> Any:
         except Exception:
             logger.exception('the card-only tools could not be stripped either')
     return result
+
+
+def log_manifest_decision(result: Any, decision: tuple[bool, str] | None = None) -> Any:
+    """State what this client was just served, and why. Returns `result` untouched.
+
+    `card` is read off the MANIFEST, not re-derived from the profile. The two
+    should always agree, and the whole point of this line is to be believed
+    when something has gone wrong — a line that re-asks the decision would
+    faithfully report `card=on` for a client the tailoring gave nothing to,
+    which is the silent-failure class this release exists to make visible.
+    Anything between the decision and the tailoring (the fail-closed fallback
+    above, a future ordering change) shows up here instead of hiding.
+
+    The REASON still comes from the decision, since only the decision knows it.
+    When the two disagree the reason says so and it is logged at ERROR: that
+    combination is a bug of ours and nothing else on the line would show it.
+    """
+    try:
+        from lenz_mcp import client, config, decisions, mcp_card
+
+        profile = client.client_profile()
+        decided, reason = mcp_card.card_decision(profile) if decision is None else decision
+        card_on = _manifest_carries_the_card(result)
+        if card_on is not None and card_on != decided:
+            logger.error(
+                'mcp_manifest_mismatch decided=%s served=%s reason=%s — the tool list does not match the '
+                'card decision that produced it',
+                decided,
+                card_on,
+                reason,
+            )
+            reason = f'{reason}_mismatch'
+        decisions.log_manifest(
+            profile,
+            card_on=decided if card_on is None else card_on,
+            reason=reason,
+            wait=config.verify_wait_seconds(profile.identity),
+        )
+    except Exception:  # noqa: BLE001 — never break discovery over a log line
+        logger.exception('the manifest decision could not be logged')
+    return result
+
+
+def _manifest_carries_the_card(result: Any) -> bool | None:
+    """Whether the tool list going out actually has the card in it.
+
+    Read from the answer, not from the rule that produced it. `None` when the
+    result is not a shape we can read, so the line falls back to the decision
+    rather than reporting a guess.
+    """
+    from lenz_mcp import mcp_card
+
+    tools = result.get('tools') if isinstance(result, dict) else None
+    if not isinstance(tools, list):
+        return None
+    return any(isinstance(tool, dict) and tool.get('name') in mcp_card.CARD_ONLY_TOOL_NAMES for tool in tools)
 
 
 def tailor_resource_list(result: Any) -> Any:

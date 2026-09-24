@@ -31,7 +31,14 @@ import pytest
 from lenz_mcp import client, config, mcp_card, server
 from lenz_mcp.client import ApiResponse
 from lenz_mcp.mcp_card import CARD_DIR
-from lenz_mcp.testing import assembled_app
+from lenz_mcp.testing import (
+    APPS_EXTENSION_ID,
+    DECLARES_APPS,
+    DECLARES_NO_APPS,
+    LEGACY,
+    MODERN,
+    assembled_app,
+)
 
 CARD_TOOLS = {'start_verification_widget', 'get_verification_widget', 'select_claims_widget'}
 
@@ -58,14 +65,25 @@ def _app(*, card: bool):
         yield harness
 
 
-def _wire(harness, ua):
-    wire = harness.wire(user_agent=ua, authorization=KEY)
-    wire.initialize()
+def _wire(harness, ua, *, capabilities=None, era=LEGACY):
+    """A client against the assembled app.
+
+    `capabilities` is what it DECLARES, and only the 2026-07-28 era carries one
+    (the 2025 handshake declares once and this server is stateless). The card
+    is keyed on that declaration, so a card client here is one that passes
+    `DECLARES_APPS` — a User-Agent alone does not make one, in this harness any
+    more than anywhere else.
+    """
+    wire = harness.wire(user_agent=ua, authorization=KEY, capabilities=capabilities)
+    if era == LEGACY:
+        wire.initialize()
     return wire
 
 
-def _tools(harness, ua):
-    return {t['name']: t for t in _wire(harness, ua).call('tools/list', name='tools/list')['tools']}
+def _tools(harness, ua, *, capabilities=None, era=LEGACY, client_name='wire'):
+    wire = _wire(harness, ua, capabilities=capabilities, era=era)
+    listed = wire.call('tools/list', era=era, name='tools/list', client_name=client_name)
+    return {t['name']: t for t in listed['tools']}
 
 
 def _dump(tools):
@@ -156,26 +174,87 @@ def test_other_clients_are_unchanged_with_the_card_on(ua):
     assert with_card == without_card
 
 
-def test_openais_api_connector_is_not_a_card_host():
-    # Measured 2026-09-18: OpenAI's Responses-API MCP connector sends the SAME
-    # leading token as the ChatGPT app (`openai-mcp`), renders no card, cuts a
-    # tool call at 59.8 s against the app's 119.8 s, and — unlike the app —
-    # lists app-only tools to its model. Matching on the token would hand that
-    # developer's model `start_verification_widget` and `select_claims_widget`,
-    # which START PAID CHECKS.
+def test_a_card_host_is_a_client_that_declares_the_extension():
+    """Who gets the card is the CLIENT's answer, not our table's.
+
+    This REVERSES the rule it replaces, deliberately. Until 2026-09-23 the card
+    went to an allow-list of full identity strings, so OpenAI's Responses-API
+    connector and any unrecognised `openai-mcp (…)` suffix were refused it.
+    Then OpenAI shipped a ChatGPT build sending `openai-mcp/1.0.0 (ChatGPT)`,
+    the app fell out of its own allow-list, and it lost the card silently —
+    with the list still looking correct to anyone reading it.
+
+    So the key is what the client declares on the request. A client that says
+    it renders MCP Apps gets the card whatever its suffix; one that says it
+    does not is refused however familiar its User-Agent. The cost of the
+    reversal is pinned by `test_a_declaring_client_that_renders_nothing_is_accepted`.
+    """
+    for ua in ['openai-mcp/1.0.0 (Responses API)', 'openai-mcp/1.0.0 (Something New)', 'brand-new-host/9']:
+        with _app(card=True) as harness:
+            declaring = _tools(harness, ua, capabilities=DECLARES_APPS, era=MODERN)
+            silent = _tools(harness, ua, capabilities=DECLARES_NO_APPS, era=MODERN)
+        assert CARD_TOOLS <= set(declaring), f'{ua} declared the extension and was refused the card'
+        assert declaring['assess_claim']['_meta'] == {'ui': {'resourceUri': mcp_card.CARD_URI}}, ua
+        assert not CARD_TOOLS & set(silent), f'{ua} declared no extension and was served card-only tools'
+        for name, tool in silent.items():
+            assert 'ui' not in (tool.get('_meta') or {}), f'{ua}: {name}'
+
+
+def test_claude_code_declares_no_card_and_is_served_none():
+    """The regression this rule was ALLOWED to cause, pinned so it stays caused.
+
+    Claude Code sends the same `Claude-User` User-Agent as the Claude app and
+    declares no UI extension at all, so the identity table served it three
+    card-only tools it cannot render — two of which start paid checks. Under
+    the declaration it is not served them, on the modern era, which is what it
+    speaks.
+    """
     with _app(card=True) as harness:
-        connector = _tools(harness, 'openai-mcp/1.0.0 (Responses API)')
-        unknown = _tools(harness, 'openai-mcp/1.0.0 (Something New)')
-    for name in ['start_verification_widget', 'get_verification_widget', 'select_claims_widget']:
-        assert name not in connector, f'{name} must not be listed to the API connector'
-    # And its manifest is today's: no card meta anywhere.
-    for name, tool in connector.items():
+        tools = _tools(harness, 'Claude-User', capabilities=DECLARES_NO_APPS, era=MODERN, client_name='claude-code')
+    assert not CARD_TOOLS & set(tools), 'Claude Code was served card-only tools'
+    for name, tool in tools.items():
         assert 'ui' not in (tool.get('_meta') or {}), name
-    # An unrecognised suffix is treated the same way, never as the app.
-    assert 'start_verification_widget' not in unknown
 
 
-def test_the_delivery_hint_follows_the_app_not_the_token(monkeypatch, authed):
+def test_the_extension_without_the_mime_type_is_not_a_declaration():
+    """The SDK wants the extension AND `text/html;profile=mcp-app` under it.
+
+    A host that names the extension but lists no mime type it can render has
+    not said it can render OURS, and must not be handed a card on the strength
+    of the key alone.
+    """
+    with _app(card=True) as harness:
+        tools = _tools(harness, 'brand-new-host/9', capabilities={'extensions': {APPS_EXTENSION_ID: {}}}, era=MODERN)
+    assert not CARD_TOOLS & set(tools)
+
+
+def test_a_declaring_client_that_renders_nothing_is_accepted():
+    """The stated cost of keying on the declaration, written down as a test.
+
+    OpenAI's Responses-API connector declares the extension (measured
+    2026-09-17/18), renders no card, and ignores `ui.visibility: ['app']`, so
+    its model can see three card-only tools. That is accepted: the alternative
+    is a second allow-list keyed on the same kind of host-controlled string
+    that just broke, and what it would manage is not a UX risk. This test is
+    where to come back to if it ever confuses anyone.
+    """
+    with _app(card=True) as harness:
+        tools = _tools(harness, 'openai-mcp/1.0.0 (Responses API)', capabilities=DECLARES_APPS, era=MODERN)
+    assert CARD_TOOLS <= set(tools)
+
+
+def test_the_delivery_hint_follows_the_vendor_not_the_identity(monkeypatch, authed):
+    """Delivery is keyed on the raw leading token, so an unparsable UA keeps it.
+
+    ChatGPT accepts `ui/update-model-context`, never delivers it, and then tells
+    the user no verification was run — beside a card showing a sourced verdict.
+    A proxied or relabelled ChatGPT renders the same card and needs the same
+    hint: keyed on the full identity, `openai-mcp/1.0.0 (x) proxy/1.0` would
+    get `context` and produce exactly that contradiction. The hint grants
+    nothing, so the coarse answer costs nothing — a client that renders no card
+    never reads it.
+    """
+
     async def _verify(authorization, **kwargs):
         return ApiResponse(status=202, data={'task_id': 't' * 32})
 
@@ -184,11 +263,17 @@ def test_the_delivery_hint_follows_the_app_not_the_token(monkeypatch, authed):
     for ua, deliver in [
         ('openai-mcp/1.0.0', 'message'),
         ('openai-mcp/1.0.0 (Codex)', 'message'),
-        # The API connector renders no card, so it is never told to post one.
-        ('openai-mcp/1.0.0 (Responses API)', 'context'),
-        ('openai-mcp/1.0.0 (Something New)', 'context'),
+        ('openai-mcp/1.0.0 (ChatGPT)', 'message'),
+        ('openai-mcp/1.0.0 (Responses API)', 'message'),
+        ('openai-mcp/1.0.0 (Something New)', 'message'),
+        # Unparsable, so it wins nothing in the wait table — but it is still
+        # OpenAI's, and a card of theirs must not be told to push silently.
+        ('openai-mcp/1.0.0 (Responses API) proxy/1.0', 'message'),
+        ('Claude-User/1.0', 'context'),
+        ('some-other-host/1.0', 'context'),
+        ('', 'context'),
     ]:
-        monkeypatch.setattr(client, 'client_user_agent', lambda ua=ua: ua)
+        _as_client(monkeypatch, ua)
         out = _run(server.start_verification_widget('The claim.', _Ctx()))
         assert out[mcp_card.CARD_RESULT_NAMESPACE] == {'deliver': deliver}, ua
 
@@ -669,8 +754,15 @@ def test_the_picker_cap_allows_exactly_its_number(monkeypatch, authed):
 # ── How the card is told to deliver ───────────────────────────────────
 
 
-def _as_client(monkeypatch, user_agent):
-    monkeypatch.setattr(client, 'client_user_agent', lambda: user_agent)
+def _as_client(monkeypatch, user_agent, **kwargs):
+    """Put a request from `user_agent` in scope, the way the middleware does.
+
+    ONE seam: every per-client decision reads `client.client_profile()`, so
+    patching it moves the card, its delivery hint and the deep-check wait
+    together. Patching the User-Agent reader alone used to move some of them
+    and not others, which is the shape of bug this whole change is about.
+    """
+    monkeypatch.setattr(client, 'client_profile', lambda: client.ClientProfile.from_user_agent(user_agent, **kwargs))
 
 
 @pytest.mark.parametrize(
@@ -738,17 +830,32 @@ def test_the_delivery_hint_is_never_shown_to_a_model():
     }
 
 
-def test_the_card_gate_and_the_wait_read_the_client_the_same_way(monkeypatch):
-    # One token, three readers: a client matched one way here and another way
-    # there is how a host ends up on the wrong wait with the right card.
-    _as_client(monkeypatch, 'openai-mcp/1.0.0 (Codex)')
-    assert client.client_user_agent_token() == 'openai-mcp'
-    assert mcp_card.request_is_claude() is False
+def test_every_per_client_decision_reads_one_profile(monkeypatch):
+    """Three decisions, ONE resolved description of the client.
+
+    They deliberately read DIFFERENT fields — the card the declaration, its
+    delivery the vendor token, the wait the full identity — because the three
+    questions are different and their failures are not alike. What must never
+    differ is where the answer comes FROM: three modules each re-deriving the
+    client from a raw header is how one of them ends up matching a host the
+    others no longer do.
+    """
+    monkeypatch.setattr(config, 'CARD_ENABLED', True)
+    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_IDENTITY', {'openai-mcp (Codex)': 100.0, 'Claude-User': 130.0})
+
+    _as_client(monkeypatch, 'openai-mcp/1.0.0 (Codex)', declares_apps=True, declaration_source='request')
+    profile = client.client_profile()
+    assert (profile.vendor_token, profile.identity) == ('openai-mcp', 'openai-mcp (Codex)')
+    assert mcp_card.card_active() is True
     assert mcp_card.card_delivery() == 'message'
-    _as_client(monkeypatch, 'Claude-User/1.0')
-    assert client.client_user_agent_token() == 'Claude-User'
-    assert mcp_card.request_is_claude() is True
+    assert server._verify_wait_seconds() == 100.0
+
+    _as_client(monkeypatch, 'Claude-User/1.0', declares_apps=False, declaration_source='request')
+    profile = client.client_profile()
+    assert (profile.vendor_token, profile.identity) == ('Claude-User', 'Claude-User')
+    assert mcp_card.card_active() is False, 'a client that declares no card is served none'
     assert mcp_card.card_delivery() == 'context'
+    assert server._verify_wait_seconds() == 130.0, 'and its wait is unaffected by the card decision'
 
 
 def test_the_card_declares_a_csp_and_it_allows_nothing():
@@ -836,35 +943,37 @@ def test_every_card_only_tool_tells_a_model_to_leave_it_alone(monkeypatch):
         assert _run(call)['status'] == 'invalid_request'
 
 
-def test_an_unreadable_client_is_privileged_nowhere(monkeypatch):
-    """'' must be an unknown client at every gate, not a privileged one.
+def test_an_unreadable_client_wins_the_long_wait_and_the_card_nowhere(monkeypatch):
+    """A client we cannot identify must win nothing it did not ask for.
 
-    The identity read goes through an SDK internal that mcp 2.x removes, and it
-    is wrapped: a failure returns ''. Moving to mcp 2.x makes that read
-    loud, but loud is not the same as safe — what makes it safe is that '' wins
-    nothing here. One seam, three gates, asserted together.
+    It can still be SERVED a card, by declaring it can render one — that is
+    the whole point of keying exposure on the declaration, and it costs a
+    stranger nothing anyone else is not already getting. What it cannot have is
+    the long deep-check wait, which is sized to a measured client's ceiling and
+    whose overrun is a hard error in the chat.
     """
-    monkeypatch.setattr(client, 'client_user_agent', lambda: '')
-    assert client.client_identity() == ''
-    assert mcp_card.request_is_claude() is False
-    assert mcp_card.request_is_chatgpt_app() is False
-    assert mcp_card.card_delivery() == mcp_card.DELIVER_BY_CONTEXT
     monkeypatch.setattr(config, 'CARD_ENABLED', True)
-    assert mcp_card.card_active() is False, 'no card for a client we cannot identify'
-    assert '' not in config.VERIFY_WAIT_SECONDS_BY_USER_AGENT
+    _as_client(monkeypatch, '')
+    assert client.client_identity() == ''
+    assert client.client_user_agent_token() == ''
+    assert mcp_card.card_delivery() == mcp_card.DELIVER_BY_CONTEXT
+    assert mcp_card.card_active() is False, 'no declaration and no card vendor: no card'
+    assert '' not in config.VERIFY_WAIT_SECONDS_BY_IDENTITY
+    assert server._verify_wait_seconds() == config.VERIFY_WAIT_SECONDS
 
 
-def test_a_client_we_cannot_parse_is_privileged_nowhere(monkeypatch):
-    # The same rule for a User-Agent that parses to nothing we recognise: it is
-    # returned verbatim precisely so it matches no row at any gate.
+def test_a_client_we_cannot_parse_never_inherits_a_measured_clients_wait(monkeypatch):
+    """A User-Agent that parses to nothing is returned verbatim, so it matches
+    no row in the wait table — the one decision where a wrong match is worse
+    than no match. Its delivery hint still follows its raw leading token
+    (`test_the_delivery_hint_follows_the_vendor_not_the_identity`), which is
+    the safe direction for a proxied card host."""
     for ua in [
         'openai-mcp/1.0.0 (Responses API) proxy/1.0',
         'openai-mcp/1.0.0 (a) (b)',
         'Claude-User/1.0 (Something)',
         'garbage (',
     ]:
-        monkeypatch.setattr(client, 'client_user_agent', lambda ua=ua: ua)
-        assert mcp_card.request_is_claude() is False, ua
-        assert mcp_card.request_is_chatgpt_app() is False, ua
-        assert mcp_card.card_delivery() == mcp_card.DELIVER_BY_CONTEXT, ua
-        assert client.client_identity() not in config.VERIFY_WAIT_SECONDS_BY_USER_AGENT, ua
+        _as_client(monkeypatch, ua)
+        assert client.client_identity() not in config.VERIFY_WAIT_SECONDS_BY_IDENTITY, ua
+        assert server._verify_wait_seconds() == config.VERIFY_WAIT_SECONDS, ua

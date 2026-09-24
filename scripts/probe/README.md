@@ -20,7 +20,7 @@ protocol this probe spoke then; the card renders and follows the theme. **Run 2*
 section 6 below. **On the modern protocol (2026-07-28), which Claude negotiates with
 lenz-mcp, 150 s completes and 210 s is cut** (2026-09-18, with a direct 210 s
 control call that completed; the exact ceiling in between is unmeasured).
-`VERIFY_WAIT_SECONDS_BY_USER_AGENT` holds Claude's whole call under the 150 s.
+`VERIFY_WAIT_SECONDS_BY_IDENTITY` holds Claude's whole call under the 150 s.
 
 Every request is logged to the terminal as one JSON line, including what Claude
 declares when it connects. Everything Claude answers the card's buttons is shown in

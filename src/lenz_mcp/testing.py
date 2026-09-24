@@ -71,6 +71,19 @@ _MCP_MODULES = (
 )
 
 
+#: The MCP Apps extension, and the mime type a client must list under it for
+#: the SDK to count it as declared (`mcp.server.apps.client_supports_apps`).
+APPS_EXTENSION_ID = 'io.modelcontextprotocol/ui'
+APP_MIME_TYPE = 'text/html;profile=mcp-app'
+
+#: What a card host declares: the capabilities block that makes `card_active`
+#: true on the modern era. A test that wants a card client asks for THIS rather
+#: than spelling the extension, so the one place the shape is written is here.
+DECLARES_APPS: dict[str, Any] = {'extensions': {APPS_EXTENSION_ID: {'mimeTypes': [APP_MIME_TYPE]}}}
+#: A client that declares capabilities and NOT the card — Claude Code's shape.
+DECLARES_NO_APPS: dict[str, Any] = {'elicitation': {}, 'roots': {'listChanged': True}}
+
+
 def modern_meta(client_name: str = 'wire', capabilities: dict[str, Any] | None = None) -> dict[str, Any]:
     """The `_meta` block a 2026-07-28 client puts on every request."""
     return {
@@ -104,11 +117,26 @@ def messages(response: httpx.Response) -> list[dict[str, Any]]:
 class Wire:
     """One client against one assembled app. Async under the hood, sync to use."""
 
-    def __init__(self, harness, *, user_agent: str = 'wire/1', authorization: str | None = None, timeout: float = 10.0):
+    def __init__(
+        self,
+        harness,
+        *,
+        user_agent: str = 'wire/1',
+        authorization: str | None = None,
+        timeout: float = 10.0,
+        capabilities: dict[str, Any] | None = None,
+    ):
         self._harness = harness
         self.user_agent = user_agent
         self.authorization = authorization
         self.timeout = timeout
+        # What this client DECLARES on every modern request. The card is keyed
+        # on it, so a card client is one that passes `DECLARES_APPS` here — a
+        # User-Agent alone no longer makes one, in the harness any more than in
+        # production. Only the 2026-07-28 era carries it: the 2025 handshake
+        # declares capabilities once, and this server is stateless, so nothing
+        # a legacy client declares survives to its next request.
+        self.capabilities = capabilities
         self.negotiated_version: str | None = None
         self._id = 0
 
@@ -155,7 +183,7 @@ class Wire:
             # `_meta`, so overwriting a caller's block would drop exactly what a
             # capability-gated test declares, and the test would pass against a server
             # that saw no capabilities at all.
-            params['_meta'] = {**modern_meta(client_name), **(params.get('_meta') or {})}
+            params['_meta'] = {**modern_meta(client_name, self.capabilities), **(params.get('_meta') or {})}
             sent['mcp-protocol-version'] = MODERN_VERSION
             sent['mcp-method'] = method
             if name:

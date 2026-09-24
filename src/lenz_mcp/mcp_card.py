@@ -3,13 +3,25 @@
 The card is a Preact bundle built in ``src/lenz_mcp/card/`` to a committed
 ``dist/``, served as ``text/html;profile=mcp-app`` and pointed at by
 ``assess_claim``'s ``_meta.ui.resourceUri`` in the tools/list a card client
-receives. Behind ``MCP_CARD_ENABLED`` (off by default), and only for the
-clients the card is MEASURED in — ``Claude-User`` (claude.ai, Claude Desktop,
-the directory connector) and the ChatGPT app (``card_active``).
+receives. Behind ``MCP_CARD_ENABLED`` (off by default), and for a client that
+DECLARES MCP Apps support (``card_decision``).
 
-This module owns the card's identity (URI, mime type, versions), the predicate
-every card surface gates on, and the resource registration. The per-client
-tools/list tailoring lives in ``middleware.py`` (``tailor_tool_list``).
+This module owns the card's identity (URI, mime type, versions), the two
+per-client decisions the card needs — who is served one (``card_decision``)
+and how that client's card must tell the model (``card_delivery``) — and the
+resource registration. Both are pure functions of one
+``client.ClientProfile``; the per-client tools/list tailoring lives in
+``middleware.py`` (``tailor_tool_list``).
+
+**Neither decision is keyed on the full client identity any more, and that is
+the point.** Until 2026-09-23 both were, and both stopped matching at once
+when OpenAI shipped a ChatGPT build sending ``openai-mcp/1.0.0 (ChatGPT)``
+instead of ``openai-mcp/1.0.0`` — a hand-maintained table of strings the host
+controls, with nothing to say when a lookup started missing. Exposure now
+follows the client's own declaration, which a card host restates on every
+modern request; delivery follows the vendor token, which a suffix does not
+change. The deep-check wait still keys on the identity, on purpose
+(``config.VERIFY_WAIT_SECONDS_BY_IDENTITY`` says why).
 
 Two rules from measuring Claude (scripts/probe, 2026-09-17):
 
@@ -49,12 +61,23 @@ CARD_DIR = Path(__file__).resolve().parent / 'card'
 DIST_DIR = CARD_DIR / 'dist'
 _VERSIONS_PATH = DIST_DIR / 'versions.json'
 
-# The client identities whose card is measured. Identities, not tokens: a
-# suffix nobody has measured must not inherit a measured client's card. Claude
-# sends no suffix today; if it grows one, that variant gets
-# today's manifest until somebody watches the card work in it.
+# The vendors whose card we have MEASURED, by their User-Agent's leading
+# token. This is a FALLBACK and nothing else: it decides only for a request
+# that carries no MCP Apps declaration at all, or whose declaration could not
+# be read. On the 2025 era that is every request — the handshake declares
+# capabilities once and this server is stateless, so nothing survives to the
+# `tools/list` that follows — and the Claude renderer still opens 2025-era
+# sessions, so without this fallback it would lose its own card.
+#
+# Deliberately the coarse token, not the identity: a new parenthesised suffix
+# on a vendor's own client (`openai-mcp/1.0.0 (ChatGPT)`, 2026-09-23) must not
+# silently withdraw the card, which is exactly what an identity table did.
+# The stated cost: a legacy in-session request from Claude Code, or from
+# anything else sending `Claude-User`, keeps today's card-only tools. Both
+# self-correct the moment the client speaks the modern era, where the
+# declaration decides.
 CLAUDE_USER_AGENT_PRODUCT = 'Claude-User'
-CLAUDE_IDENTITIES = frozenset({CLAUDE_USER_AGENT_PRODUCT})
+CARD_VENDOR_TOKENS = frozenset({CLAUDE_USER_AGENT_PRODUCT, 'openai-mcp'})
 
 # Tools only the card calls: listed to Claude with the card on, hidden from the
 # model by the MCP Apps visibility hint, stripped from every other manifest.
@@ -82,27 +105,30 @@ CARD_ONLY_TOOL_META = {'ui': {'visibility': ['app']}}
 CARD_RESULT_NAMESPACE = '_card'
 DELIVER_BY_MESSAGE = 'message'
 DELIVER_BY_CONTEXT = 'context'
-# The ChatGPT APP, whose card we have measured — and ONLY it. OpenAI's
-# Responses-API connector shares the `openai-mcp` token but renders no card at
-# all (it is how a developer wires Lenz into their own agent), and measured
-# 2026-09-18 it also ignores `ui.visibility: ['app']` and lists every tool to
-# its model. Matching on the token would hand that developer's model three
-# card-only tools, two of which START PAID CHECKS. So the match is on the full
-# identity, and an unrecognised suffix is NOT the app.
-CHATGPT_APP_IDENTITIES = frozenset({'openai-mcp', 'openai-mcp (Codex)'})
+# Whose card must post a message instead of pushing context: OpenAI's, by
+# VENDOR token. Every OpenAI surface that renders our card is a ChatGPT
+# surface, and the failure this prevents is the model contradicting a sourced
+# verdict the user is looking at — so the coarse answer is the right one here,
+# and a proxied or relabelled ChatGPT gets it too. It grants nothing: a client
+# that renders no card never reads the hint.
+MESSAGE_DELIVERY_VENDOR_TOKENS = frozenset({'openai-mcp'})
 
 
-def card_delivery() -> str:
+def card_delivery(profile=None) -> str:
     """Which mechanism THIS client's card must use to tell the model.
 
-    Keyed on the same client identity as the deep-check wait
-    (``client.client_identity()``, the token plus its suffix). An
-    unknown client gets ``context``: the card then pushes only if the host
+    Keyed on the VENDOR token, not the identity. Both are attacker-controlled
+    strings, but the question is "whose host is this" and nothing finer: the
+    hint is read only by a card that is already rendering, and getting it wrong
+    shows the user a model contradicting a verdict on screen.
+
+    An unknown client gets ``context``: the card then pushes only if the host
     declares it, so a host nobody has measured is never made to post messages
     into the user's own turn that it did not ask for.
     """
     try:
-        if request_is_chatgpt_app():
+        resolved = _profile(profile)
+        if resolved.vendor_token in MESSAGE_DELIVERY_VENDOR_TOKENS:
             return DELIVER_BY_MESSAGE
     except Exception:  # noqa: BLE001 — the quieter mechanism is the safe default
         return DELIVER_BY_CONTEXT
@@ -113,7 +139,14 @@ def with_delivery(result: dict) -> dict:
     """Stamp a card-only tool's result with how this client must deliver."""
     if not isinstance(result, dict):
         return result
-    result[CARD_RESULT_NAMESPACE] = {'deliver': card_delivery()}
+    deliver = card_delivery()
+    result[CARD_RESULT_NAMESPACE] = {'deliver': deliver}
+    try:
+        from lenz_mcp import decisions
+
+        decisions.log_card_delivery(deliver)
+    except Exception:  # noqa: BLE001 — a log line never costs a card its result
+        logger.exception('the card delivery decision could not be logged')
     return result
 
 
@@ -188,44 +221,75 @@ def card_enabled() -> bool:
     return bool(config.CARD_ENABLED)
 
 
-def request_is_claude() -> bool:
-    """The request is from a Claude client whose card is measured. Never raises.
+# Why a request was or was not offered the card. The log line carries it, and
+# a reader of the log needs it: `card=off` alone cannot tell a client that told us
+# it renders no cards from one whose table row we forgot.
+REASON_FLAG_OFF = 'flag_off'
+#: The request declared MCP Apps support. The card is on because the client
+#: said it can render one.
+REASON_DECLARED = 'declared'
+#: The request declared its capabilities and MCP Apps was NOT among them. The
+#: card is off because the client said so — Claude Code is this case.
+REASON_NO_DECLARATION = 'no_declaration'
+#: No declaration on this request at all (the 2025 era, every request):
+#: decided by the vendor token.
+# noqa on both: ruff reads a name ending in _TOKEN as a credential. These
+# are log vocabulary — the vendor TOKEN of a User-Agent — and the strings
+# are a wire format log tooling matches on, so they are not renamed.
+REASON_LEGACY_TOKEN = 'legacy_token'  # noqa: S105
+#: The declaration could not be read: decided by the vendor token, as it was
+#: before this request's declaration existed. Never silently worse than that.
+REASON_READ_FAILED_TOKEN = 'read_failed_token'  # noqa: S105
+#: The decision itself raised. Distinct from `flag_off`, which is somebody's
+#: choice: this one is a bug, and reading it as the kill switch would hide it.
+REASON_ERROR = 'error'
 
-    Keyed on the full identity (``client.client_identity``), so an unmeasured
-    suffix is not Claude for the card's purposes — the same rule that keeps
-    OpenAI's API connector from being mistaken for its app.
+
+def _profile(profile=None):
+    from lenz_mcp import client
+
+    return client.client_profile() if profile is None else profile
+
+
+def card_decision(profile=None) -> tuple[bool, str]:
+    """Whether this client is served the card, and WHY. Never raises.
+
+    Keyed on what the client DECLARES — `mcp.server.apps.client_supports_apps`,
+    the SDK's own predicate for the MCP Apps extension — and not on a table of
+    User-Agent strings we maintain by hand. A host that renders cards says so
+    on every modern request; a table only says what somebody last measured,
+    and on 2026-09-23 the ChatGPT app changed its User-Agent and fell out of
+    one.
+
+    It fails OPEN, to today's answer: when there is no declaration to read
+    (every 2025-era request) or the read raised, the vendor token decides, so a
+    client cannot end up with LESS than it had before this rule existed. That
+    is the opposite of the deep-check wait, which fails closed — and
+    deliberately, because the failures are not alike. A missing card is an
+    invisible downgrade; a wait that is too long is "HTTP 504" in the chat.
     """
     try:
+        if not card_enabled():
+            return False, REASON_FLAG_OFF
+        resolved = _profile(profile)
+        if resolved.declares_apps is not None:
+            return resolved.declares_apps, (REASON_DECLARED if resolved.declares_apps else REASON_NO_DECLARATION)
         from lenz_mcp import client
 
-        return client.client_identity() in CLAUDE_IDENTITIES
+        reason = (
+            REASON_READ_FAILED_TOKEN
+            if resolved.declaration_source == client.DECLARATION_READ_FAILED
+            else REASON_LEGACY_TOKEN
+        )
+        return resolved.vendor_token in CARD_VENDOR_TOKENS, reason
     except Exception:  # noqa: BLE001 — a card is a courtesy, never a reason to break discovery
-        return False
+        logger.exception('the card decision failed; serving no card')
+        return False, REASON_ERROR
 
 
-def request_is_chatgpt_app() -> bool:
-    """The request is from the ChatGPT app, the client whose card is measured.
-
-    NOT its Responses-API connector, which shares the token (see
-    CHATGPT_APP_IDENTITIES). Never raises.
-    """
-    try:
-        from lenz_mcp import client
-
-        return client.client_identity() in CHATGPT_APP_IDENTITIES
-    except Exception:  # noqa: BLE001 — a card is a courtesy, never a reason to break discovery
-        return False
-
-
-def card_active() -> bool:
-    """The ONE predicate every card surface gates on.
-
-    The flag, and a client we have MEASURED the card in: Claude, and the
-    ChatGPT app, which renders the same standard MCP Apps card. Any other
-    client gets today's manifest — a card is only offered to a host somebody
-    has actually watched it work in.
-    """
-    return card_enabled() and (request_is_claude() or request_is_chatgpt_app())
+def card_active(profile=None) -> bool:
+    """The ONE predicate every card surface gates on. See `card_decision`."""
+    return card_decision(profile)[0]
 
 
 def register_card_resources(mcp: MCPServer) -> None:
