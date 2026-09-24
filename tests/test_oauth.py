@@ -562,7 +562,7 @@ def test_the_contract_numbers():
     assert oauth.RETRY_AFTER_S == 60
 
 
-# ── the bridge: _authorization under OAuth ───────────────────────────
+# ── _authorization under OAuth ───────────────────────────────────────
 
 
 def _ctx(auth='Bearer lenz_testkey'):
@@ -652,7 +652,6 @@ def test_a_refused_credential_mid_call_tells_a_signed_in_caller_to_reconnect(mon
     from lenz_mcp import client as api_client
 
     _signed_in(monkeypatch)
-    monkeypatch.setattr(config, 'SERVICE_SIGNING_KEY', 'a-signing-key-' + 'k' * 32)
 
     async def _unauthorized(*_args, **_kwargs):
         return api_client.ApiResponse(status=401, data={'detail': 'Unauthorized'})
@@ -669,7 +668,7 @@ def test_the_reconnect_copy_names_no_tool_and_no_key(monkeypatch):
         assert word not in server.OAUTH_REAUTH_MESSAGE
 
 
-def test_flag_off_never_touches_auth_context(monkeypatch):
+def test_oauth_off_never_touches_auth_context(monkeypatch):
     monkeypatch.setattr(config, 'OAUTH_ENABLED', False)
 
     def _boom():

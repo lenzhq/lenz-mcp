@@ -15,7 +15,7 @@ import functools
 import logging
 import re
 import time
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal
 
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
@@ -221,8 +221,8 @@ _VERIFICATION_ID_RE = re.compile(r'^[0-9a-f]{8}$')
 # by a rule that was only ever about the URL.
 _SENDABLE_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
 
-# Everything outside printable ASCII. A Lenz key is `lenz_<32 hex>` and the
-# OAuth bridge mints a JWT, so a real credential never contains anything else —
+# Everything outside printable ASCII. A Lenz key is `lenz_<32 hex>`, so a real
+# credential never contains anything else —
 # but uvicorn accepts `\x80`-`\xff` inbound and Starlette latin-1-decodes it,
 # while httpx encodes header values as ASCII. A key copied from a styled page
 # or a chat message, carrying a non-breaking space or a curly quote, therefore
@@ -408,15 +408,11 @@ def _authorization(ctx: Context) -> client.Authorization:
     """The credential each tool forwards to the public API.
 
     API-key callers: the inbound ``Authorization`` header, verbatim (v1
-    behavior — the API validates the key). OAuth callers: the WorkOS JWT was
-    already verified at the transport, but it is audience-bound to the MCP
-    and the API can't accept it — so mint a fresh short-lived service
-    assertion for the resolved user instead (the ``act_as_user`` bridge,
-    src/lenz_mcp/bridge.py; the API re-checks user status per call).
-
-    With ``LENZ_OAUTH_EXCHANGE`` on, an OAuth caller gets the call's
-    ``exchange.CallCredential`` instead: the client resolves it to an exchanged
-    API token on the first request, scoped to the running tool, and every later
+    behavior — the API validates the key). OAuth callers: the user's token was
+    verified at the transport, but it is audience-bound to this server and the
+    API cannot accept it, so the call gets its own
+    ``exchange.CallCredential``. The client resolves it to an exchanged API
+    token on the first request, scoped to the running tool, and every later
     request of the same call (each poll of a deep-check wait) reuses it.
     """
     if config.OAUTH_ENABLED:
@@ -426,17 +422,11 @@ def _authorization(ctx: Context) -> client.Authorization:
 
         access_token = get_access_token()
         if access_token is not None and (access_token.claims or {}).get('auth_mode') == oauth.AUTH_MODE_OAUTH:
-            if config.OAUTH_EXCHANGE:
-                credential = _CALL_CREDENTIAL.get()
-                if credential is None or not credential.is_for(access_token.token):
-                    credential = exchange.CallCredential(access_token.token, exchange.scopes_for(_CALL_TOOL.get()))
-                    _CALL_CREDENTIAL.set(credential)
-                return credential
-
-            from lenz_mcp.bridge import mint_service_assertion
-
-            # subject is digits-only — enforced by DualModeTokenVerifier.
-            return f'Bearer {mint_service_assertion(int(cast(str, access_token.subject)))}'
+            credential = _CALL_CREDENTIAL.get()
+            if credential is None or not credential.is_for(access_token.token):
+                credential = exchange.CallCredential(access_token.token, exchange.scopes_for(_CALL_TOOL.get()))
+                _CALL_CREDENTIAL.set(credential)
+            return credential
 
     try:
         request = ctx.request_context.request

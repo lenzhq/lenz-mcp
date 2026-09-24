@@ -82,17 +82,15 @@ if [ "${reported}" = "dev" ] || [ "${reported}" != "${VERSION}" ]; then
 fi
 
 # Every module imports inside the image, including the ones only a live request
-# reaches (the OAuth bridge's signer, the card resources), and an OAuth bridge
-# assertion can be minted there: the keyless OAuth smoke below never reaches
-# either, so a missing dependency would pass it.
-docker exec -e MCP_SERVICE_SIGNING_KEY=container-test-signing-key -e MCP_SERVICE_SIGNING_KEYS=container-test-signing-key-0123456789abcdef \
-    lenz-mcp-ct-on python -c "
+# reaches (the token exchange, the card resources): the keyless OAuth smoke
+# below never reaches them, so a missing dependency would pass it.
+docker exec lenz-mcp-ct-on python -c "
 import importlib, pkgutil, lenz_mcp
 for m in pkgutil.walk_packages(lenz_mcp.__path__, 'lenz_mcp.'):
     importlib.import_module(m.name)
-from lenz_mcp.bridge import mint_service_assertion
-assert mint_service_assertion(1)
-print('server modules import, and the bridge mints')
+from lenz_mcp import exchange
+assert exchange.TOOL_SCOPES
+print('server modules import, and the exchange is wired')
 "
 
 status=0

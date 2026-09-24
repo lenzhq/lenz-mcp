@@ -640,7 +640,8 @@ def test_the_auth_wall_answers_a_keyless_client_with_the_oauth_challenge(era):
     with assembled_app(
         MCP_OAUTH_ENABLED=True,
         WORKOS_AUTHKIT_DOMAIN='dual-era.authkit.app',
-        MCP_SERVICE_SIGNING_KEYS='dual-era-signing-key-' + 'k' * 32,
+        LENZ_OAUTH_CLIENT_ID='dual-era-client',
+        LENZ_OAUTH_CLIENT_SECRET='dual-era-secret',
     ) as harness:
         wire = harness.wire(user_agent=CLAUDE)
         method = 'tools/list' if era == LEGACY else 'server/discover'
@@ -657,7 +658,8 @@ def test_an_api_key_is_served_with_oauth_on(api, era):
     with assembled_app(
         MCP_OAUTH_ENABLED=True,
         WORKOS_AUTHKIT_DOMAIN='dual-era.authkit.app',
-        MCP_SERVICE_SIGNING_KEYS='dual-era-signing-key-' + 'k' * 32,
+        LENZ_OAUTH_CLIENT_ID='dual-era-client',
+        LENZ_OAUTH_CLIENT_SECRET='dual-era-secret',
     ) as harness:
         wire = _wire(harness, CLAUDE, era)
         result = wire.call('tools/call', {'name': 'check_usage', 'arguments': {}}, era=era, name='check_usage')
