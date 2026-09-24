@@ -39,7 +39,7 @@ def _no_wait(monkeypatch):
 
     monkeypatch.setattr(server, '_sleep', _instant)
     monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS', 0.05)
-    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_USER_AGENT', {'Claude-User': 0.05})
+    monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_IDENTITY', {'Claude-User': 0.05})
 
 
 def _status_sequence(monkeypatch, *responses):
@@ -1095,7 +1095,14 @@ def test_submitted_message_names_the_waiting_call_for_every_client(monkeypatch):
     assert 'card' not in claude.lower()
 
     # A client with the card OFF (the default) reads exactly like Claude.
-    monkeypatch.setattr('lenz_mcp.client.client_user_agent', lambda: 'openai-mcp/1.0.0')
+    # The client is put in scope as a bound PROFILE, the way the middleware
+    # binds one: the card reads what this request declared, not its User-Agent.
+    monkeypatch.setattr(
+        'lenz_mcp.client.client_profile',
+        lambda: client.ClientProfile.from_user_agent(
+            'openai-mcp/1.0.0', declares_apps=True, declaration_source='request'
+        ),
+    )
     monkeypatch.setattr(config, 'CARD_ENABLED', False)
     assert server._submitted_message(already_running=False) == claude
 

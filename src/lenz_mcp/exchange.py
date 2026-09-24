@@ -7,9 +7,8 @@ endpoint as its own OAuth client (HTTP Basic) and exchanges the user's token,
 already verified at the transport, for a short-lived Lenz API access token
 carrying only the scopes the tool in hand needs.
 
-On behind ``LENZ_OAUTH_EXCHANGE=True`` (with OAuth itself on). Off, the
-connector signs its act-as-user assertion exactly as before
-(``lenz_mcp.bridge``).
+This is how an OAuth caller is served: there is no other credential path, so a
+deployment with OAuth on and no client credentials cannot serve one.
 
 Three properties matter more than the rest:
 
