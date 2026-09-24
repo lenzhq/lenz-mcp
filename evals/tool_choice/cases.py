@@ -178,18 +178,20 @@ CASES: tuple[Case, ...] = (
     Case(
         id='submission-3-deep',
         single_call=True,
-        tools_line='`verify_claim` (one call; if the check runs long, ChatGPT follows with `get_verification` on its own, with no user action).',
+        tools_line=(
+            '`verify_claim` (one call; a deep check often outlasts a single tool call, so '
+            '`get_verification` follows — ChatGPT usually calls it itself, otherwise ask once for the result).'
+        ),
         group='openai_submission',
         scenario='The user wants evidence they can cite.',
         prompt='Use Lenz to verify with sources: Vikings wore horned helmets in battle.',
         expect='verify_claim',
         expect_args={'depth': lambda v: v in (None, '', 'standard')},
         expected_output=(
-            'ChatGPT says a deep check is running (about a minute to a minute and a half). Then: '
-            'verdict False (or Mostly False) with a 1-10 score and the confidence, a key finding '
-            'that no horned helmet from the Viking age has been found and the image comes from '
-            '19th-century art and costume, how many sources the check drew on, and the top sources '
-            'with links and what each says.'
+            'ChatGPT says a deep check is running (about a minute to a minute and a half). If it '
+            'stops there, say "show me the Lenz result". Then: verdict False (or Mostly False) '
+            'with a 1-10 score and the confidence, a key finding that no horned helmet from the '
+            'Viking age has been found and the top sources.'
         ),
         why='"with sources" is the consent the instructions treat as asking for a deep check.',
     ),
