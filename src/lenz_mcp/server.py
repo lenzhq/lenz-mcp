@@ -788,10 +788,12 @@ async def assess_claim(
 ) -> dict[str, Any]:
     """The quick check: a verdict and a bucketed confidence for each factual claim in
     a text or a list (3-model panel, about 15-20 seconds, one credit per claim).
-    Use it when the user says things like “fact-check this”, “double-check that”,
-    “is this accurate?”, “is that true?” or “are you sure?” about a factual
-    statement. When the user doubts something you said, pass the specific
-    statement being doubted, not the whole conversation.
+    Use it when the user asks to fact-check or double-check a factual statement
+    or a text (“fact-check this”, “double-check that”), asks whether one is true
+    or accurate (“is that true?”, “is this accurate?”), or doubts a factual
+    statement you made (“are you sure?”). Not for opinions, predictions,
+    arithmetic or how code behaves. When the user doubts something you said,
+    pass the specific statement being doubted, not the whole conversation.
 
     For one claim or a whole text (a draft, a pasted text or your previous
     answer), pass ONE text in ``claim`` (every claim found gets a row, up to

@@ -4,7 +4,7 @@
   "private": true,
   "description": "The Lenz verdict card (MCP Apps). Preact, built to a committed dist/ served by src/lenz_mcp/mcp_card.py.",
   "type": "module",
-  "cardVersion": 5,
+  "cardVersion": 6,
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test \"src/**/*.test.js\"",

@@ -1025,8 +1025,8 @@ test('each whole-call failure says what happened and what to do, and asks for no
     [{ status: 'rate_limited', retry_after_seconds: 7200 }, /could not reach its sources/, /Try again in about 2 hours\./],
     [{ status: 'quota_exhausted' }, /out of Lenz credits/, /how many Lenz credits/],
     // Never "run it again" here: one check is already running and paid for.
-    [{ status: 'in_progress' }, /already being checked/, /show my recent Lenz checks/],
-    [{ status: 'already_resolved' }, /already chosen/, /show my recent Lenz checks/],
+    [{ status: 'in_progress' }, /already being checked/, /ask for your recent Lenz checks/],
+    [{ status: 'already_resolved' }, /already chosen/, /ask for your recent Lenz checks/i],
   ];
   for (const [i, [result, heading, next]] of cases.entries()) {
     const id = `f${i}`;
@@ -1187,7 +1187,7 @@ test('a child id the card could not send back is not a started check', async () 
     ['good-1'],
   );
   // And the reader is told the rest did not start.
-  assert.match(await frame.locator('.lz').innerText(), /1 of 2 started\. Ask Claude to check the rest\./);
+  assert.match(await frame.locator('.lz').innerText(), /1 of 2 started\. Ask to check the rest\./);
   await page.context().close();
 });
 

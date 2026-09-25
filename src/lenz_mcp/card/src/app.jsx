@@ -34,7 +34,6 @@ function safeStorage() {
 function Footer({ right }) {
   return (
     <div class="lz-footer">
-      <span>{copy.BRAND}</span>
       <span>{right}</span>
     </div>
   );

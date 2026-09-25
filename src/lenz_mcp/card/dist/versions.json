@@ -14,5 +14,9 @@
   "ui://lenz/card-v5": {
     "file": "card-v5.html",
     "sha256": "556e326fb89ac2e55dd84ba1156c4cc5cedd237920d257c3918aa579a0d17203"
+  },
+  "ui://lenz/card-v6": {
+    "file": "card-v6.html",
+    "sha256": "a5ccf439a140d1f376d7d841bcc0243bac428493f559d3d7391a303b86aabb10"
   }
 }

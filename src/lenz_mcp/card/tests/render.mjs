@@ -131,10 +131,21 @@ try {
           await page.evaluate((w) => window.setWidth('card', w), 735);
           await page.waitForTimeout(150);
           await frame.addScriptTag({ content: AXE }).catch(() => {});
-          const violations = await frame.evaluate(async () => {
-            const r = await window.axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] });
-            return r.violations.map((v) => `${v.id} (${v.nodes.length}): ${v.nodes[0].target.join(' ')}`);
-          });
+          // A card with no ground of its own shows the host's through the frame,
+          // and axe inside the frame cannot see past it: lend it the host page's
+          // ground for the run, so contrast is measured against what a reader sees.
+          const ground = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+          const violations = await frame.evaluate(async (hostGround) => {
+            const root = document.documentElement;
+            const lent = getComputedStyle(root).getPropertyValue('--lz-bg').trim() === 'transparent';
+            if (lent) root.style.background = hostGround;
+            try {
+              const r = await window.axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] });
+              return r.violations.map((v) => `${v.id} (${v.nodes.length}): ${v.nodes[0].target.join(' ')}`);
+            } finally {
+              if (lent) root.style.background = '';
+            }
+          }, ground);
           for (const v of violations) problems.push(`AXE ${state.name} ${theme}: ${v}`);
         }
         for (const size of SIZES.filter((s) => s.scale === scale)) {
