@@ -44,6 +44,8 @@ const SIZES = [
   { key: 'zoom200', width: 368, scale: 2 },
 ];
 const THEMES = ['light', 'dark'];
+// The ends of the ground band each theme's inks hold AA on (src/styles.js).
+const GROUND_BANDS = { light: ['#FFFFFF', '#E8E8E8'], dark: ['#171717', '#3A3A3A'] };
 const BLEED_WIDTH = 390;
 
 const states = buildStates().filter((s) => !only || only.has(s.name));
@@ -131,10 +133,30 @@ try {
           await page.evaluate((w) => window.setWidth('card', w), 735);
           await page.waitForTimeout(150);
           await frame.addScriptTag({ content: AXE }).catch(() => {});
-          const violations = await frame.evaluate(async () => {
-            const r = await window.axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] });
-            return r.violations.map((v) => `${v.id} (${v.nodes.length}): ${v.nodes[0].target.join(' ')}`);
-          });
+          // A card with no ground of its own shows the host's through the frame,
+          // and axe inside the frame cannot see past it. The card cannot know the
+          // exact shade, so it is measured on the host page's ground and on both
+          // ends of the band its inks are chosen for (src/styles.js).
+          const hostGround = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+          const grounds = [hostGround, ...GROUND_BANDS[theme]];
+          const violations = await frame.evaluate(async (list) => {
+            const root = document.documentElement;
+            const run = async () => {
+              const r = await window.axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] });
+              return r.violations.map((v) => `${v.id} (${v.nodes.length}): ${v.nodes[0].target.join(' ')}`);
+            };
+            if (getComputedStyle(root).getPropertyValue('--lz-bg').trim() !== 'transparent') return run();
+            const out = [];
+            try {
+              for (const g of list) {
+                root.style.background = g;
+                for (const v of await run()) out.push(`on ${g}: ${v}`);
+              }
+            } finally {
+              root.style.background = '';
+            }
+            return out;
+          }, grounds);
           for (const v of violations) problems.push(`AXE ${state.name} ${theme}: ${v}`);
         }
         for (const size of SIZES.filter((s) => s.scale === scale)) {

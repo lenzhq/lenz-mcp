@@ -2,8 +2,16 @@
 // are four SLOTS (--lz-bg / ink / meta / hair) with Ledger values here as the
 // default; the host adapter fills them from whatever variables that host
 // publishes (src/host/theme.js), inline on the root, so nothing below names a
-// host's variables. OURS either way: the five verdict inks, the one filled
-// button and the mono labels.
+// host's variables. OURS either way: the five verdict inks and the one filled
+// button. Type is the host's own face (--font-sans, then the system UI font):
+// no second face, no letter-spaced capitals.
+//
+// The ground: a host that says which theme it is in has its own surface behind
+// the card, so the card paints none and the host's shows through; the inks are
+// that theme's. A host that publishes a ground variable still wins (the slot is
+// set inline on the root). Only a host that states no theme at all gets the
+// Ledger ground, because inks over a surface of unknown lightness can land on
+// the wrong side of it.
 //
 // Rules: a hairline frame, radius 10 (top and bottom rules only on a full-bleed
 // frame), no shadow, no pills, no animation; the
@@ -11,20 +19,24 @@
 // secondary ink, never opacity (opacity fails AA: 2.4-3.1 on both grounds).
 // Measured AA on Claude's grounds (#FFFFFF, rgb(48,48,46)), 2026-09-17: light
 // inks 4.92-6.47, dark inks 4.78-7.92, primary 5.55 / on-dark 7.03.
+// Where the host's ground shows through, the card cannot know its exact shade,
+// so every ink holds AA across a band rather than on one colour: light grounds
+// from #FFFFFF down to #E8E8E8 (worst ink 4.53) and dark grounds from #171717
+// up to #3A3A3A (worst 4.52). ChatGPT (#FFFFFF, #212121) and Claude's grounds
+// sit inside it. tests/render.mjs runs axe on both ends of each band.
 
 export const CSS = `
 :root {
   color-scheme: light dark;
   --lz-font: var(--font-sans, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
-  --lz-mono: var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
   --lz-bg: #FFFFFF;
   --lz-ink: #1A1816;
   --lz-meta: #635E59;
   --lz-hair: #E8E4DD;
   --lz-true: #14783A;
-  --lz-mostly-true: #A16207;
+  --lz-mostly-true: #8F5706;
   --lz-mixed: #635E59;
-  --lz-mostly-false: #C2410C;
+  --lz-mostly-false: #B23B0B;
   --lz-false: #B91C1C;
   --lz-primary: #3D65BC;
   --lz-on-primary: #FFFFFF;
@@ -37,13 +49,13 @@ export const CSS = `
 :root[data-theme='dark'] {
   --lz-bg: #2A2724;
   --lz-ink: #FFFDF7;
-  --lz-meta: #A8A29E;
+  --lz-meta: #B5AFAA;
   --lz-hair: #3D3935;
   --lz-true: #4ADE80;
   --lz-mostly-true: #FBBF24;
-  --lz-mixed: #A8A29E;
+  --lz-mixed: #B5AFAA;
   --lz-mostly-false: #FB923C;
-  --lz-false: #F87171;
+  --lz-false: #FA8C8C;
   --lz-primary: #7BA3F0;
   --lz-on-primary: #1A1816;
   --lz-off: #3D3935;
@@ -52,18 +64,20 @@ export const CSS = `
   :root:not([data-theme]) {
     --lz-bg: #2A2724;
     --lz-ink: #FFFDF7;
-    --lz-meta: #A8A29E;
+    --lz-meta: #B5AFAA;
     --lz-hair: #3D3935;
     --lz-true: #4ADE80;
     --lz-mostly-true: #FBBF24;
-    --lz-mixed: #A8A29E;
+    --lz-mixed: #B5AFAA;
     --lz-mostly-false: #FB923C;
-    --lz-false: #F87171;
+    --lz-false: #FA8C8C;
     --lz-primary: #7BA3F0;
     --lz-on-primary: #1A1816;
     --lz-off: #3D3935;
   }
 }
+/* After both theme blocks, so it outranks their ground. */
+:root[data-theme='light'], :root[data-theme='dark'] { --lz-bg: transparent; }
 html, body { margin: 0; padding: 0; background: transparent; }
 body { font-family: var(--lz-font); color: var(--lz-ink); -webkit-font-smoothing: antialiased; }
 * { box-sizing: border-box; }
@@ -88,19 +102,15 @@ body { font-family: var(--lz-font); color: var(--lz-ink); -webkit-font-smoothing
 
 /* Zero specificity: the reset must never outrank a component's own margin. */
 :where(.lz) :where(h1, h2, p) { margin: 0; }
-.lz-eyebrow {
-  font-family: var(--lz-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--lz-meta); margin: 0 0 8px;
-}
+.lz-eyebrow { font-size: 13px; line-height: 1.4; color: var(--lz-meta); margin: 0 0 8px; }
 .lz-claim { font-size: 17px; font-weight: 500; line-height: 1.4; }
 .lz-claim:focus { outline: none; }
 .lz-verdict { margin-top: 16px; font-size: 30px; font-weight: 500; line-height: 1.1; }
 .lz-verdict.dimmed { color: var(--lz-meta); }
 .lz-verdict .lz-verdict-label {
-  font-family: var(--lz-mono); font-size: 12px; font-weight: 400; letter-spacing: 0.04em;
-  color: var(--lz-meta); margin-left: 8px; vertical-align: middle;
+  font-size: 13px; font-weight: 400; color: var(--lz-meta); margin-left: 8px; vertical-align: middle;
 }
-.lz-meta { font-family: var(--lz-mono); font-size: 13px; line-height: 1.5; color: var(--lz-meta); }
+.lz-meta { font-size: 13px; line-height: 1.5; color: var(--lz-meta); }
 .lz-conf { margin-top: 6px; }
 
 .v-true { color: var(--lz-true); }
@@ -116,11 +126,8 @@ body { font-family: var(--lz-font); color: var(--lz-ink); -webkit-font-smoothing
 .lz-body, .lz-finding, .lz-quote, .lz-note, .lz-caveats, .lz-conf { max-width: var(--lz-measure); }
 .lz-body + .lz-body { margin-top: 10px; }
 .lz-clamp { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
-.lz-label {
-  font-family: var(--lz-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--lz-meta); margin: 8px 0 0;
-}
-h2.lz-label { margin: 0 0 10px; font-weight: 400; }
+.lz-label { font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--lz-meta); margin: 8px 0 0; }
+h2.lz-label { margin: 0 0 10px; }
 
 .lz-link {
   appearance: none; background: none; border: 0; padding: 4px 0; margin: 0; cursor: pointer;
@@ -145,7 +152,7 @@ a.lz-link { display: inline-block; }
 
 .lz-running h2 { font-size: 15px; font-weight: 500; }
 .lz-running .lz-meta { margin-top: 6px; font-variant-numeric: tabular-nums; }
-/* A sentence is prose, not data: secondary ink in the text face, never mono. */
+/* A sentence is prose: secondary ink at reading size. */
 .lz-note { margin-top: 10px; font-size: 14px; line-height: 1.5; color: var(--lz-meta); }
 /* A button under a note or an alert keeps the 16px a button in .lz-actions has; alone in its region it sits on the rule. */
 .lz-region > * + .lz-button { margin-top: 16px; }
@@ -156,7 +163,7 @@ a.lz-link { display: inline-block; }
 .lz-stamp { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
 .lz-stamp-word { font-size: 34px; font-weight: 500; line-height: 1; }
 @media (max-width: 419px) { .lz-stamp-word.two-words { font-size: 28px; } }
-.lz-stamp-score { font-family: var(--lz-mono); font-size: 20px; font-variant-numeric: tabular-nums; }
+.lz-stamp-score { font-size: 20px; font-variant-numeric: tabular-nums; }
 .lz-stamp-score .denom { color: var(--lz-meta); }
 .lz-bar { display: inline-flex; gap: 3px; flex-basis: 100%; }
 .lz-bar i { display: block; width: 14px; height: 7px; background: var(--lz-off); }
@@ -188,7 +195,7 @@ a.lz-link { display: inline-block; }
 .lz-picks > li + li .lz-pick { border-top: 1px dotted var(--lz-hair); }
 .lz-pick input { margin: 2px 0 0; width: 16px; height: 16px; accent-color: var(--lz-primary); }
 .lz-pick input:disabled { cursor: not-allowed; }
-.lz-pick-n { font-family: var(--lz-mono); font-size: 13px; color: var(--lz-meta); padding-top: 2px; }
+.lz-pick-n { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--lz-meta); padding-top: 2px; }
 .lz-alert { color: var(--lz-false); }
 .lz-button:disabled { opacity: 0.55; cursor: not-allowed; }
 
@@ -220,7 +227,7 @@ a.lz-link { display: inline-block; }
   .lz-row-head .row-line { grid-column: 1; grid-row: auto; text-align: left; max-width: none; }
 }
 .lz-row-head .row-verdict.dimmed { color: var(--lz-meta); }
-.lz-row-head .row-score { font-family: var(--lz-mono); font-size: 13px; font-variant-numeric: tabular-nums; margin-left: 6px; }
+.lz-row-head .row-score { font-size: 13px; font-variant-numeric: tabular-nums; margin-left: 6px; }
 @media (pointer: coarse) { .lz-row-head { min-height: 44px; } }
 .lz-row-panel { margin-top: 0; padding-bottom: 8px; }
 .lz-row-changed { margin-top: -4px; }
@@ -228,14 +235,14 @@ a.lz-link { display: inline-block; }
 /* The list card's title and its tally share one line when they fit. */
 .lz-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
 .lz-head .lz-tally { margin-top: 0; }
-.lz-rows > li > .num { font-family: var(--lz-mono); font-size: 13px; color: var(--lz-meta); padding-top: 8px; }
+.lz-rows > li > .num { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--lz-meta); padding-top: 8px; }
 .lz-rows > li .row-claim { font-size: 15px; line-height: 1.5; }
 .lz-rows > li .row-verdict { font-size: 15px; font-weight: 500; }
 
 .lz-footer {
   margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--lz-hair);
-  display: flex; justify-content: space-between; gap: 12px;
-  font-family: var(--lz-mono); font-size: 12px; color: var(--lz-meta);
+  display: flex; gap: 12px;
+  font-size: 13px; color: var(--lz-meta);
 }
 .lz-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

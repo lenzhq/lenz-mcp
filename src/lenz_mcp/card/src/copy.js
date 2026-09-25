@@ -1,8 +1,9 @@
 // Every string the card shows a person, in one place. The reader is someone
 // using Lenz inside an assistant: the verb is "check", and there are no tool
-// names, no credit numbers and no links to plans.
-
-export const BRAND = 'Lenz';
+// names, no credit numbers and no links to plans. The same card runs in every
+// host, so no string names an assistant: "ask for …", never "ask <name> …".
+// The host shows the app's name above the card, so the card does not repeat it
+// as a label; "Lenz" appears only inside a sentence.
 
 // Quick check
 export const QUICK_EYEBROW = 'Quick check';
@@ -60,8 +61,8 @@ export const USUALLY = 'Usually about a minute to a minute and a half';
 export const LONG_RUN = 'This is taking longer than usual. It keeps running.';
 
 // Deep check, the ways it does not finish
-export const UNAVAILABLE = 'Lost touch with this check. It keeps running. Ask Claude: show my recent Lenz checks.';
-export const UNRECOVERABLE = 'This check could not be recovered. Ask Claude: show my recent Lenz checks.';
+export const UNAVAILABLE = 'Lost touch with this check. It keeps running. In a minute or two, ask for your recent Lenz checks; if it is not listed yet, ask again a little later.';
+export const UNRECOVERABLE = 'This check could not be recovered. Ask for your recent Lenz checks.';
 export const OUTAGE = 'Sources could not be reached just now.';
 export const TRY_AGAIN = 'Try again';
 export const FAILED_HEADING = 'This check did not finish.';
@@ -72,7 +73,7 @@ export const FAILED_BY_CLASS = {
 export const FAILED_DEFAULT = 'Something went wrong on our side. Nothing was charged for it.';
 export const QUOTA_EMPTY = 'You are out of Lenz credits.';
 export const QUOTA_SHORT = 'Not enough Lenz credits for a deep check.';
-export const QUOTA_NEXT = 'Ask Claude: how many Lenz credits do I have left?';
+export const QUOTA_NEXT = 'Ask how many Lenz credits you have left.';
 
 // Deep check, completed
 export const DEEP_EYEBROW = 'Claim checked';
@@ -99,8 +100,8 @@ export const ROW_ERROR = {
   framing_failed: 'Could not be read',
 };
 export const ROW_ERROR_DEFAULT = 'Could not be checked just now';
-export const RECONNECT = "Reconnect Lenz in Claude's connector settings.";
-export const ASK_AGAIN = 'Ask Claude to run it again.';
+export const RECONNECT = 'Reconnect Lenz in your settings, under apps or connectors.';
+export const ASK_AGAIN = 'Ask for it to run again.';
 
 // Whole-call failures. Each gets its own frame, because one generic
 // "did not finish" frame answers none of the three questions a failure
@@ -124,9 +125,9 @@ export const retryIn = (seconds) => {
 export const IN_PROGRESS_HEADING = 'This one is already being checked';
 // Never "run it again": the whole point of this frame is that a check is
 // already running, so a second one would be a second charge for one answer.
-export const IN_PROGRESS_BODY = 'Nothing new was started. Ask Claude: show my recent Lenz checks.';
+export const IN_PROGRESS_BODY = 'Nothing new was started. In a minute or two, ask for your recent Lenz checks.';
 export const ALREADY_RESOLVED_HEADING = 'Those claims were already chosen';
-export const ALREADY_RESOLVED_BODY = 'This check has moved on. Ask Claude: show my recent Lenz checks.';
+export const ALREADY_RESOLVED_BODY = 'This check has moved on. Ask for your recent Lenz checks.';
 
 // The picker. No credit numbers anywhere: the
 // count lives in the button, and the checkboxes already say which ones.
@@ -151,7 +152,7 @@ export const DEEP_ROWS_FOOTER = 'Deep checks';
 export const ROW_DID_NOT_FINISH = 'did not finish';
 // Some picks started and some did not: never silently drop the rest.
 export const pickerPartial = (started, asked) =>
-  `${started} of ${asked} started. Ask Claude to check the rest.`;
+  `${started} of ${asked} started. Ask to check the rest.`;
 // A heading counts VERDICTS, not rows that stopped: "3 claims checked" over
 // three failures would be a lie.
 export const pickerDoneHeading = (checked, total) =>

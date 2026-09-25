@@ -249,8 +249,11 @@ INSTRUCTIONS_MAX_CHARS = 2214
 # measured both vendors splitting a pasted draft into `claims` and rewriting it
 # on the way — resolved pronouns, invented figures — so the tool's own text has
 # to say a pasted text goes in `claim` whole. 170 chars is cheaper than a
-# verdict on a claim the user never made.
-ASSESS_DESCRIPTION_MAX_CHARS = 1407
+# verdict on a claim the user never made. Raised again for the trigger
+# sentence: each example phrase sits beside the intent it stands for, followed
+# by what the tool is not for, so the description states the user's intent
+# rather than a list of words to react to.
+ASSESS_DESCRIPTION_MAX_CHARS = 1575
 
 
 def _assess_description() -> str:
@@ -283,14 +286,24 @@ def test_assess_claim_description_carries_the_trigger_phrases():
     descriptions, so the phrases a user types have to be in the tool's own
     text, and in its first two sentences."""
     description = _assess_description()
-    phrases = (
-        'Use it when the user says things like “fact-check this”, “double-check that”, '
-        '“is this accurate?”, “is that true?” or “are you sure?” about a '
-        'factual statement.'
-    )
-    doubted = 'When the user doubts something you said, pass the specific statement being doubted, not the whole conversation.'
     first_sentence_end = description.index('one credit per claim).') + len('one credit per claim).')
-    assert description[first_sentence_end:].lstrip().startswith(phrases)
+    second = description[first_sentence_end:].lstrip()
+    second = second[: second.index('.') + 1]
+    # Each phrase sits beside the intent it is an example of, so the sentence
+    # describes what the user wants rather than listing words to react to.
+    assert second.startswith('Use it when the user asks to fact-check or double-check a factual statement')
+    for phrase in (
+        '“fact-check this”',
+        '“double-check that”',
+        '“is that true?”',
+        '“is this accurate?”',
+        '“are you sure?”',
+    ):
+        assert phrase in second, phrase
+    assert 'doubts a factual statement you made (“are you sure?”)' in second
+    # The scope sentence right after it keeps the phrases from reading as keywords.
+    assert 'Not for opinions, predictions, arithmetic or how code behaves.' in description
+    doubted = 'When the user doubts something you said, pass the specific statement being doubted, not the whole conversation.'
     assert doubted in description
     assert len(description) <= ASSESS_DESCRIPTION_MAX_CHARS
 
