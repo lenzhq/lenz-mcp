@@ -19,8 +19,11 @@
 // secondary ink, never opacity (opacity fails AA: 2.4-3.1 on both grounds).
 // Measured AA on Claude's grounds (#FFFFFF, rgb(48,48,46)), 2026-09-17: light
 // inks 4.92-6.47, dark inks 4.78-7.92, primary 5.55 / on-dark 7.03.
-// On ChatGPT's grounds, which show through (light #FFFFFF, dark #212121): light
-// inks 4.92-6.47, dark inks 5.82-9.65, primary 5.55 / on-dark 6.39.
+// Where the host's ground shows through, the card cannot know its exact shade,
+// so every ink holds AA across a band rather than on one colour: light grounds
+// from #FFFFFF down to #E8E8E8 (worst ink 4.53) and dark grounds from #171717
+// up to #3A3A3A (worst 4.52). ChatGPT (#FFFFFF, #212121) and Claude's grounds
+// sit inside it. tests/render.mjs runs axe on both ends of each band.
 
 export const CSS = `
 :root {
@@ -31,9 +34,9 @@ export const CSS = `
   --lz-meta: #635E59;
   --lz-hair: #E8E4DD;
   --lz-true: #14783A;
-  --lz-mostly-true: #A16207;
+  --lz-mostly-true: #8F5706;
   --lz-mixed: #635E59;
-  --lz-mostly-false: #C2410C;
+  --lz-mostly-false: #B23B0B;
   --lz-false: #B91C1C;
   --lz-primary: #3D65BC;
   --lz-on-primary: #FFFFFF;
@@ -46,13 +49,13 @@ export const CSS = `
 :root[data-theme='dark'] {
   --lz-bg: #2A2724;
   --lz-ink: #FFFDF7;
-  --lz-meta: #A8A29E;
+  --lz-meta: #B5AFAA;
   --lz-hair: #3D3935;
   --lz-true: #4ADE80;
   --lz-mostly-true: #FBBF24;
-  --lz-mixed: #A8A29E;
+  --lz-mixed: #B5AFAA;
   --lz-mostly-false: #FB923C;
-  --lz-false: #F87171;
+  --lz-false: #FA8C8C;
   --lz-primary: #7BA3F0;
   --lz-on-primary: #1A1816;
   --lz-off: #3D3935;
@@ -61,13 +64,13 @@ export const CSS = `
   :root:not([data-theme]) {
     --lz-bg: #2A2724;
     --lz-ink: #FFFDF7;
-    --lz-meta: #A8A29E;
+    --lz-meta: #B5AFAA;
     --lz-hair: #3D3935;
     --lz-true: #4ADE80;
     --lz-mostly-true: #FBBF24;
-    --lz-mixed: #A8A29E;
+    --lz-mixed: #B5AFAA;
     --lz-mostly-false: #FB923C;
-    --lz-false: #F87171;
+    --lz-false: #FA8C8C;
     --lz-primary: #7BA3F0;
     --lz-on-primary: #1A1816;
     --lz-off: #3D3935;

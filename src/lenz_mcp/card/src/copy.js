@@ -61,7 +61,7 @@ export const USUALLY = 'Usually about a minute to a minute and a half';
 export const LONG_RUN = 'This is taking longer than usual. It keeps running.';
 
 // Deep check, the ways it does not finish
-export const UNAVAILABLE = 'Lost touch with this check. It keeps running. Once it finishes, ask for your recent Lenz checks.';
+export const UNAVAILABLE = 'Lost touch with this check. It keeps running. In a minute or two, ask for your recent Lenz checks; if it is not listed yet, ask again a little later.';
 export const UNRECOVERABLE = 'This check could not be recovered. Ask for your recent Lenz checks.';
 export const OUTAGE = 'Sources could not be reached just now.';
 export const TRY_AGAIN = 'Try again';
@@ -125,7 +125,7 @@ export const retryIn = (seconds) => {
 export const IN_PROGRESS_HEADING = 'This one is already being checked';
 // Never "run it again": the whole point of this frame is that a check is
 // already running, so a second one would be a second charge for one answer.
-export const IN_PROGRESS_BODY = 'Nothing new was started. Once it finishes, ask for your recent Lenz checks.';
+export const IN_PROGRESS_BODY = 'Nothing new was started. In a minute or two, ask for your recent Lenz checks.';
 export const ALREADY_RESOLVED_HEADING = 'Those claims were already chosen';
 export const ALREADY_RESOLVED_BODY = 'This check has moved on. Ask for your recent Lenz checks.';
 
