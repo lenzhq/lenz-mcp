@@ -1303,7 +1303,7 @@ async def get_verification(
     verdict, the 1–10 Lenz score, confidence, key finding, executive summary,
     top sources, the ``depth`` the verdict was produced at and the
     ``verification_id`` — pass that to `ask_followup` for a grounded follow-up.
-    If the check needs a decision (several claims, or a near-duplicate) it
+    If the check needs a decision (the text holds several claims) it
     returns ``status: needs_input`` with the options. Still ``processing``
     after the wait means tell the user it is still running and call again;
     `list_verifications` finds it later if the conversation moves on. A
