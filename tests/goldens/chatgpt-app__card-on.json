@@ -286,7 +286,7 @@
         "readOnlyHint": false,
         "title": "Resolve a multi-claim interrupt"
       },
-      "description": "Resolve a `needs_input` verification by choosing which claim(s) to run.\n\n    When `verify_claim` or `get_verification` returns ``status: needs_input``\n    with reason ``multi_claim``, call this with\n    that ``task_id`` and a ``claims`` list of one or more of the offered claim\n    texts, exactly as listed. Each selected claim starts its own deep\n    verification. With ONE claim selected this waits for the check and\n    returns its result like `get_verification` (with the new ``task_id``);\n    with several it returns one ``task_id`` per claim to pass to\n    `get_verification`. (Not for ``duplicate_found`` — use the surfaced\n    `similar_claims` there instead.)\n    ",
+      "description": "Resolve a `needs_input` verification by choosing which claim(s) to run.\n\n    When `verify_claim` or `get_verification` returns ``status: needs_input``\n    with reason ``multi_claim``, call this with\n    that ``task_id`` and a ``claims`` list of one or more of the offered claim\n    texts, exactly as listed. Each selected claim starts its own deep\n    verification. With ONE claim selected this waits for the check and\n    returns its result like `get_verification` (with the new ``task_id``);\n    with several it returns one ``task_id`` per claim to pass to\n    `get_verification`.\n    ",
       "inputSchema": {
         "properties": {
           "claims": {

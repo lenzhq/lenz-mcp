@@ -1158,8 +1158,7 @@ async def select_claims(
     verification. With ONE claim selected this waits for the check and
     returns its result like `get_verification` (with the new ``task_id``);
     with several it returns one ``task_id`` per claim to pass to
-    `get_verification`. (Not for ``duplicate_found`` — use the surfaced
-    `similar_claims` there instead.)
+    `get_verification`.
     """
     started_at = time.monotonic()  # the wait budget covers the selection too
     authorization = _authorization(ctx)  # gate enforced by @requires_auth
@@ -1244,9 +1243,8 @@ async def _verification_result(
     if status == 'needs_input':
         reason = data.get('reason', '')
         out = {'status': 'needs_input', 'task_id': task_id, 'reason': reason}
-        for key in ('claims', 'similar_claims'):
-            if data.get(key):
-                out[key] = data[key]
+        if data.get('claims'):
+            out['claims'] = data['claims']
         if reason == 'multi_claim':
             # The options ride in the TEXT, numbered, with the instruction to
             # put them to the user. When the picker card was the only path
@@ -1255,12 +1253,6 @@ async def _verification_result(
             out['resolve_with'] = (
                 'Call `select_claims` with this task_id and a `claims` list of one or more of the '
                 'offered claim texts, exactly as listed.'
-            )
-        elif reason == 'duplicate_found':
-            out['resolve_with'] = (
-                'A matching verification already exists — use one of `similar_claims` (it '
-                'carries the verdict and link), or re-submit with more specific wording to '
-                'force a fresh check.'
             )
         return out
 

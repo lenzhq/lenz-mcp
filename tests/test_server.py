@@ -814,25 +814,6 @@ def test_get_verification_needs_input(monkeypatch):
     assert '1. a' in out['message'] and '2. b' in out['message']
 
 
-def test_get_verification_duplicate_hint(monkeypatch):
-    _patch_api(
-        monkeypatch,
-        'verify_status',
-        ApiResponse(
-            status=200,
-            data={
-                'status': 'needs_input',
-                'reason': 'duplicate_found',
-                'similar_claims': [{'verification_id': 'x', 'verdict': 'True', 'url': 'https://lenz.io/c/x'}],
-            },
-        ),
-    )
-    out = _run(server.get_verification('tid', _ctx()))
-    assert out['reason'] == 'duplicate_found'
-    assert 'similar_claims' in out
-    assert 'similar_claims' in out['resolve_with']
-
-
 # ── select ───────────────────────────────────────────────────────────
 
 
