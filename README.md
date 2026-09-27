@@ -113,9 +113,12 @@ You can revoke the connection at any time; see the [privacy policy](https://lenz
 ### Claude Code
 
 ```bash
-claude mcp add --transport http lenz https://lenz.io/mcp \
+claude mcp add --scope user --transport http lenz https://lenz.io/mcp \
   --header "Authorization: Bearer ${LENZ_API_KEY}"
 ```
+
+`--scope user` makes Lenz available in every project; without it, Claude Code adds the
+server only to the directory you run the command in.
 
 ### Claude Desktop / any client that reads `.mcp.json`
 
