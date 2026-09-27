@@ -25,7 +25,14 @@ ones included):
 - ``capabilities`` / ``meta``: the keys under ``params.capabilities`` and
   ``params._meta`` on ANY request, one level deep, so a client that declares
   what it supports per request rather than at the handshake shows up too;
-- ``status``: the HTTP status we answered.
+- ``status``: the HTTP status we answered;
+- ``auth`` / ``user``: how the request was authenticated (``oauth``,
+  ``api_key`` or ``-``) and, for OAuth, the verified subject, the Lenz user id.
+  Read from ``scope['user']``, which the SDK's authentication middleware writes
+  on the scope this wrapper handed down, so it is there once the app returns.
+  Without it a per-connection funnel (signed in, listed the tools, called one)
+  had to match this line to ``mcp_auth_ok`` by instance and timestamp. A
+  key-door request names no user: nothing here verifies an API key.
 
 It observes only, and never reads ahead of the app: a request the auth layer
 rejects is rejected before its body is read, as it would be without this
@@ -49,6 +56,8 @@ import logging
 import re
 from typing import Any
 
+from lenz_mcp.oauth import AUTH_MODE_API_KEY, AUTH_MODE_OAUTH
+
 logger = logging.getLogger(__name__)
 
 # What a logged token may contain. Deliberately excludes whitespace and `=`,
@@ -68,6 +77,8 @@ _META_CLIENT = 'io.modelcontextprotocol/clientInfo'
 _META_CAPABILITIES = 'io.modelcontextprotocol/clientCapabilities'
 # Methods only a modern client sends, so they place a request with no version on it.
 _MODERN_ONLY_METHODS = frozenset({'server/discover', 'subscriptions/listen'})
+# A user id as the verifier admits it; anything else is not logged as one.
+_USER_ID = re.compile(r'[1-9][0-9]{0,18}')
 
 
 def log_token(value: Any) -> str:
@@ -196,9 +207,24 @@ def _describe(scope: dict[str, Any], body: bytes, status: int | None, gave_up: s
         # and the two facts are independent — a dropped call still has whatever
         # status we had reached.
         'gave_up': gave_up or '-',
+        # After the fields the host watch filters on, before `ua`.
+        **_principal(scope),
         'ua': log_token(headers.get('user-agent', '')),
     }
     return 'mcp_protocol ' + ' '.join(f'{key}={value}' for key, value in fields.items())
+
+
+def _principal(scope: dict[str, Any]) -> dict[str, str]:
+    """`auth` and `user` for the line, from what the SDK's auth middleware left on the scope."""
+    token = getattr(scope.get('user'), 'access_token', None)
+    mode = (getattr(token, 'claims', None) or {}).get('auth_mode') if token is not None else None
+    if mode == AUTH_MODE_OAUTH:
+        subject = getattr(token, 'subject', None)
+        user = subject if isinstance(subject, str) and _USER_ID.fullmatch(subject) else '-'
+        return {'auth': AUTH_MODE_OAUTH, 'user': user}
+    if mode == AUTH_MODE_API_KEY:
+        return {'auth': AUTH_MODE_API_KEY, 'user': '-'}
+    return {'auth': '-', 'user': '-'}
 
 
 def _client(info: Any, current: str) -> str:
