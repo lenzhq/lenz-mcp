@@ -703,6 +703,13 @@ def test_an_unauthenticated_request_names_nobody(logs):
     assert _field(line, 'user') == '-'
 
 
+def test_every_subject_the_verifier_admits_is_logged(logs):
+    """The line uses the verifier's own rule, so the longest id it accepts is named too."""
+    _run(_drive(_as(_token('oauth', '12345678901234567890')), 'POST', '/mcp', body=_CALL))
+    (line,) = logs
+    assert _field(line, 'user') == '12345678901234567890'
+
+
 def test_a_subject_that_is_not_a_user_id_is_not_logged(logs):
     """The verifier admits only a decimal user id, but this line must not depend
     on that: a subject is client-influenced text, and a forged field is the risk."""

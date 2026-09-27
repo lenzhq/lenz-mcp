@@ -56,7 +56,7 @@ import logging
 import re
 from typing import Any
 
-from lenz_mcp.oauth import AUTH_MODE_API_KEY, AUTH_MODE_OAUTH
+from lenz_mcp.oauth import AUTH_MODE_API_KEY, AUTH_MODE_OAUTH, SUBJECT_PATTERN
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +77,6 @@ _META_CLIENT = 'io.modelcontextprotocol/clientInfo'
 _META_CAPABILITIES = 'io.modelcontextprotocol/clientCapabilities'
 # Methods only a modern client sends, so they place a request with no version on it.
 _MODERN_ONLY_METHODS = frozenset({'server/discover', 'subscriptions/listen'})
-# A user id as the verifier admits it; anything else is not logged as one.
-_USER_ID = re.compile(r'[1-9][0-9]{0,18}')
 
 
 def log_token(value: Any) -> str:
@@ -220,7 +218,7 @@ def _principal(scope: dict[str, Any]) -> dict[str, str]:
     mode = (getattr(token, 'claims', None) or {}).get('auth_mode') if token is not None else None
     if mode == AUTH_MODE_OAUTH:
         subject = getattr(token, 'subject', None)
-        user = subject if isinstance(subject, str) and _USER_ID.fullmatch(subject) else '-'
+        user = subject if isinstance(subject, str) and SUBJECT_PATTERN.fullmatch(subject) else '-'
         return {'auth': AUTH_MODE_OAUTH, 'user': user}
     if mode == AUTH_MODE_API_KEY:
         return {'auth': AUTH_MODE_API_KEY, 'user': '-'}
