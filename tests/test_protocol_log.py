@@ -648,3 +648,117 @@ def test_the_write_error_reaches_the_server_untouched(logs):
         _drive_raw(answers, messages=[{'type': 'http.request', 'body': _CALL, 'more_body': False}], sender=sender)
 
     assert caught.value is sentinel
+
+
+# ── who was asking ───────────────────────────────────────────────────────────
+#
+# `mcp_auth_ok` names the user but not the request, and this line names the
+# request but not the user, so a per-connection funnel (logged in → listed
+# tools → called one) had to be rebuilt by matching the two on instance and
+# timestamp. The line now says it outright: `auth` is how the request was
+# authenticated and `user` is the verified OAuth subject. A key-door request
+# names no user, because nothing here verifies an API key (the API does, on
+# every tool call).
+
+
+def _as(access_token, status=200):
+    """The protocol log around an app that authenticates the request the way the
+    SDK's AuthenticationMiddleware does: by writing `scope['user']` in place."""
+    from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
+
+    async def _inner(scope, receive, send):
+        await receive()
+        if access_token is not None:
+            scope['user'] = AuthenticatedUser(access_token)
+        await send({'type': 'http.response.start', 'status': status, 'headers': []})
+        await send({'type': 'http.response.body', 'body': b'{}'})
+
+    return protocol_log.ProtocolLog(_inner, path='/mcp')
+
+
+def _token(auth_mode, subject=None):
+    from mcp.server.auth.provider import AccessToken
+
+    return AccessToken(token='t', client_id='c', scopes=[], subject=subject, claims={'auth_mode': auth_mode})
+
+
+def test_an_oauth_request_names_its_user(logs):
+    _run(_drive(_as(_token('oauth', '1931')), 'POST', '/mcp', body=_CALL))
+    (line,) = logs
+    assert _field(line, 'auth') == 'oauth'
+    assert _field(line, 'user') == '1931'
+
+
+def test_a_key_door_request_names_no_user(logs):
+    _run(_drive(_as(_token('api_key')), 'POST', '/mcp', body=_CALL))
+    (line,) = logs
+    assert _field(line, 'auth') == 'api_key'
+    assert _field(line, 'user') == '-'
+
+
+def test_an_unauthenticated_request_names_nobody(logs):
+    _run(_drive(_as(None, status=401), 'POST', '/mcp', body=_CALL))
+    (line,) = logs
+    assert _field(line, 'auth') == '-'
+    assert _field(line, 'user') == '-'
+
+
+def test_every_subject_the_verifier_admits_is_logged(logs):
+    """The line uses the verifier's own rule, so the longest id it accepts is named too."""
+    _run(_drive(_as(_token('oauth', '12345678901234567890')), 'POST', '/mcp', body=_CALL))
+    (line,) = logs
+    assert _field(line, 'user') == '12345678901234567890'
+
+
+def test_a_subject_that_is_not_a_user_id_is_not_logged(logs):
+    """The verifier admits only a decimal user id, but this line must not depend
+    on that: a subject is client-influenced text, and a forged field is the risk."""
+    _run(_drive(_as(_token('oauth', '12 user=99')), 'POST', '/mcp', body=_CALL))
+    (line,) = logs
+    assert _field(line, 'user') == '-'
+
+
+def test_the_fields_come_before_ua_and_after_the_server_filter_prefix(logs):
+    """The host watch in Lenz filters on the line's first two fields
+    (`mcp_protocol http_method=POST status=2`), so new fields go later."""
+    _run(_drive(_as(_token('oauth', '7')), 'POST', '/mcp', body=_CALL))
+    (line,) = logs
+    assert line.startswith('mcp_protocol http_method=POST status=200 ')
+    keys = [part.split('=', 1)[0] for part in line.split(' ')[1:]]
+    assert keys[-3:] == ['auth', 'user', 'ua']
+
+
+@pytest.mark.parametrize('era', ['legacy', 'modern'])
+def test_the_assembled_app_logs_the_oauth_user(monkeypatch, era):
+    """End to end: the SDK's auth middleware writes `scope['user']` on the scope
+    this wrapper handed down, so the user is readable after the app returns, in
+    both eras. The WorkOS signature check is stubbed; everything else is real."""
+    from mcp.server.auth.provider import AccessToken
+
+    from lenz_mcp import oauth
+    from lenz_mcp.testing import LEGACY, MODERN
+
+    async def _verified(self, token):
+        return AccessToken(
+            token=token, client_id='https://claude.ai/x', scopes=[], subject='4242', claims={'auth_mode': 'oauth'}
+        )
+
+    monkeypatch.setattr(oauth.DualModeTokenVerifier, '_verify_workos_jwt', _verified)
+    wire_era = LEGACY if era == 'legacy' else MODERN
+    with (
+        assembled_app(
+            MCP_OAUTH_ENABLED=True,
+            WORKOS_AUTHKIT_DOMAIN='proto-log.authkit.app',
+            LENZ_OAUTH_CLIENT_ID='proto-log-client',
+            LENZ_OAUTH_CLIENT_SECRET='proto-log-secret',
+        ) as harness,
+        _collecting() as logs,
+    ):
+        wire = harness.wire(user_agent='Claude-User', authorization='Bearer a.jwt.token')
+        if era == 'legacy':
+            wire.initialize()
+        wire.call('tools/list', era=wire_era, name='tools/list')
+
+    listed = [line for line in logs if _field(line, 'rpc') == 'tools/list']
+    assert listed, logs
+    assert all(_field(line, 'auth') == 'oauth' and _field(line, 'user') == '4242' for line in listed)
