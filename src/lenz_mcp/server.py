@@ -133,6 +133,17 @@ SUPERSEDES_NOTE = (
     'apologise, do not average the two, do not present both as valid.'
 )
 
+# Beside `suggested_rewrite`, only when there is one: the claim rewritten with
+# its wrong part corrected, from the check's own findings. Nothing checks the
+# new sentence, so the rule that it is a suggestion travels with it, in the
+# same say/do split as the notes above.
+SUGGESTED_REWRITE_NOTE = (
+    "A suggested rewrite of the claim, with its wrong part corrected, built from this check's "
+    'findings. It has not been verified itself. Offer it to the user as a suggestion to review '
+    'before they use it, never as a checked fact. If they want it checked, offer a deep check of '
+    'the new sentence.'
+)
+
 # `sources[].snippet` on the API is usually a short quote, but it can be a
 # longer passage, and nothing on the API says which is which. A quote is never
 # cut: any sentence splitter meets "U.S.", "No. 5" or a script without spaces,
@@ -1096,10 +1107,12 @@ async def verify_claim(
     checked before comes back at once. Otherwise returns ``status: submitted``
     with a ``task_id``: call `get_verification` with it, which waits again. A
     completed result replaces any earlier quick verdict on the same claim; its
-    ``supersedes`` and ``presentation`` say how to tell the user. If the text
-    contains several claims the result is ``status: needs_input`` with a
-    numbered list: show it to the user and call `select_claims` with the exact
-    text of the chosen claim(s).
+    ``supersedes`` and ``presentation`` say how to tell the user. A result may
+    carry ``suggested_rewrite``, the claim with its wrong part corrected: it is
+    not verified itself, so offer it as a suggestion to review, never as a
+    checked fact. If the text contains several claims the result is
+    ``status: needs_input`` with a numbered list: show it to the user and call
+    `select_claims` with the exact text of the chosen claim(s).
     """
     started_at = time.monotonic()  # the wait budget covers the submission too
     authorization = _authorization(ctx)  # gate enforced by @requires_auth
@@ -1301,7 +1314,9 @@ async def get_verification(
     With a ``task_id`` (from `verify_claim` or `select_claims`) this waits for
     the run to finish and returns ``status: completed`` with the
     verdict, the 1–10 Lenz score, confidence, key finding, executive summary,
-    top sources, the ``depth`` the verdict was produced at and the
+    top sources, a ``suggested_rewrite`` when the claim can be corrected (not
+    verified itself: a suggestion to review, never a checked fact), the
+    ``depth`` the verdict was produced at and the
     ``verification_id`` — pass that to `ask_followup` for a grounded follow-up.
     If the check needs a decision (the text holds several claims) it
     returns ``status: needs_input`` with the options. Still ``processing``
@@ -1569,7 +1584,9 @@ def _completed_result(result: dict[str, Any]) -> dict[str, Any]:
     # come back empty). `sources_total` is the full count the deep check drew on,
     # so the card/model can say "5 of 24" rather than implying only 5 exist.
     all_sources = [_source_row(s) for s in (result.get('sources') or []) if isinstance(s, dict) and s.get('url')]
-    return {
+    rewrite = result.get('suggested_rewrite')
+    rewrite = (rewrite.strip() or None) if isinstance(rewrite, str) else None
+    out = {
         'status': 'completed',
         # The caller's own claim id — pass to `ask_followup` for a grounded follow-up.
         'verification_id': result.get('verification_id', ''),
@@ -1585,6 +1602,9 @@ def _completed_result(result: dict[str, Any]) -> dict[str, Any]:
         'depth': result.get('depth', 'standard'),
         'key_finding': result.get('key_finding', ''),
         'executive_summary': result.get('executive_summary', ''),
+        # The claim with its wrong part corrected, or None (a True verdict, no
+        # correction established, a verification older than the field).
+        'suggested_rewrite': rewrite,
         # What the check flagged about its own verdict (a contested figure, a
         # dated source, a wording problem). Always a list of text.
         'warnings': _text_list(result.get('warnings')),
@@ -1594,6 +1614,9 @@ def _completed_result(result: dict[str, Any]) -> dict[str, Any]:
         'supersedes': SUPERSEDES_NOTE,
         'source': 'Lenz deep fact-check',
     }
+    if rewrite:
+        out['suggested_rewrite_note'] = SUGGESTED_REWRITE_NOTE
+    return out
 
 
 @mcp.tool(

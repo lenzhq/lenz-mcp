@@ -3,7 +3,8 @@
 // `ui/update-model-context` REPLACES the card's previous context, so this is one
 // cumulative snapshot of every deep check the card has shown, never a stream.
 // It carries what the model did not produce and the user has already seen:
-// verdict, score, confidence, key finding, summary, caveats, sources. Source
+// verdict, score, confidence, key finding, summary, suggested rewrite, caveats,
+// sources. Source
 // text is page text, so it goes in as quoted, labelled evidence on single lines
 // (no line break survives, so page text cannot forge a block or a header). The
 // tool result's instruction strings (presentation, supersedes) are never sent.
@@ -62,6 +63,7 @@ function block(c, i, k, tier) {
   if (tier < 3) {
     if (c.keyFinding) head += `; key finding: ${line(c.keyFinding)}`;
     if (c.summary) head += `; summary: ${line(c.summary)}`;
+    if (c.suggestedRewrite) head += `; suggested rewrite (not verified itself): ${line(c.suggestedRewrite)}`;
     const caveats = (c.warnings || []).map(line).filter(Boolean);
     if (caveats.length) head += `; caveats: ${caveats.join(' ')}`;
   }

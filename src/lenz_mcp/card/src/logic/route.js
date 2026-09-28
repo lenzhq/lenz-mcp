@@ -154,6 +154,9 @@ export function deepResult(payload) {
     confidence: confidenceBucket(p.confidence),
     keyFinding: text(p.key_finding),
     summary: text(p.executive_summary),
+    // The claim with its wrong part corrected. The API sends none on a True
+    // verdict, so the card needs no verdict rule of its own.
+    suggestedRewrite: text(p.suggested_rewrite),
     warnings: (Array.isArray(p.warnings) ? p.warnings : []).map(text).filter(Boolean),
     sources,
     sourcesTotal: total,

@@ -21,6 +21,7 @@
       "lenz_score": 10,
       "key_finding": "Annual inspections report no structural faults in the main trusses.",
       "executive_summary": "Its deck was replaced in 1968 and again in 2004, while the original trusses remain. A 2019 survey found the timber had been treated with a preservative every decade. The county heritage register lists it as the oldest timber bridge still open to walkers. A plaque at the east end records the names of the carpenters who built it.",
+      "suggested_rewrite": null,
       "warnings": [
         "Annual inspections report no structural faults in the main trusses.",
         "Its deck was replaced in 1968 and again in 2004, while the original trusses remain.",
@@ -260,6 +261,7 @@
       "lenz_score": 2,
       "key_finding": "Its bylaws require members to set aside a share of each harvest for the local school.",
       "executive_summary": "Apple varieties grown by members include several found nowhere else in the region. The cooperative runs a cider press that any member may book for a day. Its bylaws require members to set aside a share of each harvest for the local school. The cooperative publishes its annual yields in a report to members each spring. It now counts about ninety member farms across three valleys. The Harlow Valley orchard cooperative was founded by twelve growers in 1952.",
+      "suggested_rewrite": "It now counts about forty member farms across two valleys.",
       "warnings": [
         "The Harlow Valley orchard cooperative was founded by twelve growers in 1952.",
         "The cooperative runs a cider press that any member may book for a day. Apple varieties grown by members include several found nowhere else in the region.",
@@ -530,6 +532,7 @@
       "lenz_score": 9,
       "key_finding": "Boating is limited to non-motorised craft under a district rule adopted in 1999.",
       "executive_summary": "Water quality monitoring has run at three fixed points since 1987. The deepest point measured in the last survey was forty-one metres. Lake Orvell covers about eleven square kilometres and is fed by four streams. The lakeside path is about nineteen kilometres long and fully signposted. Boating is limited to non-motorised craft under a district rule adopted in 1999.",
+      "suggested_rewrite": null,
       "warnings": [
         "Lake Orvell covers about eleven square kilometres and is fed by four streams.",
         "Summer algae blooms have become shorter since runoff controls were added upstream."

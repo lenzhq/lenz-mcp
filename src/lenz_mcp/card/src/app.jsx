@@ -314,6 +314,13 @@ function DeepResult({ result, quickVerdict, host, headingRef, compact = false })
           <p class="lz-body">{result.summary}</p>
         </div>
       ) : null}
+      {/* Between the summary and the caveats, where the claim page puts it. */}
+      {result.suggestedRewrite ? (
+        <div class="lz-region">
+          <h2 class="lz-label">{copy.SUGGESTED_REWRITE}</h2>
+          <p class="lz-body">{result.suggestedRewrite}</p>
+        </div>
+      ) : null}
       <Caveats warnings={result.warnings} />
       <Sources result={result} host={host} />
       {/* "Ask a follow-up" PREFILLS the composer and the user finishes the

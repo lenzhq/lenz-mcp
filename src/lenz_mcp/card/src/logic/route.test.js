@@ -240,3 +240,10 @@ test('a heading for one check does not say "1 claims"', () => {
   assert.equal(copy.pickerButton(1), 'Check 1 claim');
   assert.equal(copy.pickerButton(3), 'Check 3 claims');
 });
+
+test('a deep result carries the suggested rewrite as text, or nothing', () => {
+  assert.equal(deepResult({ suggested_rewrite: '  It now counts about forty farms.  ' }).suggestedRewrite, 'It now counts about forty farms.');
+  for (const value of [null, undefined, '', 7, { claim: 'x' }, ['x']]) {
+    assert.equal(deepResult({ suggested_rewrite: value }).suggestedRewrite, '');
+  }
+});

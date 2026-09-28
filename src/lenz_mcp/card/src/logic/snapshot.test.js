@@ -171,3 +171,9 @@ test('every check keeps its id and verdict, however many there are: detail is wh
   const last = short.slice(short.indexOf('verification_id 00000003'));
   assert.match(last, /key finding/);
 });
+
+test('a suggested rewrite goes in labelled as unverified, on the check line', () => {
+  const { text } = buildSnapshot({ checks: [check({ suggestedRewrite: 'About one in five\nstartups fails in year one.' })] });
+  assert.match(text, /; suggested rewrite \(not verified itself\): About one in five startups fails in year one\./);
+  assert.ok(!buildSnapshot({ checks: [check()] }).text.includes('suggested rewrite'));
+});

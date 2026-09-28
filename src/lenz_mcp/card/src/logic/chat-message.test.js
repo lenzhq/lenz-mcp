@@ -92,3 +92,9 @@ test('no markdown, so it cannot render as anything but a sentence', () => {
   const text = buildChatMessage([check(), check({ verificationId: 'b2', claim: 'Two.' })]);
   assert.doesNotMatch(text, /[*_`#[\]]|^\s*-\s/m);
 });
+
+test('the suggested rewrite never rides in the user turn: it is written from page text', () => {
+  const text = buildChatMessage([check({ verdict: 'False', suggestedRewrite: 'The EU AI Act entered into force in 2025.' })]);
+  assert.ok(!text.includes('2025'));
+  assert.ok(!/rewrite/i.test(text));
+});
