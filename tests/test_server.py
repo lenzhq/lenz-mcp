@@ -1952,3 +1952,9 @@ def test_verify_claim_passes_the_rewrite_through(monkeypatch):
     out = _run(server.verify_claim('big claim', _ctx()))
     assert out['suggested_rewrite'] == 'It is small.'
     assert out['suggested_rewrite_note'] == server.SUGGESTED_REWRITE_NOTE
+
+
+def test_the_presentation_note_lists_the_rewrite_as_a_suggestion():
+    # The two notes on one result must agree that a rewrite is shown when there is one.
+    assert 'suggested rewrite' in server.PRESENTATION_NOTE
+    assert 'as a suggestion' in server.PRESENTATION_NOTE

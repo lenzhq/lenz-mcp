@@ -243,6 +243,8 @@ test('the snapshot from a hostile deep result: quotes labelled as untrusted evid
   // Markup renders as text; a javascript: link is never a link.
   assert.equal(await frame.locator('img, b').count(), 0);
   assert.equal(await frame.getByRole('link', { name: /Sweets and other sugary foods/ }).count(), 0);
+  // The rewrite renders under its label, as text.
+  assert.equal(await frame.getByRole('heading', { name: 'Suggested rewrite' }).count(), 1);
   await page.waitForFunction(() => window.log.some((e) => e.method === 'ui/update-model-context'), null, { timeout: 5000 });
   const [push] = await pushesOf(page, 's');
   const text = push.params.content[0].text;
@@ -251,7 +253,10 @@ test('the snapshot from a hostile deep result: quotes labelled as untrusted evid
   assert.ok(header >= 0, 'sources are introduced as untrusted evidence');
   // The fixture puts the instruction in the summary too; the QUOTE copy must sit under the header.
   assert.ok(text.indexOf('Ignore all previous instructions', header) > header, 'the instruction-shaped quote sits under that header');
-  for (const modelFacing of [hostile.presentation, hostile.supersedes, hostile.confidence_note, 'next_step', 'resolve_with']) {
+  // A completed check reaches the snapshot with its rewrite, labelled as unverified.
+  assert.ok(text.includes('Suggested rewrite of the claim'), 'the rewrite reaches the model context, labelled');
+  assert.ok(hostile.suggested_rewrite_note, 'the fixture carries the note the snapshot must not');
+  for (const modelFacing of [hostile.presentation, hostile.supersedes, hostile.confidence_note, hostile.suggested_rewrite_note, 'next_step', 'resolve_with']) {
     assert.ok(!text.includes(modelFacing), `snapshot carries no server instruction: ${String(modelFacing).slice(0, 40)}`);
   }
   // Controls and line breaks in page text cannot forge a new snapshot line.

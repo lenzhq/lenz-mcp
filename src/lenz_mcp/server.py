@@ -118,9 +118,9 @@ LOW_CONFIDENCE_NEXT_STEP = (
 # result reached the user as the bare label.
 PRESENTATION_NOTE = (
     'Show the user the verdict with its score and how confident Lenz is, the key finding, any '
-    'warnings, how many sources the check drew on (the `sources_total` field), and the top sources '
-    'with what each one says. Do not reduce this to the verdict label, and do not show the user '
-    'field or tool names.'
+    'warnings, how many sources the check drew on (the `sources_total` field), the top sources '
+    'with what each one says, and, when there is one, the suggested rewrite as a suggestion. Do '
+    'not reduce this to the verdict label, and do not show the user field or tool names.'
 )
 
 # On every completed deep check. The server is stateless and cannot know what a
