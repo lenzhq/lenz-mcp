@@ -140,8 +140,8 @@ SUPERSEDES_NOTE = (
 SUGGESTED_REWRITE_NOTE = (
     "A suggested rewrite of the claim, with its wrong part corrected, built from this check's "
     'findings. It has not been verified itself. Offer it to the user as a suggestion to review '
-    'before they use it, never as a checked fact. If they want it checked, offer a deep check of '
-    'the new sentence.'
+    'before they use it, never as a checked fact. If they want it checked, offer to check the new '
+    'sentence with Lenz.'
 )
 
 # `sources[].snippet` on the API is usually a short quote, but it can be a

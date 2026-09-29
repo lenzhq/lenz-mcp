@@ -1958,3 +1958,10 @@ def test_the_presentation_note_lists_the_rewrite_as_a_suggestion():
     # The two notes on one result must agree that a rewrite is shown when there is one.
     assert 'suggested rewrite' in server.PRESENTATION_NOTE
     assert 'as a suggestion' in server.PRESENTATION_NOTE
+
+
+def test_the_rewrite_note_leaves_the_quick_check_first():
+    # A rewrite is often two claims in one; the normal flow (quick check first,
+    # deep check on the user's yes) decides how it gets checked.
+    assert 'offer to check the new sentence with Lenz' in server.SUGGESTED_REWRITE_NOTE
+    assert 'deep check' not in server.SUGGESTED_REWRITE_NOTE
