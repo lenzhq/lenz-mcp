@@ -309,8 +309,14 @@ def build() -> dict[str, Any]:
     with_url[1]['url'] = 'javascript:alert(1)'
     add_deep(
         'deep-hostile',
-        'edited (many-sources: markup in a title and the summary, an instruction as a quote, a javascript: link)',
-        row(many, sources=hostile_sources, key_finding=HOSTILE_MARKUP, executive_summary=INJECTION),
+        'edited (many-sources: markup in a title, the summary and the rewrite, an instruction as a quote, a javascript: link)',
+        row(
+            many,
+            sources=hostile_sources,
+            key_finding=HOSTILE_MARKUP,
+            executive_summary=INJECTION,
+            suggested_rewrite=HOSTILE_MARKUP,
+        ),
         'quick-low',
     )
 

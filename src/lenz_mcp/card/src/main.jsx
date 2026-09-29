@@ -156,6 +156,7 @@ function Root({ host, dev }) {
       confidence: result.confidence,
       keyFinding: result.keyFinding,
       summary: result.summary,
+      suggestedRewrite: result.suggestedRewrite,
       warnings: result.warnings,
       sources: result.sources,
       replacesQuick: changedFrom(row.verdict, result.verdict),

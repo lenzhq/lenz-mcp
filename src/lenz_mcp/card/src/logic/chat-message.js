@@ -15,8 +15,8 @@
 //  4. it never reads as an instruction to call a tool, or the user pays twice;
 //  5. it carries NO page text. A user turn is the most trusted position in a
 //     conversation; the snapshot can quote sources behind an untrusted-evidence
-//     header, a user turn cannot. `key_finding` is out too: our sentence, but
-//     written from page text;
+//     header, a user turn cannot. `key_finding` and `suggested_rewrite` are
+//     out too: our sentences, but written from page text;
 //  6. it makes the cheap reply the right one — acknowledge, do not re-summarise,
 //     do not fetch. The id is offered "for later", never as something to get.
 // Change the wording deliberately: each rule above is load-bearing.

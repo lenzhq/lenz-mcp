@@ -1896,3 +1896,72 @@ def test_a_well_formed_id_still_reaches_the_api(monkeypatch):
     for ident in ('0123456789abcdef0123456789abcdef', 'PUB12345', 'abc1234', 'task-1', 'tid'):
         _run(server.get_verification(ident, _ctx()))
     assert calls == ['0123456789abcdef0123456789abcdef', 'PUB12345', 'abc1234', 'task-1', 'tid']
+
+
+# ── suggested_rewrite ────────────────────────────────────────────────────────
+# The API's rewrite of the claim with its wrong part corrected: a string, or
+# null on a True verdict, when no correction is established, and on older
+# verifications. It is not verified itself, so the note that travels with it
+# says so in the result, where the model cannot miss it.
+
+
+def test_a_completed_result_carries_the_suggested_rewrite_and_its_note():
+    out = server._completed_result(
+        {'verdict': 'False', 'suggested_rewrite': '  The Amazon produces roughly 6-9% of the oxygen.  '}
+    )
+    assert out['suggested_rewrite'] == 'The Amazon produces roughly 6-9% of the oxygen.'
+    assert out['suggested_rewrite_note'] == server.SUGGESTED_REWRITE_NOTE
+    assert 'not been verified' in server.SUGGESTED_REWRITE_NOTE
+
+
+@pytest.mark.parametrize('value', [None, '', '   ', 7, {'claim': 'an object from the first API draft'}, ['x']])
+def test_no_rewrite_is_null_and_carries_no_note(value):
+    out = server._completed_result({'verdict': 'False', 'suggested_rewrite': value})
+    assert out['suggested_rewrite'] is None
+    assert 'suggested_rewrite_note' not in out
+
+
+def test_an_older_verification_without_the_field_reads_null():
+    out = server._completed_result({'verdict': 'Mostly False'})
+    assert out['suggested_rewrite'] is None
+    assert 'suggested_rewrite_note' not in out
+
+
+def test_get_verification_by_id_passes_the_rewrite_through(monkeypatch):
+    _patch_api(
+        monkeypatch,
+        'verification_detail',
+        ApiResponse(
+            status=200,
+            data={'verification_id': 'ab12cd34', 'verdict': 'False', 'suggested_rewrite': 'It is small.'},
+        ),
+    )
+    out = _run(server.get_verification('ab12cd34', _ctx()))
+    assert out['status'] == 'completed'
+    assert out['suggested_rewrite'] == 'It is small.'
+    assert out['suggested_rewrite_note'] == server.SUGGESTED_REWRITE_NOTE
+
+
+def test_verify_claim_passes_the_rewrite_through(monkeypatch):
+    _patch_api(monkeypatch, 'verify', ApiResponse(status=202, data={'task_id': 'task-123', 'status': 'queued'}))
+    completed = ApiResponse(
+        status=200,
+        data={'status': 'completed', 'result': {**_COMPLETED.data['result'], 'suggested_rewrite': 'It is small.'}},
+    )
+    _status_sequence(monkeypatch, completed)
+    out = _run(server.verify_claim('big claim', _ctx()))
+    assert out['suggested_rewrite'] == 'It is small.'
+    assert out['suggested_rewrite_note'] == server.SUGGESTED_REWRITE_NOTE
+
+
+def test_the_presentation_note_lists_the_rewrite_as_a_suggestion():
+    # The two notes on one result must agree that a rewrite is shown when there is one.
+    assert 'suggested rewrite' in server.PRESENTATION_NOTE
+    assert 'as a suggestion' in server.PRESENTATION_NOTE
+
+
+def test_the_rewrite_note_leaves_the_quick_check_first():
+    # A rewrite is often two claims in one; the normal flow (quick check first,
+    # deep check on the user's yes) decides how it gets checked.
+    assert 'offer to check the new sentence with Lenz' in server.SUGGESTED_REWRITE_NOTE
+    assert 'deep check' not in server.SUGGESTED_REWRITE_NOTE

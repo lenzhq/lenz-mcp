@@ -81,6 +81,8 @@ export const changedFrom = (verdict) => `Changed from the quick verdict: was ${v
 export const deepConfidence = (bucket) => `Confidence: ${bucket}`;
 export const scoreLabel = (score) => `Score ${score} out of 10`;
 export const CAVEATS = 'Caveats';
+// The same label as the claim page and the Workbench.
+export const SUGGESTED_REWRITE = 'Suggested rewrite';
 export const showMoreCaveats = (n) => `Show ${n} more ${n === 1 ? 'caveat' : 'caveats'}`;
 export const sourcesLabel = (total, shown) =>
   total > shown ? `${total} sources · showing ${shown}` : `${total} ${total === 1 ? 'source' : 'sources'}`;
