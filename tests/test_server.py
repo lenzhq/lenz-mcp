@@ -1094,6 +1094,97 @@ def test_submitted_message_names_the_waiting_call_for_every_client(monkeypatch):
     assert 'not poll' not in card.lower()
 
 
+# ── the card's deep check reaches the model as widget context ────────
+
+
+def _bind_client(monkeypatch, user_agent, *, declares=True, card_on=True):
+    monkeypatch.setattr(
+        'lenz_mcp.client.client_profile',
+        lambda: client.ClientProfile.from_user_agent(
+            user_agent,
+            declares_apps=declares,
+            declaration_source='request' if declares is not None else client.DECLARATION_ABSENT,
+        ),
+    )
+    monkeypatch.setattr(config, 'CARD_ENABLED', card_on)
+
+
+_ONE_ROW = [{'claim': 'A', 'verdict': 'True', 'confidence': 'high'}]
+
+
+def _picker(monkeypatch, status=_MULTI_CLAIM):
+    _patch_api(monkeypatch, 'verify', ApiResponse(status=202, data={'task_id': 'task-123', 'status': 'queued'}))
+    _status_sequence(monkeypatch, status)
+    return _run(server.verify_claim('claim A and claim B', _ctx()))
+
+
+def test_a_claude_card_result_tells_the_model_to_read_the_widget_context(monkeypatch):
+    """Claude stores the card's context push and its model has to fetch it; on
+    a natural follow-up it did not, and denied the deep check the card showed
+    (measured on claude.ai, 2026-09-29). The quick check the card renders says
+    where that result will arrive, and what an empty context does not prove."""
+    _bind_client(monkeypatch, 'Claude-User')
+    out = _assess_rows(monkeypatch, _ONE_ROW)
+    assert out['card_note'] == server.CARD_CONTEXT_NOTE
+    note = out['card_note']
+    assert 'widget context' in note
+    assert 'follow-up about these claims' in note
+    # An empty context is not proof, and finding out never costs a deep check.
+    assert 'call `list_verifications`' in note
+    assert 'never start a deep check' in note
+
+
+def test_a_claude_picker_result_carries_the_card_note(monkeypatch):
+    """The picker card starts its own checks from a needs_input result, so that
+    result says where their results will arrive too."""
+    _bind_client(monkeypatch, 'Claude-User')
+    out = _picker(monkeypatch)
+    assert out['status'] == 'needs_input'
+    assert out['card_note'] == server.CARD_CONTEXT_NOTE
+
+
+@pytest.mark.parametrize(
+    ('user_agent', 'declares', 'card_on'),
+    [
+        # The kill switch: no card, nothing will push.
+        ('Claude-User', True, False),
+        # ChatGPT's card posts the result into the chat: no widget context.
+        ('openai-mcp/1.0.0', True, True),
+        # Claude Code sends Claude-User and declares no card.
+        ('Claude-User (claude-code)', False, True),
+        # A legacy-era request: the vendor token serves the card, but nothing
+        # shows this client renders one, or has a widget-context tool.
+        ('Claude-User', None, True),
+        # Another Apps host: it renders cards, but its tools were never measured.
+        ('SomeHost/2.0', True, True),
+    ],
+)
+def test_no_card_note_outside_claude_with_a_declared_card(monkeypatch, user_agent, declares, card_on):
+    _bind_client(monkeypatch, user_agent, declares=declares, card_on=card_on)
+    assert 'card_note' not in _assess_rows(monkeypatch, _ONE_ROW)
+    assert 'card_note' not in _picker(monkeypatch)
+
+
+def test_a_needs_input_that_is_not_a_picker_carries_no_card_note(monkeypatch):
+    _bind_client(monkeypatch, 'Claude-User')
+    other = ApiResponse(status=200, data={'status': 'needs_input', 'reason': 'ambiguous'})
+    out = _picker(monkeypatch, other)
+    assert out['status'] == 'needs_input'
+    assert 'card_note' not in out
+
+
+def test_a_failing_card_note_never_costs_the_paid_result(monkeypatch):
+    _bind_client(monkeypatch, 'Claude-User')
+
+    def _boom():
+        raise RuntimeError('profile read failed')
+
+    monkeypatch.setattr('lenz_mcp.client.client_profile', _boom)
+    out = _assess_rows(monkeypatch, _ONE_ROW)
+    assert out['status'] == 'ok'
+    assert 'card_note' not in out
+
+
 # ── check_usage ──────────────────────────────────────────────────────
 
 
