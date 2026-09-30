@@ -737,6 +737,90 @@ def test_the_wait_is_read_through_the_real_request_context(monkeypatch, user_age
         reset()
 
 
+# ── the quick check's HTTP timeout, per client ────────────────────────
+# The API may take up to 90 s on a long text. A host that lets a tool call run
+# that long gets a timeout that outlasts it; a host that cuts a call at ~60 s
+# (and every host nobody measured) keeps one that ends before its cut, so the
+# user sees a clean tool error rather than a dropped call.
+ASSESS_SERVER_BUDGET_SECONDS = 90
+
+
+def test_the_assess_timeout_defaults():
+    fresh = _fresh_config()
+    assert fresh.ASSESS_TIMEOUT_BY_IDENTITY == {
+        'Claude-User': 105,
+        'openai-mcp': 105,
+        'openai-mcp (ChatGPT)': 105,
+        'openai-mcp (Codex)': 105,
+        'openai-mcp (Responses API)': 55,
+    }
+    assert fresh.ASSESS_TIMEOUT_SHORT_HOST == 55
+    # The longest the connector ever waits on /assess, named on its own.
+    assert fresh.ASSESS_TIMEOUT == max(fresh.ASSESS_TIMEOUT_BY_IDENTITY.values()) == 105
+
+
+def test_every_assess_timeout_fits_its_host():
+    fresh = _fresh_config()
+    table = fresh.ASSESS_TIMEOUT_BY_IDENTITY
+    # A capable host outlasts the server's whole budget, with room for the hop.
+    for identity in ('Claude-User', 'openai-mcp', 'openai-mcp (ChatGPT)', 'openai-mcp (Codex)'):
+        assert table[identity] >= ASSESS_SERVER_BUDGET_SECONDS + 10, identity
+    # And still ends inside that host's measured tool-call cut.
+    assert table['Claude-User'] <= CLAUDE_MODERN_PROVEN_SECONDS - 15
+    assert table['openai-mcp'] <= CHATGPT_TOOL_CALL_CUT_SECONDS - 10
+    # A host that cuts at ~60 s, and an unmeasured one, end before that cut.
+    assert table['openai-mcp (Responses API)'] < 59
+    assert fresh.ASSESS_TIMEOUT_SHORT_HOST < 59
+
+
+@pytest.mark.parametrize(
+    ('user_agent', 'timeout'),
+    [
+        ('Claude-User', 105.0),
+        ('Claude-User/1.0', 105.0),
+        ('openai-mcp/1.0.0', 105.0),
+        ('openai-mcp/1.0.0 (ChatGPT)', 105.0),
+        ('openai-mcp/1.0.0 (Codex)', 105.0),
+        ('openai-mcp/1.0.0 (Responses API)', 55.0),
+        # An unrecognised suffix must NOT inherit its token's row.
+        ('openai-mcp/1.0.0 (Something New)', 55.0),
+        ('Claude-User (Desktop)', 55.0),
+        ('claude-code/2.1.4', 55.0),
+        ('node', 55.0),
+        ('', 55.0),
+    ],
+)
+def test_the_assess_request_carries_the_clients_timeout(monkeypatch, user_agent, timeout):
+    """Through the real request context and the real HTTP client: the timeout
+    the /assess request is actually sent with, not a helper's return value."""
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, json=_ASSESS)
+
+    real_client = httpx.AsyncClient
+
+    def _factory(*_args, **kwargs):
+        kwargs.pop('transport', None)
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(client.httpx, 'AsyncClient', _factory)
+    reset = client.bind_client_user_agent(user_agent)
+    try:
+        assert config.assess_timeout(client.client_identity()) == timeout
+        out = _run(server.assess_claim(_ASSESS['claims'][0]['claim'], _ctx()))
+    finally:
+        reset()
+
+    assert out['status'] == 'ok'
+    assert len(seen) == 1
+    request = seen[0]
+    assert request.method == 'POST'
+    assert request.url.path.endswith('/api/v1/assess')
+    assert request.extensions['timeout'] == {'connect': timeout, 'read': timeout, 'write': timeout, 'pool': timeout}
+
+
 def _simulated_clock(monkeypatch, polls, *, finish_at, credential_ok=None):
     """Time advances only when the wait sleeps. When `credential_ok` is given,
     each status poll's minted credential is checked with it at that moment."""

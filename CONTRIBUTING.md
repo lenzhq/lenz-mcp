@@ -50,16 +50,17 @@ then build. `npm run check:published` fails on an edit to a published bundle.
 
 ## When a host changes how it presents itself
 
-Three things this server does depend on which client is asking: which tools it
-is listed, how its card hands the result to the model, and how long a deep
-check may wait inside one tool call. Hosts change how they present themselves —
+Four things this server does depend on which client is asking: which tools it
+is listed, how its card hands the result to the model, how long a deep check
+may wait inside one tool call, and how long a quick check's request to the API
+may take. Hosts change how they present themselves —
 a new User-Agent suffix, a different capability set, a different protocol era —
 and when that happens a decision can quietly start coming out differently.
 
-Two of the three are keyed on facts a host restates on every request (its
+Two of the four are keyed on facts a host restates on every request (its
 declared MCP Apps support, its vendor token), so they follow such a change on
-their own. The wait is keyed on the client's full identity, deliberately: a
-wait that is too long is a hard timeout the user sees, so an unrecognised
+their own. The two waits are keyed on the client's full identity, deliberately:
+a wait that is too long is a hard timeout the user sees, so an unrecognised
 client gets the short default rather than inheriting a longer row. That is the
 case that needs a repair, and the repair is one line.
 
@@ -74,9 +75,9 @@ mcp_verify_wait_exhausted identity=… wait=… tool=…
 
 - **A known client is on the default wait** — `wait=45` for a host that should
   have its own row, or a steady stream of `mcp_verify_wait_exhausted` from one
-  identity. Add the identity to `client.KNOWN_IDENTITIES` and a row to
-  `config.VERIFY_WAIT_SECONDS_BY_IDENTITY`; a test fails if you do only one of
-  those. Use the same app's measured ceiling when the surface is the same one
+  identity. Add the identity to `client.KNOWN_IDENTITIES` and a row to both
+  `config.VERIFY_WAIT_SECONDS_BY_IDENTITY` and
+  `config.ASSESS_TIMEOUT_BY_IDENTITY`; a test fails if you miss one. Use the same app's measured ceiling when the surface is the same one
   under a new name, and measure with `scripts/probe/` when it is genuinely new.
 - **`card=off reason=no_declaration` for a host that should render one.** The
   host has stopped declaring MCP Apps support. Re-measure with `scripts/probe/`

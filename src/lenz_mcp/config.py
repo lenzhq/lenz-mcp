@@ -86,8 +86,41 @@ PLANS_URL: str = f'{FRONTEND_URL}/plans'
 # under the MCP server's own request timeout, so a genuinely stuck upstream
 # still yields a clean tool error.
 DEFAULT_TIMEOUT = 15.0
-ASSESS_TIMEOUT = 60.0
-# Not derived from ASSESS_TIMEOUT: /ask is a single LLM reply, but it can block
+
+# /assess, per client. The API gives a quick check up to 90 s on a long text,
+# so a timeout shorter than that cuts off work the server is still doing. How
+# long we can wait is the HOST's limit, not ours: a host that lets one tool
+# call run past two minutes gets 105 s, enough to outlast the server's whole
+# budget plus the hop; a host that cuts a tool call at ~60 s keeps 55 s, so
+# its caller gets a clean tool error before the host drops the call. Keyed on
+# the client's IDENTITY, like the deep-check wait below and for the same
+# reason: one leading token covers the ChatGPT app (cut at ~120 s) and OpenAI's
+# Responses-API connector (cut at ~60 s). An identity in no row, including an
+# unrecognised suffix on a known token, gets the short value.
+#
+# Every value stays well under the server's own request timeout and under the
+# host's measured cut (the ceilings are documented with
+# VERIFY_WAIT_SECONDS_BY_IDENTITY). Every key must be a
+# `client.KNOWN_IDENTITIES` member (`tests/test_client_profile.py`).
+ASSESS_TIMEOUT_SHORT_HOST = 55.0
+ASSESS_TIMEOUT_BY_IDENTITY: dict[str, float] = {
+    'Claude-User': 105.0,  # modern-protocol calls of 150 s complete
+    'openai-mcp': 105.0,  # the ChatGPT app; cuts a tool call at ~120 s
+    'openai-mcp (ChatGPT)': 105.0,  # the same app, newer build
+    'openai-mcp (Codex)': 105.0,  # the same app, model-side calls
+    # Named explicitly at the short value: this connector cuts at ~60 s.
+    'openai-mcp (Responses API)': ASSESS_TIMEOUT_SHORT_HOST,
+}
+# The longest the connector ever waits on /assess.
+ASSESS_TIMEOUT = max(ASSESS_TIMEOUT_BY_IDENTITY.values())
+
+
+def assess_timeout(identity: str) -> float:
+    """The HTTP timeout for a /assess request made for a tool call from `identity`."""
+    return ASSESS_TIMEOUT_BY_IDENTITY.get(identity, ASSESS_TIMEOUT_SHORT_HOST)
+
+
+# Not derived from the /assess timeouts: /ask is a single LLM reply, but it can block
 # on source summaries, so it is not reliably the lighter of the two. Sized
 # independently.
 ASK_TIMEOUT = 60.0
@@ -107,9 +140,9 @@ ASK_TIMEOUT = 60.0
 # parenthesised suffix (`client.ClientProfile.identity`); a client with no row
 # gets VERIFY_WAIT_SECONDS.
 #
-# This is the one per-client decision still keyed on a hand-maintained table of
-# identity strings, and it stays that way deliberately (the card's two
-# decisions moved off it in 2026-09). The failures are not symmetric. A wait
+# This and the /assess timeout above are the per-client decisions still keyed
+# on a hand-maintained table of identity strings, and they stay that way
+# deliberately (the card's two decisions moved off it in 2026-09). The failures are not symmetric. A wait
 # that is too LONG is a hard error in the chat — "HTTP 504" — and for OpenAI's
 # API connector a silent retry that costs the developer's user about two
 # minutes of dead time first. A wait that is too SHORT is a recoverable
