@@ -144,6 +144,30 @@ SUGGESTED_REWRITE_NOTE = (
     'sentence with Lenz.'
 )
 
+# On a card-rendered result (assess_claim, and a needs_input the picker shows),
+# for Claude only (_card_context_note). Claude accepts the card's context push
+# but does not fold it into the next turn: its model has to fetch it ("Reading
+# widget context"), and on a natural follow-up it did not, so it told the user
+# no deep check had run beside a card showing one (measured on claude.ai,
+# 2026-09-29: 0 of 2 runs fetched on "What did the Lenz card's deep check
+# find?", 2 of 2 on "Read the widget context.").
+# - In the result, not the instructions: the instructions say nothing about a
+#   card (test_the_instructions_say_nothing_about_a_card).
+# - "May see": a live card can still fall back to text, and the model cannot tell.
+# - Follow-ups about the claims too, not only questions about a deep check: a
+#   card's deep check can overrule the quick verdict this result carries.
+# - An empty context proves nothing (the push can fail, or the check can still
+#   be running), so the model looks the check up before denying it, and never
+#   starts a paid one to find out.
+CARD_CONTEXT_NOTE = (
+    'The user may see this result as a Lenz card, which can run a deep check itself. That deep check '
+    'does not come back to you as a tool result: when it finishes, the card sends it to you as widget '
+    'context, and it replaces any quick verdict on these claims. Before answering a follow-up about '
+    'these claims or about a deep check, read the widget context. If it holds no deep check, that does '
+    'not show that none ran: call `list_verifications` before saying so, and never start a deep check '
+    'to find out.'
+)
+
 # `sources[].snippet` on the API is usually a short quote, but it can be a
 # longer passage, and nothing on the API says which is which. A quote is never
 # cut: any sentence splitter meets "U.S.", "No. 5" or a script without spaces,
@@ -886,12 +910,16 @@ async def assess_claim(
             entry['lenz_url'] = link
         claims_out.append(entry)
 
-    return {
+    out = {
         'status': 'ok',
         'claims': claims_out,
         'confidence_note': CONFIDENCE_NOTE + ASSESS_ESCALATION_NOTE + ASSESS_NOTES_NOTE,
         'source': 'Lenz fast fact-check (3-model panel)',
     }
+    note = _card_context_note()
+    if note:
+        out['card_note'] = note
+    return out
 
 
 def _card_active() -> bool:
@@ -903,6 +931,29 @@ def _card_active() -> bool:
     from lenz_mcp import mcp_card
 
     return mcp_card.card_active()
+
+
+def _card_context_note() -> str:
+    """CARD_CONTEXT_NOTE for Claude with a live card it DECLARED, else ''.
+
+    Narrower than the card gate on purpose: the note tells the model to use a
+    host tool, and only Claude was measured to have one. A legacy-era request
+    (no declaration, so the vendor token serves the card) or another Apps host
+    gets nothing rather than a pointer to a tool it may not have. Never raises:
+    it runs after a paid call.
+    """
+    try:
+        from lenz_mcp import mcp_card
+
+        profile = client.client_profile()
+        if profile.vendor_token != mcp_card.CLAUDE_USER_AGENT_PRODUCT or profile.declares_apps is not True:
+            return ''
+        if not _card_active() or mcp_card.card_delivery() != mcp_card.DELIVER_BY_CONTEXT:
+            return ''
+        return CARD_CONTEXT_NOTE
+    except Exception:  # noqa: BLE001 — a note never costs a paid result
+        logger.exception('the card context note could not be decided')
+        return ''
 
 
 def _submitted_message(*, already_running: bool) -> str:
@@ -1267,6 +1318,10 @@ async def _verification_result(
                 'Call `select_claims` with this task_id and a `claims` list of one or more of the '
                 'offered claim texts, exactly as listed.'
             )
+            # The picker card starts its own checks from this result.
+            note = _card_context_note()
+            if note:
+                out['card_note'] = note
         return out
 
     if status == 'failed':
