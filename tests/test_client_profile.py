@@ -247,6 +247,15 @@ def test_every_measured_identity_has_a_wait_row():
     assert not missing, f'measured identities with no wait row: {sorted(missing)}'
 
 
+def test_every_assess_timeout_row_names_a_measured_identity():
+    """The /assess timeout is the second table keyed on an identity; it is held
+    to the same registry as the wait, in both directions."""
+    stray = set(config.ASSESS_TIMEOUT_BY_IDENTITY) - set(client.KNOWN_IDENTITIES)
+    assert not stray, f'assess timeout rows for identities no registry entry describes: {sorted(stray)}'
+    missing = set(client.KNOWN_IDENTITIES) - set(config.ASSESS_TIMEOUT_BY_IDENTITY)
+    assert not missing, f'measured identities with no assess timeout row: {sorted(missing)}'
+
+
 @pytest.mark.parametrize(
     ('user_agent', 'vendor', 'identity'),
     [

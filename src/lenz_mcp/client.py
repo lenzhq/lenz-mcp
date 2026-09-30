@@ -609,7 +609,7 @@ async def assess(
         '/assess',
         authorization,
         json=body,
-        timeout=config.ASSESS_TIMEOUT,
+        timeout=config.assess_timeout(client_identity()),
         idempotency_key=key,
     )
 

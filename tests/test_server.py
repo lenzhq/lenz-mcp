@@ -1400,7 +1400,9 @@ def test_client_assess_targets_assess_endpoint(monkeypatch):
     assert cap['method'] == 'POST'
     assert cap['path'] == '/assess'
     assert cap['json'] == {'claim': 'hi', 'language': 'es'}
-    assert cap['timeout'] == client.config.ASSESS_TIMEOUT  # assess gets the generous read timeout
+    # No client in scope reads as unknown: the short-host timeout, still well
+    # above the default (per-client values: tests/test_first_check.py).
+    assert cap['timeout'] == client.config.ASSESS_TIMEOUT_SHORT_HOST > client.config.DEFAULT_TIMEOUT
     assert cap['auth'] == 'Bearer k'
 
 
