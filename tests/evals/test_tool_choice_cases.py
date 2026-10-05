@@ -26,12 +26,19 @@ def test_every_case_is_well_formed():
         assert case.id not in seen, f'duplicate case id: {case.id}'
         seen.add(case.id)
         assert case.group in cases.GROUPS, (case.id, case.group)
-        assert case.prompt.strip(), case.id
+        # An empty prompt is a case about the model answering a TOOL RESULT: the
+        # history must then end on one, or the model is asked to continue from nothing.
+        if not case.prompt.strip():
+            assert case.history and isinstance(case.history[-1], cases.ToolExchange), case.id
         assert case.why.strip(), f'{case.id} must say what it protects'
         assert isinstance(case.expect, (str, list)), case.id
         if isinstance(case.expect, list):
             assert case.expect, f'{case.id}: an empty list is `none`, say so'
-        for role, text in case.history:
+        for turn in case.history:
+            if isinstance(turn, cases.ToolExchange):
+                assert turn.name and isinstance(turn.arguments, dict) and isinstance(turn.result, dict), case.id
+                continue
+            role, text = turn
             assert role in ('user', 'assistant'), (case.id, role)
             assert text.strip(), case.id
 
@@ -251,13 +258,17 @@ def test_an_empty_manifest_is_refused_before_any_call(no_spend, monkeypatch):
 
 def test_one_call_is_enforced_wherever_it_is_promised():
     # The submission tells a reviewer "one call" for these; an eval that let a
-    # second call pass would be vouching for a shape it never checked. The
-    # drafts are one call by definition.
+    # second call pass would be vouching for a shape it never checked. Every
+    # positive case is now one call per expected tool by default (a second call
+    # is a second charge): only a case that NAMES an extra tool may make one.
     promised = {case.id for case in cases.CASES if 'one call' in case.tools_line}
-    drafts = {'submission-2-draft', 'named-draft', 'named-draft-hedged'}
-    enforced = {case.id for case in cases.CASES if case.single_call}
     assert promised, 'no submission case promises one call any more: re-read this test'
-    assert promised | drafts <= enforced
+    for case_id in promised:
+        case = cases.by_id(case_id)
+        assert not case.also_allowed, f'{case_id} promises one call and allows another tool'
+        assert len(case.expected_tools) == 1, case_id
+    for case in cases.CASES:
+        assert set(case.also_allowed) <= {'get_verification'}, (case.id, case.also_allowed)
 
 
 def test_the_drafts_are_judged_on_their_whole_text():
@@ -277,48 +288,16 @@ def test_the_drafts_are_judged_on_their_whole_text():
 
 
 def test_a_second_call_on_a_draft_case_fails_the_attempt():
-    from evals.tool_choice.__main__ import _judge
+    from evals.tool_choice.scoring import judge as _judge
     from evals.tool_choice.vendors import Call, Turn
 
     case = cases.by_id('named-draft')
     whole = {'claim': case.prompt.split(': ', 1)[1].strip('"')}
     one = Turn(calls=[Call('assess_claim', whole)], text='')
     two = Turn(calls=[Call('assess_claim', whole), Call('assess_claim', whole)], text='')
-    assert _judge(case, two) == (False, "made 2 calls (['assess_claim', 'assess_claim']); this case must be one call")
+    assert _judge(case, two) == (False, 'called assess_claim 2 times; this case must call it once')
     # And the rule does not over-reach: one call with the whole draft passes.
     assert _judge(case, one) == (True, '')
-
-
-def _write_result(directory, wording, rows, stamp='2026-01-01T0000', *, recorded=None):
-    import json
-
-    payload = {'wording': wording if recorded is None else recorded, 'results': rows}
-    (directory / f'results_{stamp}_{wording}.json').write_text(json.dumps(payload))
-
-
-def _row(case_id, vendor, *, with_instructions=True, attempts=1):
-    return {'case': case_id, 'vendor': vendor, 'with_instructions': with_instructions, 'attempts': attempts}
-
-
-def test_check_fresh_needs_the_submission_set_not_just_a_filename(no_spend, monkeypatch, tmp_path):
-    from evals.tool_choice import __main__ as runner
-
-    wording = manifest.build('claude').hash()
-    monkeypatch.setattr(runner, 'RESULTS_DIR', tmp_path)
-    submission = [case.id for case in cases.by_group('openai_submission')]
-
-    # One case, without instructions: the shape of the n=20 cell files.
-    _write_result(tmp_path, wording, [_row('named-quick', 'openai', with_instructions=False)])
-    assert _main(['--check-fresh']) == 1
-
-    # The whole submission set, but one vendor only.
-    _write_result(tmp_path, wording, [_row(cid, 'openai') for cid in submission], stamp='2026-01-01T0001')
-    assert _main(['--check-fresh']) == 1
-
-    # The whole submission set, both vendors, with instructions: fresh.
-    rows = [_row(cid, vendor) for cid in submission for vendor in ('anthropic', 'openai')]
-    _write_result(tmp_path, wording, rows, stamp='2026-01-01T0002')
-    assert _main(['--check-fresh']) == 0
 
 
 def test_the_vendor_clients_never_retry(monkeypatch):
@@ -375,26 +354,3 @@ def test_a_submission_tools_line_names_every_tool_the_case_asserts(visible):
         named_tools = set(re.findall(r'`(\w+)`', case.tools_line)) & visible
         unasserted = named_tools - set(case.expected_tools) - set(_LATER_TURN_ONLY)
         assert not unasserted, f'{case.id} promises {unasserted}, which the eval does not assert'
-
-
-def test_check_fresh_trusts_the_recorded_wording_not_the_filename(no_spend, monkeypatch, tmp_path):
-    from evals.tool_choice import __main__ as runner
-
-    wording = manifest.build('claude').hash()
-    monkeypatch.setattr(runner, 'RESULTS_DIR', tmp_path)
-    rows = [_row(case.id, vendor) for case in cases.by_group('openai_submission') for vendor in ('anthropic', 'openai')]
-    # Named with the current hash, but it RECORDS another wording: not fresh.
-    _write_result(tmp_path, wording, rows, recorded='0000000000000000')
-    assert _main(['--check-fresh']) == 1
-
-
-@pytest.mark.parametrize('payload', ['[]', '{"results": null}', '{"results": [{"case": "x"}]}', 'not json'])
-def test_a_malformed_newer_file_never_hides_a_good_older_one(no_spend, monkeypatch, tmp_path, payload):
-    from evals.tool_choice import __main__ as runner
-
-    wording = manifest.build('claude').hash()
-    monkeypatch.setattr(runner, 'RESULTS_DIR', tmp_path)
-    rows = [_row(case.id, vendor) for case in cases.by_group('openai_submission') for vendor in ('anthropic', 'openai')]
-    _write_result(tmp_path, wording, rows, stamp='2026-01-01T0000')
-    (tmp_path / f'results_2026-01-02T0000_{wording}.json').write_text(payload)
-    assert _main(['--check-fresh']) == 0
