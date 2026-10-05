@@ -9,9 +9,11 @@ sample. That is the shape a decision needs — "twice in three on one vendor" an
 
 It also checks the FAITHFULNESS of any draft a model split itself, because that
 is the question a rewrite raises: a resolved pronoun is helpful, a dropped hedge
-or a rounded figure is not. Mechanical, not a judgement: every content word of a
-split claim is looked for in the source text, and what is missing is printed for
-a human to read.
+or a rounded figure is not. Mechanical, not a judgement, and only a words check:
+every content word of a split claim is looked for in the source text, the
+negations and figures of a claim are compared IN ORDER with the draft sentence it
+matches best (so a dropped "not" or a moved figure is named), and what differs is
+printed for a human to read. Silence is not a finding that the split is faithful.
 """
 
 from __future__ import annotations
@@ -80,16 +82,42 @@ def _attempts(rows: list[dict[str, Any]]) -> tuple[int, int]:
     return failed, total
 
 
+_NEGATION = re.compile(r"\b(?:not|no|never|none|neither|nor|without|cannot|\w+n['’]t)\b", re.IGNORECASE)
+_FIGURE = re.compile(r'\d+(?:[.,]\d+)?%?')
+
+
+def _signals(text: str) -> list[str]:
+    """The negations and figures of a text, in the order they appear."""
+    found = [(m.start(), m.group(0).lower()) for m in _NEGATION.finditer(text)]
+    found += [(m.start(), m.group(0)) for m in _FIGURE.finditer(text)]
+    return [token for _, token in sorted(found)]
+
+
+def _sentences(text: str) -> list[str]:
+    return [s for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
+
+
 def faithfulness(source: str, claims: list[str]) -> list[str]:
-    """What a split lost or invented, relative to the source text."""
+    """What a split lost or invented, relative to the source text. A words check, not a judgement."""
     notes: list[str] = []
     source_words = set(_words(source))
+    sentences = _sentences(source) or [source]
     for claim in claims:
         missing = [w for w in _words(claim) if w not in source_words]
         if missing:
             notes.append(f'"{claim}" adds words not in the draft: {missing}')
+        # The draft sentence this claim is closest to, by shared words: a negation
+        # or a figure must match THAT sentence's, in order. Comparing against the
+        # whole draft would let "X did not increase 10%" lose its "not" unseen.
+        claim_words = set(_words(claim))
+        closest = max(sentences, key=lambda sentence: len(claim_words & set(_words(sentence))))
+        if _signals(claim) != _signals(closest):
+            notes.append(
+                f'"{claim}": negations and figures {_signals(claim)} differ from the draft sentence it matches '
+                f'({_signals(closest)})'
+            )
     # A figure or a hedge going missing is the damage worth naming explicitly.
-    for token in re.findall(r'\d+(?:[.,]\d+)?%?', source):
+    for token in _FIGURE.findall(source):
         if not any(token in claim for claim in claims):
             notes.append(f'the figure {token!r} is in the draft and in none of the split claims')
     for hedge in ('analysts say', 'roughly', 'about', 'approximately', 'reportedly', 'estimated'):
@@ -141,7 +169,9 @@ def main(argv: list[str] | None = None) -> int:
                     for claim in claims:
                         print(f'      {claim}')
                     source = _source_for(case)
-                    for note in faithfulness(source, claims) or ['(faithful: every word appears in the draft)']:
+                    for note in faithfulness(source, claims) or [
+                        '(words check only: nothing flagged; a person still reads the split)'
+                    ]:
                         print(f'    ! {note}')
     return 0
 
