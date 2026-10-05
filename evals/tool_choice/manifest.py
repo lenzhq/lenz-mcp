@@ -35,6 +35,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from evals.tool_choice import _path  # noqa: F401  (puts src/ on sys.path: the checkout is not installed)
+
 # The clients worth asking about, by the identity the server keys on
 # (client.client_identity). Two OpenAI entries because one token covers two
 # clients with different manifests, and one unmeasured suffix because that is

@@ -106,7 +106,22 @@ ANTHROPIC_API_KEY=... OPENAI_API_KEY=... uv run python -m evals.tool_choice
 
 Pass `--prices FILE` (a JSON map of model-name prefix to per-million-token input
 and output prices) to have the spend summary priced. A structural test checks the
-cases without calling any model.
+cases, the scorer, the gate and the freshness rules without calling any model.
+
+What it gates. A run is judged against the rows it planned, and `--gated --both-arms
+--repeat 5` is the release run: every gated case (the `openai_submission`, `named`
+and `must_not_fire` groups plus the three escalation consent cases) on both vendors,
+with and without the server instructions, five attempts each, all passing. ChatGPT
+does not show its model the instructions, so the OpenAI arm without them is gated;
+Claude's arm without them is measured but is not a client. `--check-fresh` exits 0
+only for a COMPLETE result file of that run, keyed on the wording AND the harness
+(cases, scorer, vendor wiring, the built histories) and measured on the current
+default models. Exit codes: 0 met, 1 a gated row failed, 2 refused before spending,
+3 incomplete (a vendor error or an interrupted run says nothing about the wording).
+Results are written after every case, so a crash keeps what was measured.
+
+`--distractor` also offers a `web_search` tool, as the real apps do. It is
+report-only and never makes a result release-fresh.
 
 ## Running your own server
 

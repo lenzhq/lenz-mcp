@@ -1,12 +1,17 @@
 """Run the tool-choice eval.
 
     uv run python -m evals.tool_choice --vendor both --repeat 3
+    uv run python -m evals.tool_choice --gated --both-arms --repeat 5 --max-calls 600   # the release run
     uv run python -m evals.tool_choice --print-submission
     uv run python -m evals.tool_choice --check-fresh
     uv run python -m evals.tool_choice --prices prices.json ...
 
-Makes PAID model calls (a few cents a run). Not in the pytest path; a structural
-test checks the cases without a model.
+Makes PAID model calls. Not in the pytest path; a structural test checks the
+cases without a model.
+
+Exit codes: 0 the planned rows ran and every gated one passed; 1 a gated row
+failed; 2 bad arguments (nothing spent); 3 the run is incomplete (a vendor call
+errored, or the run was stopped) and cannot vouch either way.
 
 `--prices PATH` prices the spend summary: a JSON object mapping a model-name
 prefix to `[eur_per_1M_input_tokens, eur_per_1M_output_tokens]` (the longest matching
@@ -17,11 +22,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from evals.tool_choice.scoring import ERRORED, FAILED, FLAKY, PASSED, RELEASE_REPEAT
+from evals.tool_choice.scoring import gate as _gate
+from evals.tool_choice.scoring import judge as _judge
 
 RESULTS_DIR = Path(__file__).resolve().parent
 
@@ -36,66 +46,38 @@ def _load_env() -> None:
     load_dotenv(Path.cwd() / '.env', override=False)
 
 
-# A case passes at 3/3, is FLAKY at 1-2/3, fails at 0/3. Flaky is reported
-# separately and on purpose: a trigger that fires two times in three is a
-# finding about the wording, not noise to be averaged away.
-PASSED = 'pass'
-FLAKY = 'flaky'
-FAILED = 'fail'
+# Stop a run after this many vendor errors in a row: a revoked key or an outage
+# would otherwise spend the rest of the run's time (and, for a half-failing vendor,
+# money) on calls that cannot say anything.
+MAX_CONSECUTIVE_ERRORS = 5
 
 
-def _judge(case, turn) -> tuple[bool, str]:
-    """Did this attempt satisfy the case? Deterministic; no model judges."""
-    from evals.tool_choice.cases import NONE, RESTRAINT
+def _run_case(
+    case, manifest, ask, *, model: str, with_instructions: bool, repeat: int, state: dict[str, int] | None = None
+) -> dict[str, Any]:
+    """Run one case `repeat` times. A failed vendor call is an ERRORED attempt, never a pass or a fail.
 
-    names = turn.names
-    for forbidden in case.forbid:
-        if forbidden in names:
-            return False, f'called the forbidden {forbidden}'
-
-    if case.expect == NONE:
-        return (not names), ('called ' + ', '.join(names) if names else '')
-
-    if case.expect == RESTRAINT:
-        # Zero calls passes. Otherwise: only the allowed tools, each under its
-        # ceiling. This is the shape for "spend no more than you were asked to".
-        limits = dict(case.at_most)
-        for name in names:
-            if name not in limits:
-                return False, f'called {name}, which this case does not allow'
-        for name, limit in limits.items():
-            count = names.count(name)
-            if count > limit:
-                return False, f'called {name} {count} times; at most {limit} allowed'
-        return True, ''
-
-    expected = case.expected_tools
-    if not names:
-        return False, 'called nothing'
-    if case.single_call and len(names) != 1:
-        return False, f'made {len(names)} calls ({names}); this case must be one call'
-    # An ordered list must appear in order; a single name must be the FIRST call
-    # (a model that reaches for check_usage first has still got it wrong).
-    if len(expected) > 1:
-        if names[: len(expected)] != expected:
-            return False, f'called {names}, wanted {expected} in order'
-    elif names[0] != expected[0]:
-        return False, f'called {names[0]} first, wanted {expected[0]}'
-
-    for key, predicate in case.expect_args.items():
-        value = turn.calls[0].arguments.get(key)
-        if not predicate(value):
-            return False, f'argument {key}={value!r} failed its check'
-    return True, ''
-
-
-def _run_case(case, manifest, ask, *, model: str, with_instructions: bool, repeat: int) -> dict[str, Any]:
+    One rate limit or outage on attempt 17 of 100 must not lose the paid output
+    of the other 99, and it must not read as a regression of the wording either.
+    """
     outcomes: list[bool] = []
     notes: list[str] = []
     observed: list[list[dict[str, Any]]] = []
     usages = []
+    errors = 0
+    state = state if state is not None else {'consecutive_errors': 0}
     for _ in range(repeat):
-        turn = ask(case.history, case.prompt, model=model, with_instructions=with_instructions)
+        try:
+            turn = ask(case.history, case.prompt, model=model, with_instructions=with_instructions)
+        except Exception as exc:  # noqa: BLE001 -- any vendor failure is an errored attempt
+            errors += 1
+            state['consecutive_errors'] = state.get('consecutive_errors', 0) + 1
+            notes.append(f'errored: {type(exc).__name__}')
+            observed.append([])
+            if state['consecutive_errors'] >= MAX_CONSECUTIVE_ERRORS:
+                break
+            continue
+        state['consecutive_errors'] = 0
         usages.append(turn.usage)
         ok, note = _judge(case, turn)
         outcomes.append(ok)
@@ -107,13 +89,18 @@ def _run_case(case, manifest, ask, *, model: str, with_instructions: bool, repea
         if note:
             notes.append(note)
     passes = sum(outcomes)
-    verdict = PASSED if passes == repeat else (FAILED if passes == 0 else FLAKY)
+    attempts = len(observed)
+    if errors:
+        verdict = ERRORED
+    else:
+        verdict = PASSED if passes == repeat else (FAILED if passes == 0 else FLAKY)
     return {
         'case': case.id,
         'group': case.group,
         'verdict': verdict,
         'passes': passes,
-        'attempts': repeat,
+        'attempts': attempts,
+        'errors': errors,
         'observed': observed,
         'notes': sorted(set(notes)),
         'usage': {
@@ -134,20 +121,6 @@ def _display_path(path: Path) -> Path:
         return path.relative_to(Path.cwd().resolve())
     except ValueError:
         return path
-
-
-def _gate(results: list[dict[str, Any]]) -> list[str]:
-    """The groups that must be perfect. Others are reported, not gated.
-
-    The two judgement groups have no threshold, so they report and never fail.
-    """
-    must_be_perfect = ('openai_submission', 'named', 'must_not_fire')
-    broken = []
-    for group in must_be_perfect:
-        bad = [r for r in results if r['group'] == group and r['verdict'] != PASSED]
-        if bad:
-            broken.append(f'{group}: ' + ', '.join(f'{r["case"]} ({r["verdict"]})' for r in bad))
-    return broken
 
 
 def load_prices(path: str | Path) -> dict[str, tuple[float, float]]:
@@ -180,23 +153,46 @@ def price_for(table: dict[str, tuple[float, float]], model: str) -> tuple[float,
     return prices
 
 
+def _write_results(path: Path, payload: dict[str, Any]) -> None:
+    """Write the result file whole or not at all (a crash mid-write must not leave half a file)."""
+    tmp = path.with_suffix('.tmp')
+    tmp.write_text(json.dumps(payload, indent=2) + '\n')
+    tmp.replace(path)
+
+
 def main(argv: list[str] | None = None) -> int:
     # `python -m <this package>`, whatever the package is called in this layout.
     parser = argparse.ArgumentParser(prog=f'python -m {__package__}' if __package__ else None)
     parser.add_argument('--vendor', choices=['anthropic', 'openai', 'both'], default='both')
-    parser.add_argument('--model', default='', help='override the vendor flagship')
+    parser.add_argument(
+        '--model', default='', help='override the vendor default (the result is then not release-fresh)'
+    )
     parser.add_argument('--client', default='claude', help='which client manifest to show the model')
     parser.add_argument('--group', default=None, help='run these groups only (comma-separated)')
     parser.add_argument('--case', default=None, help='run these case ids only (comma-separated)')
+    parser.add_argument(
+        '--gated',
+        action='store_true',
+        help='run exactly the gated cases (the release set); combine with --both-arms --repeat 5',
+    )
     parser.add_argument('--repeat', type=int, default=3)
     parser.add_argument(
         '--no-instructions',
         action='store_true',
-        help='show the tools WITHOUT the server instructions (the arm that measures how much they carry)',
+        help='show the tools WITHOUT the server instructions (ChatGPT never shows its model them)',
     )
     parser.add_argument('--both-arms', action='store_true', help='run every case with AND without instructions')
+    parser.add_argument(
+        '--distractor',
+        action='store_true',
+        help='also offer a web_search tool, as the real apps do. Report-only: never gated, never release-fresh',
+    )
     parser.add_argument('--print-submission', action='store_true', help='render the OpenAI dashboard text and exit')
-    parser.add_argument('--check-fresh', action='store_true', help='exit non-zero if no result matches this wording')
+    parser.add_argument(
+        '--check-fresh',
+        action='store_true',
+        help='exit non-zero unless a complete, passing result file covers the whole gated matrix at the current eval',
+    )
     # A mistyped flag must not be able to spend. This refuses to START a run
     # bigger than the number given, and the default is small enough that the
     # full set needs the number raised on purpose, so a run typed when a
@@ -234,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
 
     _load_env()
     from evals.tool_choice import cases as cases
+    from evals.tool_choice import freshness, scoring
     from evals.tool_choice import manifest as manifest_mod
     from evals.tool_choice.vendors import ASK, DEFAULT_MODELS
 
@@ -243,49 +240,26 @@ def main(argv: list[str] | None = None) -> int:
 
     manifest = manifest_mod.build(args.client)
     wording = manifest.hash()
+    harness = freshness.harness_hash()
+    key = freshness.eval_key(manifest)
 
     if args.check_fresh:
-        # FRESH means the cases the OpenAI submission stands on were measured at
-        # THIS wording: every `openai_submission` case, on both vendors, WITH the
-        # instructions, at least one attempt each. Accepting any file whose
-        # name carried the hash would let a one-case n=20 file make a wording
-        # "fresh" that had never been run on the submission set.
-        # Scoped to the submission set, because that is what this
-        # flag gates: a full 35-case run is the eval, not the freshness check.
-        needed = {
-            (case.id, vendor) for case in cases.by_group('openai_submission') for vendor in ('anthropic', 'openai')
-        }
-        for path in sorted(RESULTS_DIR.glob(f'results_*_{wording}.json'), reverse=True):
-            try:
-                data = json.loads(path.read_text())
-            except (OSError, ValueError):
-                continue
-            # The wording the file RECORDS, not the one its name claims: a
-            # renamed or hand-copied file must not vouch for a wording it never
-            # measured. And a malformed file is skipped, never fatal -- one bad
-            # newer file must not hide a good older one.
-            if not isinstance(data, dict) or data.get('wording') != wording:
-                continue
-            rows = data.get('results')
-            if not isinstance(rows, list):
-                continue
-            covered = {
-                (row['case'], row['vendor'])
-                for row in rows
-                if isinstance(row, dict)
-                and isinstance(row.get('case'), str)
-                and isinstance(row.get('vendor'), str)
-                and row.get('with_instructions') is True
-                and isinstance(row.get('attempts'), int)
-                and row['attempts'] >= 1
-            }
-            if needed <= covered:
-                print(f'fresh: {path.name} covers the submission set at the current wording ({wording})')
-                return 0
+        # FRESH means a result file may vouch for the eval AS IT IS NOW: the same
+        # wording AND harness (cases, scorer, vendor wiring, built histories), the
+        # current default models, a run that finished, and every row of the whole
+        # gated matrix (every gated case, both vendors, both instruction arms)
+        # present at the release repeat count and passing. A file that merely
+        # carries the right hash, or covers the submission set only, is not that.
+        ok, why = freshness.check_fresh(RESULTS_DIR, key, DEFAULT_MODELS)
+        if ok:
+            print(f'fresh: {why} (key {key})')
+            return 0
+        planned = len(scoring.required_matrix()) * RELEASE_REPEAT
         print(
-            f'STALE: no result file measures the submission set at wording {wording}.\n'
-            'Every openai_submission case, both vendors, with instructions. Run it before the submission:\n'
-            '  uv run python -m evals.tool_choice --group openai_submission --vendor both --max-calls 48',
+            f'STALE (key {key}): {why}.\n'
+            'The release check needs one complete run of every gated case, both vendors, both instruction\n'
+            f'arms, at {RELEASE_REPEAT} attempts each, all passing:\n'
+            f'  uv run python -m evals.tool_choice --gated --both-arms --repeat {RELEASE_REPEAT} --max-calls {planned}',
             file=sys.stderr,
         )
         return 1
@@ -300,6 +274,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f'unknown group(s) {unknown}; known: {sorted(cases.GROUPS)}', file=sys.stderr)
         return 2
     selected = [case for case in cases.CASES if case.group in wanted] if wanted else list(cases.CASES)
+    if args.gated:
+        selected = [case for case in selected if scoring.is_gated_case(case)]
     # One cell, measured at a higher repeat, is how an n=5 disagreement gets
     # settled; without this the smallest unit is a group, and settling one case
     # would spend on four others nobody asked about.
@@ -311,7 +287,7 @@ def main(argv: list[str] | None = None) -> int:
     if ids:
         selected = [case for case in selected if case.id in ids]
     if not selected:
-        print(f'no cases in group {args.group!r}', file=sys.stderr)
+        print(f'no cases selected (group {args.group!r}, case {args.case!r}, gated {args.gated})', file=sys.stderr)
         return 2
 
     # A manifest with no tools or no instructions still hashes, and the run
@@ -339,34 +315,132 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    print(f'client={args.client} wording={wording} tools={len(manifest.tools)} cases={len(selected)}')
+    # Keys are read per call (`os.environ[...]`), so a missing one would otherwise
+    # be an errored attempt on every call. Say so before the first one.
+    key_names = {'anthropic': 'ANTHROPIC_API_KEY', 'openai': 'OPENAI_API_KEY'}
+    missing = [key_names[v] for v in vendors if not os.environ.get(key_names[v])]
+    if missing:
+        print(
+            f'REFUSED: {", ".join(missing)} is not set (environment or a .env in the working directory).',
+            file=sys.stderr,
+        )
+        return 2
+
+    # The cells this run was asked to fill: what the gate is held to. A run narrowed
+    # on purpose (one group, one vendor) is judged on its own plan, and says so; a
+    # crash or an errored row still leaves the plan unmet.
+    plan = {
+        (case.id, vendor, instr)
+        for case in selected
+        if scoring.is_gated_case(case)
+        for vendor in vendors
+        for instr in arms
+        if not args.distractor
+    }
+    full_matrix = plan >= scoring.required_matrix() and args.repeat >= RELEASE_REPEAT and not args.model
+
+    print(
+        f'client={args.client} key={key} wording={wording} harness={harness} tools={len(manifest.tools)} cases={len(selected)}'
+    )
     print(f'planned calls: {planned} (ceiling {args.max_calls})')
     all_results: list[dict[str, Any]] = []
     spend: dict[str, dict[str, int]] = {}
-    for vendor in vendors:
-        model = args.model or DEFAULT_MODELS[vendor]
-        for with_instructions in arms:
-            arm = 'with instructions' if with_instructions else 'WITHOUT instructions'
-            print(f'\n── {vendor} / {model} / {arm} ──')
+    stamp = datetime.now(UTC).strftime('%Y-%m-%dT%H%M')
+    out = RESULTS_DIR / f'results_{stamp}_{key}.json'
+    # A second run in the same minute must not replace the first's raw arguments,
+    # which cannot be rebuilt without paying again.
+    suffix = 1
+    while out.exists():
+        suffix += 1
+        out = RESULTS_DIR / f'results_{stamp}-{suffix}_{key}.json'
 
-            def ask(history, prompt, *, model=model, with_instructions=with_instructions, vendor=vendor):
-                return ASK[vendor](manifest, history, prompt, model=model, with_instructions=with_instructions)
+    def snapshot(*, complete: bool) -> dict[str, Any]:
+        return {
+            'key': key,
+            'wording': wording,
+            'harness': harness,
+            'complete': complete,
+            'client': args.client,
+            'user_agent': manifest.user_agent,
+            'instructions_chars': len(manifest.instructions),
+            'tools': manifest.tool_names,
+            'repeat': args.repeat,
+            'distractor': args.distractor,
+            'models': sorted(spend),
+            'spend': spend,
+            'results': all_results,
+        }
 
-            for case in selected:
-                result = _run_case(
-                    case, manifest, ask, model=model, with_instructions=with_instructions, repeat=args.repeat
-                )
-                result |= {'vendor': vendor, 'model': model, 'with_instructions': with_instructions}
-                all_results.append(result)
-                totals = spend.setdefault(
-                    model, {'vendor': vendor, 'input': 0, 'output': 0, 'cached': 0, 'cache_write': 0, 'calls': 0}
-                )
-                for key in ('input', 'output', 'cached', 'cache_write'):
-                    totals[key] += result['usage'][key]
-                totals['calls'] += result['attempts']
-                mark = {PASSED: 'ok  ', FLAKY: 'FLAKY', FAILED: 'FAIL'}[result['verdict']]
-                detail = f' {result["notes"][0]}' if result['notes'] else ''
-                print(f'  {mark} {case.id} ({result["passes"]}/{result["attempts"]}){detail}')
+    state = {'consecutive_errors': 0}
+    stopped = False
+    try:
+        for vendor in vendors:
+            model = args.model or DEFAULT_MODELS[vendor]
+            for with_instructions in arms:
+                arm = 'with instructions' if with_instructions else 'WITHOUT instructions'
+                extra = ' + web_search' if args.distractor else ''
+                print(f'\n── {vendor} / {model} / {arm}{extra} ──')
+
+                def ask(
+                    history,
+                    prompt,
+                    *,
+                    model=model,
+                    with_instructions=with_instructions,
+                    vendor=vendor,
+                ):
+                    return ASK[vendor](
+                        manifest,
+                        history,
+                        prompt,
+                        model=model,
+                        with_instructions=with_instructions,
+                        distractor=args.distractor,
+                    )
+
+                for case in selected:
+                    result = _run_case(
+                        case,
+                        manifest,
+                        ask,
+                        model=model,
+                        with_instructions=with_instructions,
+                        repeat=args.repeat,
+                        state=state,
+                    )
+                    result |= {
+                        'vendor': vendor,
+                        'model': model,
+                        'with_instructions': with_instructions,
+                        'distractor': args.distractor,
+                    }
+                    all_results.append(result)
+                    totals = spend.setdefault(
+                        model, {'vendor': vendor, 'input': 0, 'output': 0, 'cached': 0, 'cache_write': 0, 'calls': 0}
+                    )
+                    for usage_key in ('input', 'output', 'cached', 'cache_write'):
+                        totals[usage_key] += result['usage'][usage_key]
+                    totals['calls'] += result['attempts'] - result['errors']
+                    # Written after EVERY case, so a crash, a ctrl-C or a vendor outage on
+                    # case 34 of 35 keeps the paid output of the other 34.
+                    _write_results(out, snapshot(complete=False))
+                    mark = {PASSED: 'ok  ', FLAKY: 'FLAKY', FAILED: 'FAIL', ERRORED: 'ERROR'}[result['verdict']]
+                    detail = f' {result["notes"][0]}' if result['notes'] else ''
+                    print(f'  {mark} {case.id} ({result["passes"]}/{result["attempts"]}){detail}')
+                    if state['consecutive_errors'] >= MAX_CONSECUTIVE_ERRORS:
+                        print(
+                            f'\nSTOPPED: {MAX_CONSECUTIVE_ERRORS} vendor errors in a row ({vendor}); not spending more.',
+                            file=sys.stderr,
+                        )
+                        stopped = True
+                        break
+                if stopped:
+                    break
+            if stopped:
+                break
+    except KeyboardInterrupt:
+        print('\nINTERRUPTED: keeping the rows written so far.', file=sys.stderr)
+        stopped = True
 
     print('\n── summary ──')
     for vendor in vendors:
@@ -376,7 +450,7 @@ def main(argv: list[str] | None = None) -> int:
             arm = 'with' if with_instructions else 'without'
             print(
                 f'{vendor:10} instructions {arm:8} '
-                f'pass {counts[PASSED]}  flaky {counts[FLAKY]}  fail {counts[FAILED]}  of {len(rows)}'
+                f'pass {counts[PASSED]}  flaky {counts[FLAKY]}  fail {counts[FAILED]}  error {counts[ERRORED]}  of {len(rows)}'
             )
     if args.both_arms:
         print('\n── what the instructions carry (pass rate, with − without) ──')
@@ -440,37 +514,31 @@ def main(argv: list[str] | None = None) -> int:
             for attempt in r['observed']:
                 print(f'    {json.dumps(attempt)[:400]}')
 
-    # Minute-resolution, not date: two runs of the same wording on one day are
-    # normal (a first pass and a second one), and a date-only name would let the
-    # second silently replace the first's raw arguments — which is the half that cannot
-    # be reconstructed without paying again.
-    stamp = datetime.now(UTC).strftime('%Y-%m-%dT%H%M')
-    out = RESULTS_DIR / f'results_{stamp}_{wording}.json'
-    out.write_text(
-        json.dumps(
-            {
-                'wording': wording,
-                'client': args.client,
-                'user_agent': manifest.user_agent,
-                'instructions_chars': len(manifest.instructions),
-                'tools': manifest.tool_names,
-                'repeat': args.repeat,
-                'models': sorted(spend),
-                'spend': spend,
-                'results': all_results,
-            },
-            indent=2,
-        )
-        + '\n'
-    )
+    verdict = _gate(all_results, expected=plan)
+    complete = not stopped and not verdict.incomplete
+    _write_results(out, snapshot(complete=complete))
     print(f'\nwritten: {_display_path(out)}')
 
-    broken = _gate(all_results)
-    if broken:
+    if args.distractor:
+        print('\nGATE: not applied (the web_search arm is report-only).')
+        return 3 if stopped or any(r['errors'] for r in all_results) else 0
+    if full_matrix and complete and verdict.ok:
+        print(f'\nGATE: met over the whole matrix at {args.repeat} attempts. Run --check-fresh to confirm.')
+    elif not full_matrix:
+        print(
+            '\nGATE: judged on the rows this run planned. It is NOT the release check: that needs --gated '
+            f'--both-arms --repeat {RELEASE_REPEAT}, both vendors, default models.'
+        )
+    if verdict.failed:
         print('\nGATES BROKEN:', file=sys.stderr)
-        for line in broken:
+        for line in verdict.failed:
             print(f'  {line}', file=sys.stderr)
         return 1
+    if verdict.incomplete or stopped:
+        print('\nINCOMPLETE (a vendor error or a stopped run; this says nothing about the wording):', file=sys.stderr)
+        for line in verdict.incomplete:
+            print(f'  {line}', file=sys.stderr)
+        return 3
     return 0
 
 
