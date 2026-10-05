@@ -109,7 +109,7 @@ ASSESS_NOTES_NOTE = (
 # every result string below that the model may repeat.
 LOW_CONFIDENCE_NEXT_STEP = (
     'Lenz is not confident in this quick verdict. Tell the user that a deep check would investigate '
-    'the claim against independent sources and takes about a minute to a minute and a half, and ask '
+    'the claim against independent sources and takes about a minute or two, and ask '
     'whether to run it. Do not mention tool names or credits to the user. If they say yes, call '
     '`verify_claim` with this claim.'
 )
@@ -358,8 +358,8 @@ mcp = MCPServer(
     # never "always use me": over-triggering costs real money per call, and
     # connector directories expect a server to say when NOT to use it.
     #
-    # The quick check is the default because it answers in 15-20 seconds and
-    # costs one credit; a deep check takes a minute or more and costs ten (the
+    # The quick check is the default because it answers in ~15 seconds and
+    # costs one credit; a deep check takes ~90 seconds and costs ten (the
     # per-client wait is in config, VERIFY_WAIT_SECONDS_BY_USER_AGENT). The deep check is offered by confidence, and the
     # result rows carry the same recommendation so it does not rest on the
     # model remembering this text. No sentence about links: a deep check is
@@ -374,7 +374,7 @@ mcp = MCPServer(
         'date, a quote or an attribution. Not for opinions, predictions, arithmetic, how code behaves '
         'or text with no checkable claim. '
         'Start with `assess_claim`, the quick check, for one claim or a whole text: a verdict and a '
-        'confidence for each claim in about 15-20 seconds. Present a quick verdict as a first read, not '
+        'confidence for each claim in ~15 seconds. Present a quick verdict as a first read, not '
         "as final. When a row carries a `rationale`, show it with the verdict as the reviewers' reasoning, "
         'never as sourced evidence; when it carries a `dissent`, say that a reviewer disagreed and why. '
         'Then act on its confidence: on low, or when the claim is high-stakes for the user '
@@ -383,7 +383,7 @@ mcp = MCPServer(
         'pushing it. On a long text, name at most the two claims that matter; never start '
         'deep checks across every row. '
         '`verify_claim` is the deep check: a 1-10 score, the key finding, warnings and the '
-        'main sources, in about 60-90 seconds, for more credits. '
+        'main sources, in ~90 seconds, for more credits. '
         "Never start one without the user's yes, unless they asked for sources, a deep check or a "
         'verification: then run it directly. Say a deep check is running; if the call returns '
         'first, `get_verification` waits for it. A deep check '
@@ -822,7 +822,7 @@ async def assess_claim(
     ] = None,
 ) -> dict[str, Any]:
     """The quick check: a verdict and a bucketed confidence for each factual claim in
-    a text or a list (3-model panel, about 15-20 seconds, one credit per claim).
+    a text or a list (3-model panel, ~15 seconds, one credit per claim).
     Use it when the user asks to fact-check or double-check a factual statement
     or a text (“fact-check this”, “double-check that”), asks whether one is true
     or accurate (“is that true?”, “is this accurate?”), or doubts a factual
@@ -969,7 +969,7 @@ def _submitted_message(*, already_running: bool) -> str:
     """
     lead = 'This claim is already being checked.' if already_running else 'The check has started and is still running.'
     tail = (
-        'Tell the user it is running and usually takes about a minute to a minute and a half. '
+        'Tell the user it is running and usually takes about a minute or two. '
         'Do not mention tool names to the user. Then call '
         '`get_verification` with this task_id: it waits and returns the result when the check finishes. '
         'Call it again while it is still processing. If the conversation moves on first, call '
@@ -1147,7 +1147,7 @@ async def verify_claim(
     ] = 'standard',
 ) -> dict[str, Any]:
     """The deep check: a verdict with a 1–10 score, the key finding, warnings and the
-    main sources for ONE claim (about a minute to a minute and a half).
+    main sources for ONE claim (~90 seconds).
 
     Not the default. Run only when the user asked for sources, a deep check or
     a verification, or agreed after a quick check; a plain "check this" is

@@ -40,7 +40,7 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
    (a resolved pronoun, a dropped "analysts say", an added figure) is no longer the
    claim the user made.
 
-2. **Screen with `assess_claim`** (the quick check, about 15-20 seconds). Pass a
+2. **Screen with `assess_claim`** (the quick check, ~15 seconds). Pass a
    pasted text, a draft or an answer in `claim`, whole and unedited: every claim Lenz
    finds in it gets its own row, up to 20. Use `claims` (a list, up to 20, one call)
    only when the user listed the claims separately themselves. Each row returns a
@@ -50,7 +50,7 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
    `claim` shows. Present every quick verdict as a first read.
 
 3. **Offer `verify_claim`; do not start it unasked.** It is the deep check: sourced,
-   about a minute to a minute and a half, ten times the credits of a quick-check row.
+   ~90 seconds, ten times the credits of a quick-check row.
    By the row's confidence: on **low** (the row carries `recommend_verify: true`), or
    when the claim is high-stakes for the user (health, safety, legal, financial, about
    to be published), RECOMMEND it; on **medium**, or when a row carries a `dissent`,
@@ -114,5 +114,5 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
 > **You:** That comes back **False**, high confidence, as a first read: the reviewers'
 > reasoning is that most new businesses survive their first year and official figures
 > put first-year closures at about one in five. This was a quick check, so no sources
-> are shown. Want me to run a deep check against sources? It takes about a minute to a
-> minute and a half.
+> are shown. Want me to run a deep check against sources? It takes about a
+> minute or two.

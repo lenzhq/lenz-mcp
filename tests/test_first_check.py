@@ -360,14 +360,27 @@ def test_instructions_carry_the_supersede_rule_and_the_ways_back():
 
 
 def test_no_model_facing_text_says_a_deep_check_takes_fifteen_seconds():
-    """A deep check usually runs past a minute, at either depth, so no
-    model-facing text may promise a check in seconds."""
-    texts = [server.mcp.instructions]
+    """A deep check runs past a minute (~90 s standard, ~60 s low), so
+    verify_claim's own text may not promise it in seconds; only the quick
+    check (~15 seconds) may."""
+    verify = _tools()['verify_claim']
+    texts = [verify.description or '']
+    texts.extend((p.get('description') or '') for p in (verify.input_schema or {}).get('properties', {}).values())
+    for text in texts:
+        for wrong in ('~15s', '15 seconds', '~10s'):
+            assert wrong not in text, (wrong, text[:80])
+
+
+def test_no_model_facing_text_states_a_retired_duration():
+    """The stated durations are ~15 seconds (quick) and ~90 seconds or
+    "about a minute or two" (deep); the older figures stay out of every
+    model-facing text."""
+    texts = [server.mcp.instructions, server.LOW_CONFIDENCE_NEXT_STEP]
     for tool in _tools().values():
         texts.append(tool.description or '')
         texts.extend((p.get('description') or '') for p in (tool.input_schema or {}).get('properties', {}).values())
     for text in texts:
-        for wrong in ('~15s', '15 seconds', '~10s', '~90s'):
+        for wrong in ('15-20', '60-90', '~10s', 'a minute and a half'):
             assert wrong not in text, (wrong, text[:80])
 
 
@@ -1314,7 +1327,7 @@ def test_the_guard_catches_what_it_is_for():
 def test_low_confidence_next_step_is_the_approved_say_do_text():
     assert server.LOW_CONFIDENCE_NEXT_STEP == (
         'Lenz is not confident in this quick verdict. Tell the user that a deep check would investigate '
-        'the claim against independent sources and takes about a minute to a minute and a half, and ask '
+        'the claim against independent sources and takes about a minute or two, and ask '
         'whether to run it. Do not mention tool names or credits to the user. If they say yes, call '
         '`verify_claim` with this claim.'
     )
