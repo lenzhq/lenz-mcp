@@ -39,9 +39,31 @@ from evals.tool_choice.manifest import Manifest
 # the exact id is written into every result file — nobody should read a number
 # here as "Claude" or "ChatGPT" in general.
 #
-# `gpt-5.6-terra` is an EXACT tier id on purpose: the bare `gpt-5.6` alias may
-# route to a different, dearer tier, and a result must name the model it ran.
-DEFAULT_MODELS = {'anthropic': 'claude-sonnet-5', 'openai': 'gpt-5.6-terra'}
+# Refreshed 2026-10-05 to the newest of each line: Sonnet 5.5 (was Sonnet 5) and `gpt-6-sol` (was
+# `gpt-5.6-terra`; GPT-6 has no Terra tier). Each is an EXACT id on purpose: a
+# bare family alias may route to a different, dearer tier, and a result must
+# name the model it ran. `--check-fresh` accepts only a result measured on
+# THESE models, so changing a default makes every earlier result stale.
+DEFAULT_MODELS = {'anthropic': 'claude-sonnet-5-5', 'openai': 'gpt-6-sol'}
+
+# A tool the real apps put beside the connector's: a general web search. The
+# connector is normally the ONLY tool the model sees in this eval, which flatters
+# every "must not fire" case (nothing else to reach for) and understates every
+# under-trigger case (nothing competes). `--distractor` adds this one; a call to
+# it is never scored as a Lenz call (see `scoring.judge`). Report-only.
+DISTRACTOR_NAME = 'web_search'
+DISTRACTOR_TOOL = {
+    'name': DISTRACTOR_NAME,
+    'description': (
+        'Search the web and return the top results with short snippets. Use it for current events '
+        'and for anything you do not already know.'
+    ),
+    'input_schema': {
+        'type': 'object',
+        'properties': {'query': {'type': 'string', 'description': 'The search query.'}},
+        'required': ['query'],
+    },
+}
 
 MAX_TOKENS = 1024
 
@@ -95,14 +117,72 @@ def _system_prompt(manifest: Manifest, with_instructions: bool) -> str:
     return manifest.instructions
 
 
-def _messages(history: tuple[tuple[str, str], ...], prompt: str) -> list[dict[str, Any]]:
-    turns = [{'role': role, 'content': text} for role, text in history]
-    turns.append({'role': 'user', 'content': prompt})
+def _tool_text(result: dict[str, Any]) -> str:
+    """A tool result as a client shows it to its model: the JSON the tool returned."""
+    return json.dumps(result, ensure_ascii=False)
+
+
+def _anthropic_messages(history: tuple[Any, ...], prompt: str) -> list[dict[str, Any]]:
+    """History as Anthropic messages: a `ToolExchange` is a real `tool_use` block and its `tool_result`."""
+    from evals.tool_choice.cases import ToolExchange
+
+    turns: list[dict[str, Any]] = []
+    for index, turn in enumerate(history):
+        if isinstance(turn, ToolExchange):
+            call_id = f'toolu_eval{index:02d}'
+            turns.append(
+                {
+                    'role': 'assistant',
+                    'content': [{'type': 'tool_use', 'id': call_id, 'name': turn.name, 'input': turn.arguments}],
+                }
+            )
+            turns.append(
+                {
+                    'role': 'user',
+                    'content': [{'type': 'tool_result', 'tool_use_id': call_id, 'content': _tool_text(turn.result)}],
+                }
+            )
+        else:
+            role, text = turn
+            turns.append({'role': role, 'content': text})
+    if prompt:
+        turns.append({'role': 'user', 'content': prompt})
     return turns
 
 
+def _openai_input(history: tuple[Any, ...], prompt: str) -> list[dict[str, Any]]:
+    """History as Responses API input items: a `ToolExchange` is a `function_call` and its output."""
+    from evals.tool_choice.cases import ToolExchange
+
+    items: list[dict[str, Any]] = []
+    for index, turn in enumerate(history):
+        if isinstance(turn, ToolExchange):
+            call_id = f'call_eval{index:02d}'
+            items.append(
+                {
+                    'type': 'function_call',
+                    'call_id': call_id,
+                    'name': turn.name,
+                    'arguments': json.dumps(turn.arguments, ensure_ascii=False),
+                }
+            )
+            items.append({'type': 'function_call_output', 'call_id': call_id, 'output': _tool_text(turn.result)})
+        else:
+            role, text = turn
+            items.append({'role': role, 'content': text})
+    if prompt:
+        items.append({'role': 'user', 'content': prompt})
+    return items
+
+
 def ask_anthropic(
-    manifest: Manifest, history: tuple[tuple[str, str], ...], prompt: str, *, model: str, with_instructions: bool
+    manifest: Manifest,
+    history: tuple[Any, ...],
+    prompt: str,
+    *,
+    model: str,
+    with_instructions: bool,
+    distractor: bool = False,
 ) -> Turn:
     import anthropic
 
@@ -116,7 +196,7 @@ def ask_anthropic(
             'description': tool['description'],
             'input_schema': tool['input_schema'],
         }
-        for tool in manifest.tools
+        for tool in [*manifest.tools, *([DISTRACTOR_TOOL] if distractor else [])]
     ]
     # Prompt caching: the manifest is identical across every case in an arm, so
     # the breakpoint goes on the LAST tool — a cache_control marker caches
@@ -125,7 +205,7 @@ def ask_anthropic(
     kwargs: dict[str, Any] = {
         'model': model,
         'max_tokens': MAX_TOKENS,
-        'messages': _messages(history, prompt),
+        'messages': _anthropic_messages(history, prompt),
         'tools': tools,
     }
     system = _system_prompt(manifest, with_instructions)
@@ -153,14 +233,20 @@ def ask_anthropic(
 
 
 def ask_openai(
-    manifest: Manifest, history: tuple[tuple[str, str], ...], prompt: str, *, model: str, with_instructions: bool
+    manifest: Manifest,
+    history: tuple[Any, ...],
+    prompt: str,
+    *,
+    model: str,
+    with_instructions: bool,
+    distractor: bool = False,
 ) -> Turn:
     from openai import OpenAI
 
     client = OpenAI(api_key=os.environ['OPENAI_API_KEY'], max_retries=0)  # see ask_anthropic
     kwargs: dict[str, Any] = {
         'model': model,
-        'input': _messages(history, prompt),
+        'input': _openai_input(history, prompt),
         'tools': [
             {
                 'type': 'function',
@@ -168,7 +254,7 @@ def ask_openai(
                 'description': tool['description'],
                 'parameters': tool['input_schema'],
             }
-            for tool in manifest.tools
+            for tool in [*manifest.tools, *([DISTRACTOR_TOOL] if distractor else [])]
         ],
     }
     system = _system_prompt(manifest, with_instructions)
