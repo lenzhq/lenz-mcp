@@ -2,10 +2,10 @@
   <img src="assets/logo.png" alt="Lenz" width="96" height="96">
 </p>
 
-<h1 align="center">Lenz MCP Server</h1>
+<h1 align="center">Lenz Fact-Check</h1>
 
 <p align="center">
-  Fact-check claims against independent sources — from any MCP client.
+  The Lenz MCP server: check the factual claims in a draft or an answer against independent sources, from any MCP client.
 </p>
 
 <p align="center">
