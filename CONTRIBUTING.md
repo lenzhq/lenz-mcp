@@ -123,6 +123,10 @@ Results are written after every case, so a crash keeps what was measured.
 `--distractor` also offers a `web_search` tool, as the real apps do. It is
 report-only and never makes a result release-fresh.
 
+## The Claude Code plugin
+
+`plugins/lenz/` is the plugin Claude Code installs (`lenz@lenz`) and Anthropic's directory lists: its manifest, the server config and the `lenz-fact-check` skill. It carries a `version`, so a commit elsewhere in the repo never reaches installed plugins. **Any change under `plugins/lenz/` bumps `version` in `plugins/lenz/.claude-plugin/plugin.json`**, or installs keep the old copy. Check with `claude plugin validate --strict plugins/lenz`.
+
 ## Running your own server
 
 ```bash
