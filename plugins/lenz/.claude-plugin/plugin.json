@@ -7,7 +7,7 @@
     "name": "Lenz",
     "url": "https://lenz.io"
   },
-  "homepage": "https://lenz.io/integrations/mcp-server?utm_source=claude-code-plugin&utm_medium=directory",
+  "homepage": "https://lenz.io/integrations/mcp-server",
   "repository": "https://github.com/lenzhq/lenz-mcp",
   "license": "Apache-2.0",
   "keywords": [
