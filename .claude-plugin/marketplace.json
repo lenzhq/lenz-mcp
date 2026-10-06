@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "lenz",
-      "source": "./"
+      "source": "./plugins/lenz"
     }
   ]
 }
