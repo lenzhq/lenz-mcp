@@ -1,0 +1,14 @@
+{
+  "name": "lenz",
+  "description": "Lenz Fact-Check for Claude Code: check the claims in a draft or an answer against independent sources.",
+  "owner": {
+    "name": "Lenz",
+    "url": "https://lenz.io"
+  },
+  "plugins": [
+    {
+      "name": "lenz-fact-check",
+      "source": "./"
+    }
+  ]
+}

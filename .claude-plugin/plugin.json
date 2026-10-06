@@ -1,0 +1,12 @@
+{
+  "name": "lenz-fact-check",
+  "displayName": "Lenz Fact-Check",
+  "description": "Check the factual claims in a draft or an answer against independent sources: a quick verdict with a confidence for each claim, or a deep check that shows the key finding and its sources.",
+  "author": { "name": "Lenz", "url": "https://lenz.io" },
+  "homepage": "https://lenz.io/integrations/mcp-server?utm_source=claude-code-plugin&utm_medium=directory",
+  "repository": "https://github.com/lenzhq/lenz-mcp",
+  "license": "Apache-2.0",
+  "keywords": ["fact-check", "verification", "sources", "citations", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": "./.claude-plugin/mcp.json"
+}

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "lenz": {
+      "type": "http",
+      "url": "https://lenz.io/mcp"
+    }
+  }
+}

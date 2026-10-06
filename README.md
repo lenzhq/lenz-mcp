@@ -112,6 +112,16 @@ You can revoke the connection at any time; see the [privacy policy](https://lenz
 
 ### Claude Code
 
+As a plugin (the connector plus the [`lenz-fact-check`](skills/lenz-fact-check) skill;
+sign in with `/mcp` on first use):
+
+```bash
+claude plugin marketplace add lenzhq/lenz-mcp
+claude plugin install lenz-fact-check@lenz
+```
+
+Or the connector alone, with an API key:
+
 ```bash
 claude mcp add --scope user --transport http lenz https://lenz.io/mcp \
   --header "Authorization: Bearer ${LENZ_API_KEY}"
