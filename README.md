@@ -117,7 +117,7 @@ sign in with `/mcp` on first use):
 
 ```bash
 claude plugin marketplace add lenzhq/lenz-mcp
-claude plugin install lenz-fact-check@lenz
+claude plugin install lenz@lenz
 ```
 
 Or the connector alone, with an API key:
