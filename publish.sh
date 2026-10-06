@@ -42,8 +42,8 @@ REGISTRY_DOMAIN="lenz.io"
 SMITHERY_NAME="lenz/fact-check"                 # <namespace>/<server>
 SMITHERY_DISPLAY_NAME="Lenz Fact-Check"
 SMITHERY_ICON_URL="https://lenz.io/lenz-wordmark-512.png"
-# Tagged so a visit from the listing is recorded as its own acquisition source.
-SMITHERY_HOMEPAGE="https://lenz.io/integrations/mcp-server?utm_source=smithery&utm_medium=directory"
+# Plain, not UTM-tagged: Smithery prints the homepage address as text on the listing.
+SMITHERY_HOMEPAGE="https://lenz.io/integrations/mcp-server"
 SMITHERY_REPO_URL="https://github.com/lenzhq/lenz-mcp"
 SMITHERY_LICENSE="Apache-2.0"
 SMITHERY_DESCRIPTION="Check the factual claims in a draft or an answer against independent sources. assess_claim is the quick check (~15 seconds): a multi-model verdict (True → False) for each claim, with a bucketed confidence and usually the reviewers' reasoning. verify_claim is the deep check (~90 seconds): research → debate → panel review, returning a score, the key finding, warnings and the sources with the quote behind each. ask_followup answers grounded follow-ups on a completed check, and list_verifications returns recent deep checks. Verdicts are directional, not absolute. Connect via OAuth or a free Lenz API key."
