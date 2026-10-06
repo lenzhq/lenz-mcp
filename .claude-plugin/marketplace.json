@@ -7,7 +7,7 @@
   },
   "plugins": [
     {
-      "name": "lenz-fact-check",
+      "name": "lenz",
       "source": "./"
     }
   ]
