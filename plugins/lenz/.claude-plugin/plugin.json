@@ -16,6 +16,5 @@
     "citations",
     "mcp"
   ],
-  "skills": "./skills/",
-  "mcpServers": "./.claude-plugin/mcp.json"
+  "privacyPolicyUrl": "https://lenz.io/privacy"
 }

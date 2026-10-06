@@ -112,7 +112,7 @@ You can revoke the connection at any time; see the [privacy policy](https://lenz
 
 ### Claude Code
 
-As a plugin (the connector plus the [`lenz-fact-check`](skills/lenz-fact-check) skill;
+As a plugin (the connector plus the [`lenz-fact-check`](plugins/lenz/skills/lenz-fact-check) skill;
 sign in with `/mcp` on first use):
 
 ```bash
@@ -241,11 +241,11 @@ one does clear on its own, and the result carries `retry_after_seconds` telling 
 ## Skills
 
 Prefer a guided workflow to calling the tools yourself? The
-[`lenz-fact-check`](skills/lenz-fact-check) skill turns "is this true?" into a
+[`lenz-fact-check`](plugins/lenz/skills/lenz-fact-check) skill turns "is this true?" into a
 structured pass: it runs a quick check on the text, recommends a deep `verify_claim` for the
 claims that matter, and reports verdicts with their confidence, and sources where a deep
 check ran (with the directional-not-absolute caveat built in). Point your agent at
-[`skills/lenz-fact-check/SKILL.md`](skills/lenz-fact-check/SKILL.md).
+[`plugins/lenz/skills/lenz-fact-check/SKILL.md`](plugins/lenz/skills/lenz-fact-check/SKILL.md).
 
 ## Running the server yourself
 
