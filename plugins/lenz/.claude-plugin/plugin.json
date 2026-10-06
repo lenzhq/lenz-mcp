@@ -16,5 +16,8 @@
     "citations",
     "mcp"
   ],
-  "privacyPolicyUrl": "https://lenz.io/privacy"
+  "privacyPolicyUrl": "https://lenz.io/privacy",
+  "documentationUrl": "https://lenz.io/integrations/mcp-server",
+  "supportUrl": "https://lenz.io/contact",
+  "termsOfServiceUrl": "https://lenz.io/terms"
 }
