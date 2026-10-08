@@ -1585,6 +1585,8 @@ def test_protocol_all_tools_registered():
         'check_usage',
         'ask_followup',
         'list_verifications',
+        'check_citations',
+        'get_citation_check',
     }
 
 
@@ -1609,6 +1611,11 @@ _EXPECTED_HINTS = {
     'check_usage': (True, False, True, False),
     'list_verifications': (True, False, True, False),
     'ask_followup': (False, False, False, True),
+    # A citation check debits a credit for every citation it checks and reads the cited
+    # sources on the public web; the same input is replayed for a day and then starts a
+    # new charged check, so it is not idempotent. Reading one back changes nothing.
+    'check_citations': (False, False, False, True),
+    'get_citation_check': (True, False, True, False),
 }
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextvars
 import hashlib
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -690,6 +691,52 @@ async def ask(authorization: Authorization, *, verification_id: str, message: st
         json={'message': message, 'language': language},
         timeout=config.ASK_TIMEOUT,
     )
+
+
+def _canonical_json(value: Any) -> str:
+    """The same JSON for the same content, whatever the key order.
+
+    Sorted keys, no spaces, characters kept as written, and any unsendable
+    surrogate dropped first, so the text hashed is the text sent.
+    """
+    return json.dumps(_utf8_safe(value), sort_keys=True, ensure_ascii=False, separators=(',', ':'))
+
+
+async def citecheck(
+    authorization: Authorization,
+    *,
+    text: str | None = None,
+    pairs: list[dict[str, Any]] | None = None,
+    max_citations: int | None = None,
+) -> ApiResponse:
+    """Start a citation check (POST /citecheck): a draft's text, or statement-source pairs.
+
+    Exactly the fields given are sent, and the idempotency key is derived from
+    that complete body plus the operation name. So an input mode, a pair
+    boundary, a quote, a url against a doi, and an omitted field against an
+    explicit one are all different requests with different keys, while the same
+    request sent twice joins the first (the API replays a key's first answer for
+    a day, a failed check included).
+    """
+    body: dict[str, Any] = {}
+    if text is not None:
+        body['text'] = text
+    if pairs is not None:
+        body['pairs'] = pairs
+    if max_citations is not None:
+        body['max_citations'] = max_citations
+    return await _request(
+        'POST',
+        '/citecheck',
+        authorization,
+        json=body,
+        idempotency_key=_idem_key('citecheck', _canonical_json(body)),
+    )
+
+
+async def citecheck_status(authorization: Authorization, *, citecheck_id: str) -> ApiResponse:
+    """A citation check as it stands (GET /citechecks/{id}). Never cached by the API."""
+    return await _request('GET', f'/citechecks/{citecheck_id}', authorization)
 
 
 async def me_usage(authorization: Authorization) -> ApiResponse:

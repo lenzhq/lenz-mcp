@@ -182,3 +182,112 @@ def verify_needs_input_result(claim: str, task_id: str, offered: list[str]) -> d
             ),
         },
     )
+
+
+def citecheck_running_result(text: str, citecheck_id: str) -> dict[str, Any]:
+    """What `check_citations` returns when the check outlasts the call's wait."""
+    from lenz_mcp import config
+
+    with mock.patch.object(config, 'verify_wait_seconds', lambda identity: 0):
+        return _run(
+            'check_citations',
+            (text,),
+            {
+                'citecheck': (202, {'citecheck_id': citecheck_id, 'status': 'queued'}),
+                'citecheck_status': (
+                    200,
+                    {
+                        'citecheck_id': citecheck_id,
+                        'status': 'checking',
+                        'poll_after_seconds': 10,
+                        'summary': {
+                            'citations_selected': 3,
+                            'citation_checks': {'checked': 1, 'unchecked': 0, 'failed': 0},
+                        },
+                    },
+                ),
+            },
+        )
+
+
+def citecheck_row(index: int, url: str, statement: str, finding: str, snippet: str = '', rationale: str = '') -> dict:
+    """One `citations[]` row of a finished citation check, in the API's shape."""
+    supported = finding in ('supported', 'partly_supported', 'contradicted', 'not_in_source')
+    return {
+        'index': index,
+        'reference': url,
+        'cited_url': url,
+        'doi': None,
+        'statement': statement,
+        'quotes': [],
+        'position': None,
+        'result': {
+            'finding': finding,
+            'source': 'support' if supported else None,
+            'is_issue': finding in ('contradicted', 'not_in_source', 'page_not_found'),
+        },
+        'check': {
+            'status': 'completed',
+            'page_read': 'full',
+            'support': finding if supported else 'unchecked',
+            'snippet': snippet or None,
+            'rationale': rationale or None,
+            'unchecked_reason': None,
+            'hint': None,
+            'failure': None,
+        },
+    }
+
+
+def citecheck_completed_result(
+    text: str, citecheck_id: str, rows: list[dict[str, Any]], more: list[tuple[str, str]] = ()
+) -> dict[str, Any]:
+    """What `check_citations` returns for a finished check. `more` is (url, sentence) pairs left unchecked."""
+    issues = [
+        {
+            'citation_index': r['index'],
+            'reference': r['reference'],
+            'cited_url': r['cited_url'],
+            'doi': None,
+            'statement': r['statement'],
+            'quotes': [],
+            'position': None,
+            'finding': r['result']['finding'],
+            'source': r['result']['source'],
+            'snippet': r['check']['snippet'],
+            'rationale': r['check']['rationale'],
+            'failure': None,
+        }
+        for r in rows
+        if r['result']['is_issue']
+    ]
+    body = {
+        'citecheck_id': citecheck_id,
+        'status': 'completed',
+        'outcome': 'issues_found' if issues else 'clean',
+        'summary': {
+            'citations_found': len(rows) + len(more),
+            'citations_selected': len(rows),
+            'citation_limit': 20,
+            'citation_limit_exceeded': bool(more),
+            'citation_checks': {'checked': len(rows), 'unchecked': 0, 'failed': 0},
+            'citation_issues': len(issues),
+        },
+        'credits': {'charged': len(rows)},
+        'citations': rows,
+        'citation_issues': issues,
+        'citation_failures': [],
+        'failure': None,
+        'more_citations': [
+            {'index': len(rows) + i, 'reference': url, 'cited_url': url, 'doi': None, 'sentence': sentence}
+            for i, (url, sentence) in enumerate(more)
+        ],
+    }
+    return _run(
+        'check_citations',
+        (text,),
+        {
+            'citecheck': (202, {'citecheck_id': citecheck_id, 'status': 'queued'}),
+            'citecheck_status': (200, body),
+        },
+    )

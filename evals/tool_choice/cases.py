@@ -372,6 +372,56 @@ INJECTED = (
     ),
 )
 
+
+# ── citation checks: the drafts and the conversations around them ────────
+
+_CITED_DRAFT = (
+    'Unemployment fell to 4.1% in 2024 [report](https://reports.example.org/report-2024). '
+    'The agency said the programme would end in June [statement](https://news.example.com/statement). '
+    'Sea levels rose 3 mm last year [survey](https://data.example.net/survey).'
+)
+_CITECHECK_TASK = 'ab12cd34'
+_MORE_SENTENCE = 'Its exports doubled between 2019 and 2023.'
+_MORE_URL = 'https://trade.example.com/exports'
+
+CITECHECK_RUNNING = (
+    ('user', f'Do the links in this draft really support what it says? "{_CITED_DRAFT}"'),
+    ToolExchange(
+        'check_citations', {'text': _CITED_DRAFT}, real.citecheck_running_result(_CITED_DRAFT, _CITECHECK_TASK)
+    ),
+)
+
+CITECHECK_WITH_MORE = (
+    ('user', f'Do the links in this draft really support what it says? "{_CITED_DRAFT}"'),
+    ToolExchange(
+        'check_citations',
+        {'text': _CITED_DRAFT},
+        real.citecheck_completed_result(
+            _CITED_DRAFT,
+            _CITECHECK_TASK,
+            [
+                real.citecheck_row(
+                    0,
+                    'https://reports.example.org/report-2024',
+                    'Unemployment fell to 4.1% in 2024.',
+                    'contradicted',
+                    snippet='Unemployment stood at 4.6% in 2024.',
+                    rationale='The report gives 4.6%, not 4.1%.',
+                ),
+                real.citecheck_row(
+                    1, 'https://news.example.com/statement', 'The agency said the programme would end.', 'supported'
+                ),
+            ],
+            more=[(_MORE_URL, _MORE_SENTENCE)],
+        ),
+    ),
+    (
+        'assistant',
+        'One citation does not hold up: the report gives 4.6%, not 4.1%. The second is supported. '
+        'One more citation was not covered by this check.',
+    ),
+)
+
 CASES: tuple[Case, ...] = (
     # ── The eight OpenAI submission cases, verbatim ───────────────────
     Case(
@@ -681,6 +731,133 @@ CASES: tuple[Case, ...] = (
             'about who said what, not an opinion, and not worth a deep check unasked.'
         ),
     ),
+    # ── Citation checks ───────────────────────────────────────────────
+    Case(
+        id='citations-named-sources-draft',
+        group='named',
+        prompt=f'Check with Lenz whether the sources in this draft support it: "{_CITED_DRAFT}"',
+        expect='check_citations',
+        expect_args={'text': _says('reports.example.org/report-2024', 'data.example.net/survey'), 'pairs': _unset},
+        forbid=('assess_claim', 'verify_claim'),
+        why=(
+            "The user asks whether the draft's SOURCES support it, which is the citation check and not "
+            'a fact-check of the draft. The draft goes in whole, with its links, in `text`.'
+        ),
+    ),
+    Case(
+        id='citations-unnamed-links-support',
+        group='unnamed_triggers',
+        prompt=f'Do the links in this paragraph actually back up what it says? "{_CITED_DRAFT}"',
+        expect='check_citations',
+        expect_args={'text': _says('reports.example.org/report-2024'), 'pairs': _unset},
+        forbid=('assess_claim', 'verify_claim'),
+        why=(
+            'No tool is named and no check word is used: the intent (do the cited links support the '
+            'text) has to be enough, and it must not fall back to checking the facts.'
+        ),
+    ),
+    Case(
+        id='citations-reference-list',
+        group='unnamed_triggers',
+        prompt=(
+            'Are my citations accurate? "Remote work raised output at the firm [1]. Absenteeism then fell [2].\n\n'
+            '[1] https://papers.example.org/remote-work-output\n[2] https://papers.example.org/absenteeism-study"'
+        ),
+        expect='check_citations',
+        expect_args={
+            'text': _says('[1]', 'papers.example.org/remote-work-output', 'papers.example.org/absenteeism-study')
+        },
+        forbid=('assess_claim', 'verify_claim'),
+        why='Numbered markers with a reference list are citations the draft makes; the whole text goes in.',
+    ),
+    Case(
+        id='citations-doi-pair',
+        group='unnamed_triggers',
+        prompt='Does the paper at doi 10.1038/nature12373 actually say that the diamond sensor works at room temperature?',
+        expect='check_citations',
+        expect_args={
+            'pairs': lambda v: (
+                isinstance(v, list)
+                and len(v) == 1
+                and isinstance(v[0], dict)
+                and v[0].get('doi') == '10.1038/nature12373'
+                and 'room temperature' in str(v[0].get('statement', '')).lower()
+                and not v[0].get('url')
+            ),
+            'text': _unset,
+        },
+        forbid=('assess_claim', 'verify_claim'),
+        why=(
+            'One named reference and the sentence that rests on it: `pairs` with the DOI alone (never a '
+            'url as well), the statement as the user wrote it, and no `text`.'
+        ),
+    ),
+    Case(
+        id='citations-plain-fact-check-stays-quick',
+        group='unnamed_triggers',
+        prompt=(
+            'Fact-check this paragraph: "Unemployment fell to 4.1% in 2024. The agency said the programme '
+            'would end in June."'
+        ),
+        expect='assess_claim',
+        expect_args={'claim': _says('unemployment fell', 'programme would end'), 'claims': _unset},
+        forbid=('check_citations', 'verify_claim'),
+        why=(
+            'A plain fact-check request stays with the quick check, links or no links: the citation '
+            'check is for a question about the sources, and this is not one.'
+        ),
+    ),
+    Case(
+        id='citations-get-follows-running',
+        group='tool_results',
+        history=CITECHECK_RUNNING,
+        prompt='',
+        expect='get_citation_check',
+        expect_args={'citecheck_id': _is(_CITECHECK_TASK)},
+        forbid=('check_citations', 'assess_claim', 'verify_claim', 'get_verification'),
+        why=(
+            'A check that outlasts the call comes back `running` with a citecheck_id, and the result '
+            'says to call `get_citation_check` with it. Starting the check again would be a second '
+            'charge; `get_verification` is for deep checks and would not find it.'
+        ),
+    ),
+    Case(
+        id='citations-next-batch-passes-candidates-back',
+        group='tool_results',
+        history=CITECHECK_WITH_MORE,
+        prompt='Yes, check the rest.',
+        expect='check_citations',
+        expect_args={
+            'pairs': lambda v: (
+                isinstance(v, list)
+                and len(v) == 1
+                and isinstance(v[0], dict)
+                and v[0].get('statement') == _MORE_SENTENCE
+                and v[0].get('url') == _MORE_URL
+                and not v[0].get('doi')
+            ),
+            'text': _unset,
+        },
+        forbid=('assess_claim', 'verify_claim'),
+        why=(
+            'The result lists the citations it did not cover as ready-made candidates and says to pass '
+            'them back exactly as listed. Sending the whole text again would replay the first check, '
+            'and a reference the model wrote itself is a reference nobody found in the draft.'
+        ),
+    ),
+    Case(
+        id='citations-no-deep-check-on-a-found-problem',
+        group='escalation',
+        history=CITECHECK_WITH_MORE,
+        prompt='Thanks.',
+        expect=RESTRAINT,
+        at_most=(('check_citations', 1),),
+        forbid=('verify_claim', 'assess_claim'),
+        why=(
+            'A citation problem is the answer to the question asked. It does not license a deep check '
+            'of the claims, which the user did not ask for and which costs ten times a quick check.'
+        ),
+    ),
     # ── Must not fire ─────────────────────────────────────────────────
     Case(
         id='quiet-opinion',
@@ -770,6 +947,33 @@ CASES: tuple[Case, ...] = (
             'assistant is about to write is not what was asked; the poem cases cover the topic with '
             'no facts, this covers the text that is full of them.'
         ),
+    ),
+    Case(
+        id='quiet-reformat-references',
+        group='must_not_fire',
+        prompt=(
+            'Reformat these references into APA style: Smith, J. 2021. Remote work and output. Journal of '
+            'Work 12(3), 45-60. https://papers.example.org/remote-work-output'
+        ),
+        expect=NONE,
+        why='A formatting task over references. Nobody asked whether the sources support anything.',
+    ),
+    Case(
+        id='quiet-suggest-sources',
+        group='must_not_fire',
+        prompt='Can you suggest a few sources I could cite for a paragraph about the Eiffel Tower?',
+        expect=NONE,
+        why='Asking for sources to cite is the opposite of asking whether the cited ones hold up.',
+    ),
+    Case(
+        id='quiet-summarise-linked-text',
+        group='must_not_fire',
+        prompt=(
+            'Summarise this for me: "The committee postponed the vote until the autumn session '
+            '[minutes](https://council.example.org/minutes)."'
+        ),
+        expect=NONE,
+        why='A summary request over text that happens to carry a link.',
     ),
     # ── Escalation discipline ─────────────────────────────────────────
     Case(
