@@ -1,16 +1,24 @@
-"""The tools read both shapes of the Lenz API's responses.
+"""The tools read both shapes of the Lenz API's responses, and say the same thing.
 
 The API answers in an older shape and a newer one. `api_shapes.json` holds the
-same response in each (endpoint, outcome), and every test here runs a tool on
-both and checks two things: the tool result is the SAME whichever shape
-arrived, and it says what it said before the newer shape existed. The card and
-the model therefore see one vocabulary either way.
+same response in each (endpoint and outcome). `api_shapes_expected.json` is the
+oracle: what each tool returned for the OLDER body before this server could
+read the newer one, recorded once from that earlier code and frozen. Every
+scenario here runs the tool on both bodies and requires exactly the oracle's
+output from each, serialized byte for byte.
+
+Rebuild the oracle only from the code as it was before the change (a checkout
+of that commit with this file and the fixtures copied in):
+
+    LENZ_MCP_WRITE_API_ORACLE=tests/api_shapes_expected.json uv run pytest tests/test_api_shapes.py
 """
 
 import asyncio
 import json
+import os
 import pathlib
 import types
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -18,7 +26,10 @@ import pytest
 from lenz_mcp import client, config, server
 from lenz_mcp.client import ApiResponse
 
-SHAPES: dict[str, dict[str, Any]] = json.loads((pathlib.Path(__file__).parent / 'api_shapes.json').read_text())
+HERE = pathlib.Path(__file__).parent
+SHAPES: dict[str, dict[str, Any]] = json.loads((HERE / 'api_shapes.json').read_text(encoding='utf-8'))
+ORACLE_PATH = HERE / 'api_shapes_expected.json'
+WRITE_ORACLE = os.environ.get('LENZ_MCP_WRITE_API_ORACLE', '')
 BOTH = ('legacy', 'canonical')
 
 
@@ -30,6 +41,7 @@ def _no_wait(monkeypatch):
     monkeypatch.setattr(server, '_sleep', _instant)
     monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS', 0.05)
     monkeypatch.setattr(config, 'VERIFY_WAIT_SECONDS_BY_IDENTITY', {'Claude-User': 0.05})
+    monkeypatch.setattr(config, 'CARD_ENABLED', True)
 
 
 def _ctx():
@@ -37,279 +49,190 @@ def _ctx():
     return types.SimpleNamespace(request_context=types.SimpleNamespace(request=request))
 
 
-def _response(name: str, shape: str) -> ApiResponse:
-    entry = SHAPES[name][shape]
-    return ApiResponse(status=entry['status'], data=entry['body'], headers=entry['headers'])
+def _response(fixture: str, shape: str) -> ApiResponse:
+    entry = SHAPES[fixture][shape]
+    # Lowercased like the real client's headers.
+    headers = {key.lower(): value for key, value in entry['headers'].items()}
+    return ApiResponse(status=entry['status'], data=entry['body'], headers=headers)
 
 
-def _stub(monkeypatch, api: str, response: ApiResponse) -> None:
+def _stub(m: pytest.MonkeyPatch, api: str, response: ApiResponse) -> None:
     async def _fake(*_args, **_kwargs):
         return response
 
-    monkeypatch.setattr(client, api, _fake)
+    m.setattr(client, api, _fake)
+
+
+# ── what each scenario runs ──────────────────────────────────────────
+
+
+def _assess(m, response):
+    _stub(m, 'assess', response)
+    return server.assess_claim('The text to check.', _ctx())
+
+
+def _poll(m, response):
+    _stub(m, 'verify_status', response)
+    return server.get_verification('a' * 32, _ctx())
+
+
+def _select(m, response):
+    _stub(m, 'select', response)
+    return server.select_claims('a' * 32, ['first', 'second'], _ctx())
+
+
+def _card_select(m, response):
+    _stub(m, 'select', response)
+    return server._select_claims_for_card('a' * 32, ['first', 'second'], _ctx())
+
+
+def _verify_error(m, response):
+    _stub(m, 'verify', response)
+    return server.verify_claim('The claim.', _ctx())
+
+
+def _usage(m, response):
+    _stub(m, 'me_usage', response)
+    return server.check_usage(_ctx())
+
+
+def _list(m, response):
+    _stub(m, 'list_verifications', response)
+    return server.list_verifications(_ctx())
+
+
+def _card_retry(m, response):
+    """A card retry of a failed run: allowed only when the poll says retryable."""
+    _stub(m, 'verify_status', response)
+    _stub(m, 'verify', ApiResponse(status=202, data={'task_id': 'n' * 32, 'status': 'queued'}))
+    return server._start_verification_for_card('The claim.', _ctx(), retry_of='f' * 32)
+
+
+Runner = Callable[[pytest.MonkeyPatch, ApiResponse], Any]
+
+SCENARIOS: dict[str, tuple[str, Runner]] = {}
+for _name, _runner in {
+    'assess__list_mixed_rows': _assess,
+    'assess__single_no_claim': _assess,
+    'assess__list_compound_item': _assess,
+    'assess__single_one_claim': _assess,
+    'assess__single_text_several_claims': _assess,
+    'assess__list_all_error_rows': _assess,
+    'synthetic__assess_low_confidence_row': _assess,
+    'synthetic__assess_failed_row_without_failure_block': _assess,
+    'synthetic__assess_empty_more_claims': _assess,
+    'verify__status_failed_live_retryable': _poll,
+    'verify__status_failed_live': _poll,
+    'verify__status_not_a_claim': _poll,
+    'verify__status_task_stuck': _poll,
+    'verify__stored_progress_failed_crashed': _poll,
+    'verify__stored_progress_failed_insufficient_evidence': _poll,
+    'verify__status_failed_durable': _poll,
+    'verify__status_failed_durable_framing': _poll,
+    'verify__status_not_a_claim_durable': _poll,
+    'verify__status_cancelled_durable': _poll,
+    'verify__status_needs_input': _poll,
+    'synthetic__needs_input_text_null': _poll,
+    'verify__status_completed': _poll,
+    'verify__status_processing': _poll,
+    'verify__select_202': _select,
+    'verify__batch_202': _select,
+    'verify__select_no_selection_pending_409': _select,
+    'errors__rate_limited_extract': _verify_error,
+    'review__429_review_in_flight': _verify_error,
+    'synthetic__429_zero_wait_header': _verify_error,
+    'synthetic__429_in_flight_no_header': _verify_error,
+    'verify__capacity_503': _verify_error,
+    'errors__service_unavailable_ask': _verify_error,
+    'errors__validation_wrong_type': _verify_error,
+    'verify__missing_claim_422': _verify_error,
+    'verify__invalid_depth_422': _verify_error,
+    'verify__misnamed_field_422': _verify_error,
+    'assess__422_no_input_field': _verify_error,
+    'verify__blank_claim_422': _verify_error,
+    'verify__batch_empty_422': _verify_error,
+    'errors__payment_required_verify': _verify_error,
+    'errors__not_found_verify_status': _verify_error,
+    'account__me_usage_pro_extra': _usage,
+    'account__me_usage_free_partly_spent': _usage,
+    'account__me_usage_extra_only': _usage,
+    'verify__list_200': _list,
+}.items():
+    SCENARIOS[_name] = (_name, _runner)
+for _name in ('verify__select_202', 'verify__batch_202'):
+    SCENARIOS[f'card_select:{_name}'] = (_name, _card_select)
+for _name in (
+    'verify__status_failed_live_retryable',
+    'verify__status_failed_durable',
+    'verify__status_not_a_claim',
+    'verify__stored_progress_failed_crashed',
+):
+    SCENARIOS[f'card_retry:{_name}'] = (_name, _card_retry)
 
+# Where the newer body cannot say what the older one said word for word,
+# because the older text is not derivable from it. Each entry names the one
+# field that differs and the value the newer body gives instead.
+KNOWN_DIFFERENCES: dict[str, dict[str, Any]] = {
+    # The older API wrote a failure read back from storage as "Pipeline
+    # stopped: <code>." and a live one as "Pipeline stopped at: <code>"; the
+    # newer body does not say which it was, so both read as the live form.
+    'verify__status_failed_durable': {'message': 'Pipeline stopped at: conclusion_failed'},
+    'verify__status_failed_durable_framing': {'message': 'Pipeline stopped at: framing_failed'},
+    'verify__status_not_a_claim_durable': {'message': 'Not a verifiable claim.'},
+    # The API's own sentence for a blank claim changed with the newer shape.
+    'verify__blank_claim_422': {'message': 'claim is required.'},
+}
 
-def _both(monkeypatch, run) -> dict[str, Any]:
-    """Run ``run(shape)`` for each shape; assert the results match; return one."""
-    results = {}
-    for shape in BOTH:
-        with monkeypatch.context() as m:
-            results[shape] = run(m, shape)
-    assert results['legacy'] == results['canonical']
-    return results['legacy']
 
+def _output(scenario: str, shape: str) -> Any:
+    fixture, runner = SCENARIOS[scenario]
+    with pytest.MonkeyPatch.context() as m:
+        return asyncio.run(runner(m, _response(fixture, shape)))
 
-def _run(coro):
-    return asyncio.run(coro)
 
+def _serialized(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, indent=1)
 
-def test_every_fixture_has_both_shapes():
-    for name, entry in SHAPES.items():
-        assert set(entry) == set(BOTH), name
-
-
-# ── assess ───────────────────────────────────────────────────────────
-
-
-def test_assess_rows_read_alike_in_both_shapes(monkeypatch):
-    def run(m, shape):
-        _stub(m, 'assess', _response('assess__list_mixed_rows', shape))
-        return _run(server.assess_claim(ctx=_ctx(), claims=['a', 'b', 'c', 'd']))
-
-    out = _both(monkeypatch, run)
-    rows = out['claims']
-    assert rows[0] == {'claim': 'Water boils at 100 C at sea level.', 'verdict': 'True', 'confidence': 'high'}
-    # A failed row keeps the older reading: verdict Error, confidence low, the
-    # older per-endpoint word for "nothing checkable", and the hint.
-    assert rows[1]['verdict'] == 'Error'
-    assert rows[1]['confidence'] == 'low'
-    assert rows[1]['error'] == 'no_claim'
-    assert rows[1]['hint'].startswith('The input is a greeting.')
-    assert rows[2]['error'] == 'upstream_unavailable'
-    assert rows[3]['error'] == 'framing_failed'
-    assert not any(row.get('recommend_verify') for row in rows)
-
-
-def test_assess_unchecked_extras_read_from_either_name(monkeypatch):
-    for shape in BOTH:
-        with monkeypatch.context() as m:
-            _stub(m, 'assess', _response('assess__list_compound_item', shape))
-            out = _run(server.assess_claim(ctx=_ctx(), claims=['x', 'y']))
-        assert out['claims'][0]['identified_claims'] == ['Second claim.', 'Third claim.'], shape
-        assert 'identified_claims' not in out['claims'][1], shape
-
-
-def test_assess_one_claim_reads_alike(monkeypatch):
-    def run(m, shape):
-        _stub(m, 'assess', _response('assess__single_one_claim', shape))
-        return _run(server.assess_claim('The Earth is round.', _ctx()))
-
-    assert _both(monkeypatch, run)['status'] == 'ok'
-
-
-@pytest.mark.parametrize('shape', BOTH)
-def test_assess_no_claim_in_either_shape(monkeypatch, shape):
-    _stub(monkeypatch, 'assess', _response('assess__single_no_claim', shape))
-    out = _run(server.assess_claim('hello there', _ctx()))
-    assert out['status'] == 'no_claim'
-    # The API's own sentence: `failure.detail` in the newer shape, `error` in the older.
-    body = SHAPES['assess__single_no_claim'][shape]['body']
-    expected = body['failure']['detail'] if shape == 'canonical' else body['error']
-    assert out['message'] == expected
-
-
-def test_a_low_confidence_verdict_row_still_recommends_the_deep_check(monkeypatch):
-    rows = {
-        'legacy': {'claim': 'c', 'verdict': 'Mixed', 'confidence': 'low', 'error_code': None, 'identified_claims': []},
-        'canonical': {
-            'claim': 'c',
-            'status': 'completed',
-            'verdict': 'Mixed',
-            'confidence': 'low',
-            'more_claims': [],
-            'failure': None,
-        },
-    }
 
-    def run(m, shape):
-        _stub(m, 'assess', ApiResponse(status=200, data={'claims': [rows[shape]]}))
-        return _run(server.assess_claim('c', _ctx()))
+def _oracle() -> dict[str, Any]:
+    return json.loads(ORACLE_PATH.read_text(encoding='utf-8'))
 
-    assert _both(monkeypatch, run)['claims'][0]['recommend_verify'] is True
 
+@pytest.mark.skipif(not WRITE_ORACLE, reason='writes the oracle only when asked')
+def test_write_the_oracle():
+    oracle = {scenario: _output(scenario, 'legacy') for scenario in SCENARIOS}
+    pathlib.Path(WRITE_ORACLE).write_text(_serialized(oracle) + '\n', encoding='utf-8')
 
-# ── deep check: poll ─────────────────────────────────────────────────
-
-
-def _poll(m, name, shape):
-    async def _status(_auth, *, task_id):
-        return _response(name, shape)
 
-    m.setattr(client, 'verify_status', _status)
-    return _run(server.get_verification('a' * 32, _ctx()))
-
-
-@pytest.mark.parametrize(
-    ('name', 'reason', 'failure_class', 'retryable'),
-    [
-        ('verify__status_failed_live_retryable', 'adjudication_failed', 'upstream_unavailable', True),
-        ('verify__status_failed_durable', 'conclusion_failed', 'internal', False),
-        # The newer API's `no_checkable_claim` reads as the older `not_a_claim`.
-        ('verify__status_not_a_claim', 'not_a_claim', 'invalid_input', False),
-    ],
-)
-def test_a_failed_check_reads_its_reason_from_either_shape(monkeypatch, name, reason, failure_class, retryable):
-    results = {}
-    for shape in BOTH:
-        with monkeypatch.context() as m:
-            results[shape] = _poll(m, name, shape)
-    for shape, out in results.items():
-        assert out['status'] == 'failed', shape
-        assert out['failure_reason'] == reason, shape
-        assert out['failure_class'] == failure_class, shape
-        assert out['retryable'] is retryable, shape
-        assert out['message'], shape
-    # Only the API's sentence may differ between the shapes.
-    strip = [{k: v for k, v in out.items() if k != 'message'} for out in results.values()]
-    assert strip[0] == strip[1]
-    assert results['canonical']['message'] == SHAPES[name]['canonical']['body']['failure']['detail']
-    assert results['legacy']['message'] == SHAPES[name]['legacy']['body']['error']
-
-
-def test_the_claim_picker_reads_alike_in_both_shapes(monkeypatch):
-    out = _both(monkeypatch, lambda m, shape: _poll(m, 'verify__status_needs_input', shape))
-    assert out['status'] == 'needs_input'
-    # Options keep `text`, which the card and older tool results use.
-    assert out['claims'] == [
-        {'text': 'The Earth is round.', 'domain': 'Science'},
-        {'text': 'Water boils at 100C at sea level.', 'domain': 'Science'},
-    ]
-    assert '1. The Earth is round.' in out['message']
-    assert '2. Water boils at 100C at sea level.' in out['message']
+skip_while_writing = pytest.mark.skipif(bool(WRITE_ORACLE), reason='the oracle is being written')
 
 
-def test_a_completed_check_reads_alike_in_both_shapes(monkeypatch):
-    out = _both(monkeypatch, lambda m, shape: _poll(m, 'verify__status_completed', shape))
-    assert out['status'] == 'completed'
-    assert out['claim'] == 'The Earth is round.'
-    assert out['lenz_score'] == 9
+@skip_while_writing
+def test_every_scenario_has_an_oracle_entry_and_both_shapes():
+    assert set(_oracle()) == set(SCENARIOS)
+    for fixture, _runner in SCENARIOS.values():
+        assert set(SHAPES[fixture]) == set(BOTH), fixture
 
 
-# ── select ───────────────────────────────────────────────────────────
+@skip_while_writing
+@pytest.mark.parametrize('scenario', sorted(SCENARIOS))
+def test_the_older_body_gives_what_it_gave_before(scenario):
+    assert _serialized(_output(scenario, 'legacy')) == _serialized(_oracle()[scenario])
 
 
-@pytest.mark.parametrize('name', ['verify__select_202', 'verify__batch_202'])
-def test_select_receipt_items_read_the_claim_from_either_name(monkeypatch, name):
-    def run(m, shape):
-        _stub(m, 'select', _response(name, shape))
-        return _run(server.select_claims('a' * 32, ['x', 'y'], _ctx()))
+@skip_while_writing
+@pytest.mark.parametrize('scenario', sorted(SCENARIOS))
+def test_the_newer_body_gives_the_same(scenario):
+    expected = _oracle()[scenario]
+    if scenario in KNOWN_DIFFERENCES:
+        expected = {**expected, **KNOWN_DIFFERENCES[scenario]}
+    assert _serialized(_output(scenario, 'canonical')) == _serialized(expected)
 
-    out = _both(monkeypatch, run)
-    assert [c['claim'] for c in out['claims']] == ['The Earth is round.', 'Water boils at 100C at sea level.']
 
-
-def test_the_card_select_reads_the_claim_from_either_name(monkeypatch):
-    monkeypatch.setattr(config, 'CARD_ENABLED', True)
-
-    def run(m, shape):
-        _stub(m, 'select', _response('verify__select_202', shape))
-        return _run(server._select_claims_for_card('a' * 32, ['x', 'y'], _ctx()))
-
-    out = _both(monkeypatch, run)
-    assert [c['claim'] for c in out['claims']] == ['The Earth is round.', 'Water boils at 100C at sea level.']
-
-
-@pytest.mark.parametrize(
-    ('name', 'allowed'),
-    [('verify__status_failed_live_retryable', True), ('verify__status_failed_durable', False)],
-)
-@pytest.mark.parametrize('shape', BOTH)
-def test_a_card_retry_reads_the_retry_signal_from_either_shape(monkeypatch, name, allowed, shape):
-    monkeypatch.setattr(config, 'CARD_ENABLED', True)
-
-    async def _status(_auth, *, task_id):
-        return _response(name, shape)
-
-    started = []
-
-    async def _verify(_auth, **kwargs):
-        started.append(kwargs)
-        return ApiResponse(status=202, data={'task_id': 'n' * 32, 'status': 'queued'})
-
-    monkeypatch.setattr(client, 'verify_status', _status)
-    monkeypatch.setattr(client, 'verify', _verify)
-    out = _run(server._start_verification_for_card('The claim.', _ctx(), retry_of='f' * 32))
-    assert (out['status'] == 'submitted') is allowed
-    assert bool(started) is allowed
-
-
-# ── errors ───────────────────────────────────────────────────────────
-
-
-@pytest.mark.parametrize(
-    ('name', 'seconds'), [('errors__rate_limited_extract', 900), ('review__429_review_in_flight', 60)]
-)
-def test_a_429_reads_the_wait_from_either_name(monkeypatch, name, seconds):
-    def run(m, shape):
-        entry = SHAPES[name][shape]
-        # No header: the body alone must carry the wait.
-        _stub(m, 'verify', ApiResponse(status=entry['status'], data=entry['body']))
-        return _run(server.verify_claim('x', _ctx()))
-
-    out = _both(monkeypatch, run)
-    assert out['status'] == 'rate_limited'
-    assert out['retry_after_seconds'] == seconds
-
-
-def test_a_503_reads_alike_in_both_shapes(monkeypatch):
-    def run(m, shape):
-        _stub(m, 'verify', _response('verify__capacity_503', shape))
-        return _run(server.verify_claim('x', _ctx()))
-
-    out = _both(monkeypatch, run)
-    assert out['status'] == 'service_unavailable'
-    assert out['retry_after_seconds'] == 90
-
-
-def test_a_402_reads_alike_in_both_shapes(monkeypatch):
-    def run(m, shape):
-        _stub(m, 'verify', _response('errors__payment_required_verify', shape))
-        return _run(server.verify_claim('x', _ctx()))
-
-    assert _both(monkeypatch, run)['status'] == 'quota_exhausted'
-
-
-def test_a_409_no_selection_pending_reads_alike(monkeypatch):
-    def run(m, shape):
-        _stub(m, 'select', _response('verify__select_no_selection_pending_409', shape))
-        return _run(server.select_claims('a' * 32, ['x'], _ctx()))
-
-    out = _both(monkeypatch, run)
-    assert out == {'status': 'already_resolved', 'message': 'This task has no pending claim selection.'}
-
-
-@pytest.mark.parametrize('shape', BOTH)
-def test_a_validation_422_is_an_invalid_request_in_either_shape(monkeypatch, shape):
-    _stub(monkeypatch, 'verify', _response('errors__validation_wrong_type', shape))
-    out = _run(server.verify_claim('x', _ctx()))
-    assert out['status'] == 'invalid_request'
-    assert out['message']
-
-
-# ── usage ────────────────────────────────────────────────────────────
-
-
-@pytest.mark.parametrize('name', ['account__me_usage_pro_extra', 'account__me_usage_free_partly_spent'])
-def test_usage_reads_alike_in_both_shapes(monkeypatch, name):
-    def run(m, shape):
-        _stub(m, 'me_usage', _response(name, shape))
-        return _run(server.check_usage(_ctx()))
-
-    out = _both(monkeypatch, run)
-    legacy = SHAPES[name]['legacy']['body']
-    # The per-capability projections follow from the pool and the price list
-    # when the per-capability blocks are absent.
-    assert out['assess_remaining'] == legacy['assess']['remaining']
-    assert out['verify_remaining'] == legacy['verify']['remaining']
-    assert out['credits_remaining'] == legacy['credits']['remaining']
-    assert out['resets_at']
+@skip_while_writing
+def test_each_known_difference_is_one_message_that_really_differs():
+    oracle = _oracle()
+    for scenario, override in KNOWN_DIFFERENCES.items():
+        assert scenario in SCENARIOS
+        assert set(override) == {'message'}
+        assert oracle[scenario]['message'] != override['message'], scenario
