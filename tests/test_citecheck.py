@@ -174,7 +174,7 @@ def test_schema_takes_text_or_pairs_and_never_a_webhook():
 
 def test_the_id_param_of_get_citation_check_is_described():
     props = _tools()['get_citation_check'].input_schema['properties']
-    assert set(props) == {'citecheck_id'}
+    assert set(props) == {'citecheck_id', 'offset'}
     assert props['citecheck_id']['description'].strip()
 
 
@@ -972,3 +972,130 @@ def test_the_instructions_name_both_tools_and_their_limit():
     assert '`get_citation_check` waits for a running one' in text
     # The quick check stays the default: nothing here moves the routing sentence.
     assert text.index('`assess_claim`') < text.index('`check_citations`')
+
+
+# ── paging the citations a check did not cover ───────────────────────
+
+
+def _paged(monkeypatch, shape, rows, offset, *, base='get_text_limit_reached'):
+    body = _body(base, shape)
+    body['more_citations'] = rows
+    Api(monkeypatch, polls=[ApiResponse(status=200, data=body)])
+    return _run(server.get_citation_check(CHECK_ID, _ctx(), offset=offset))
+
+
+def test_offset_is_an_optional_non_negative_integer_that_defaults_to_zero():
+    props = _tools()['get_citation_check'].input_schema['properties']
+    assert set(props) == {'citecheck_id', 'offset'}
+    assert props['offset']['type'] == 'integer'
+    assert props['offset']['minimum'] == 0
+    assert props['offset']['default'] == 0
+    assert props['offset']['description'].strip()
+    assert 'offset' not in _tools()['get_citation_check'].input_schema.get('required', [])
+
+
+def test_the_description_says_to_page_one_batch_at_a_time():
+    description = ' '.join(_tools()['get_citation_check'].description.split())
+    assert (
+        'Use `offset` only to page the remaining draft citations the user wants checked, one batch at a time'
+        in description
+    )
+
+
+@pytest.mark.parametrize('shape', BOTH)
+@pytest.mark.parametrize('offset', [0, 20, 40, 60, 80])
+def test_each_page_is_the_next_twenty_rows_and_points_at_the_one_after(monkeypatch, shape, offset):
+    out = _paged(monkeypatch, shape, _more(100, doi_every=4), offset)
+    more = out['more_citations']
+    assert more['remaining'] == 100 - offset
+    assert [c['statement'] for c in more['candidates']] == [
+        f'Sentence {i} cites a source.' for i in range(offset, offset + 20)
+    ]
+    assert all(set(c) in ({'statement', 'url'}, {'statement', 'doi'}) for c in more['candidates'])
+    if offset + 20 < 100:
+        assert more['next_offset'] == offset + 20
+    else:
+        assert 'next_offset' not in more
+    assert more['next_step'] == server.CITECHECK_MORE_NEXT_STEP
+
+
+@pytest.mark.parametrize('shape', BOTH)
+@pytest.mark.parametrize('offset', [100, 101, 500])
+def test_an_offset_at_or_past_the_end_is_an_empty_page(monkeypatch, shape, offset):
+    out = _paged(monkeypatch, shape, _more(100), offset)
+    assert out['more_citations'] == {'remaining': 0, 'candidates': []}
+    assert out['status'] == 'completed' and out['citecheck_id'] == CHECK_ID
+
+
+def test_an_offset_that_is_not_a_multiple_of_twenty_pages_from_there(monkeypatch):
+    out = _paged(monkeypatch, 'canonical', _more(50), 7)
+    more = out['more_citations']
+    assert more['remaining'] == 43
+    assert more['candidates'][0]['statement'] == 'Sentence 7 cites a source.'
+    assert len(more['candidates']) == 20 and more['next_offset'] == 27
+
+
+def test_a_later_page_is_a_compact_re_read_without_the_rows(monkeypatch):
+    out = _paged(monkeypatch, 'canonical', _more(100), 20)
+    assert set(out) == {'status', 'citecheck_id', 'more_citations', 'source'}
+    assert out['source'] == 'Lenz citation check'
+
+
+def test_the_first_page_keeps_the_whole_result_and_names_the_next_offset(monkeypatch):
+    out = _paged(monkeypatch, 'canonical', _more(100), 0)
+    assert out['citations'] and out['presentation'] == server.CITECHECK_PRESENTATION_NOTE
+    assert out['more_citations']['next_offset'] == 20
+
+
+def test_a_page_of_candidates_goes_back_as_pairs(monkeypatch):
+    out = _paged(monkeypatch, 'canonical', _more(100, doi_every=3), 40)
+    candidates = out['more_citations']['candidates']
+    api = Api(monkeypatch, submit=_resp('receipt_202', 'canonical'), polls=[_resp('get_completed_clean', 'canonical')])
+    result = _run(server.check_citations(pairs=candidates, ctx=_ctx()))
+    assert result['status'] == 'completed' and api.submitted == [{'pairs': candidates}]
+
+
+@pytest.mark.parametrize('shape', BOTH)
+def test_a_check_with_no_more_citations_pages_to_nothing(monkeypatch, shape):
+    # Pairs-mode checks, and texts that held no more than were checked, carry none.
+    out = _paged(monkeypatch, shape, [], 20, base='get_completed_clean')
+    assert out['more_citations'] == {'remaining': 0, 'candidates': []}
+    body = _body('get_completed_clean', shape)
+    body.pop('more_citations', None)
+    Api(monkeypatch, polls=[ApiResponse(status=200, data=body)])
+    again = _run(server.get_citation_check(CHECK_ID, _ctx(), offset=20))
+    assert again['more_citations'] == {'remaining': 0, 'candidates': []}
+
+
+@pytest.mark.parametrize('offset', [-1, -20, True, 1.5, '20', None])
+def test_a_bad_offset_is_refused_before_any_api_call(monkeypatch, offset):
+    api = Api(monkeypatch, polls=[_resp('get_text_limit_reached', 'canonical')])
+    out = _run(server.get_citation_check(CHECK_ID, _ctx(), offset=offset))
+    assert out['status'] == 'invalid_request'
+    assert 'offset' in out['message']
+    assert api.polled == []
+
+
+def test_a_check_still_running_is_not_paged(monkeypatch):
+    Api(monkeypatch, polls=[_resp('get_checking', 'canonical')])
+    out = _run(server.get_citation_check(CHECK_ID, _ctx(), offset=20))
+    assert out['status'] == 'running' and 'more_citations' not in out
+
+
+def test_a_failed_check_is_returned_as_it_is_whatever_the_offset(monkeypatch):
+    Api(monkeypatch, polls=[_resp('get_failed_no_citations', 'canonical')])
+    out = _run(server.get_citation_check(CHECK_ID, _ctx(), offset=20))
+    assert out['status'] == 'failed' and out['failure_reason'] == 'no_citations'
+
+
+def test_the_page_still_waits_like_any_read(monkeypatch, time_state):
+    body = _body('get_text_limit_reached', 'canonical')
+    body['more_citations'] = _more(30)
+    api = Api(monkeypatch, polls=[_resp('get_checking', 'canonical'), ApiResponse(status=200, data=body)])
+    out = _run(server.get_citation_check(CHECK_ID, _ctx(), offset=20))
+    assert out['more_citations']['remaining'] == 10 and len(api.polled) == 2
+
+
+def test_the_page_note_names_the_paging_tool_only_as_an_instruction():
+    note = server.CITECHECK_MORE_NEXT_STEP
+    assert 'next_offset' in note and '`get_citation_check`' in note and '`check_citations`' in note

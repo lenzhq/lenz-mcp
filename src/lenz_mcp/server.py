@@ -2131,7 +2131,8 @@ CITECHECK_PRESENTATION_NOTE = (
 CITECHECK_MORE_NEXT_STEP = (
     'The draft has more citations than one check covers. Tell the user how many are left and offer to check the '
     'next batch. If they agree, call `check_citations` with these candidates, exactly as listed, as `pairs`. '
-    'Never write or complete a reference yourself. Do not mention tool names to the user.'
+    'When next_offset is present, call `get_citation_check` with this citecheck_id and that offset to get the '
+    'batch after these. Never write or complete a reference yourself. Do not mention tool names to the user.'
 )
 
 CITECHECK_STILL_RUNNING = (
@@ -2397,19 +2398,25 @@ def _citecheck_summary(data: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in summary.items() if value is not None}
 
 
-def _more_citations(data: dict[str, Any]) -> dict[str, Any] | None:
-    """The citations found and not checked, as candidates the next request can carry.
+def _more_citations(data: dict[str, Any], offset: int = 0, *, always: bool = False) -> dict[str, Any] | None:
+    """The citations found and not checked, as a page of candidates the next request can carry.
 
-    Up to one batch of ready ``pairs`` (a sentence and the one url or doi it
-    cites, cut from the API's own fields), and how many were left. A candidate
-    the API would refuse is left out of the batch and still counted.
+    The API lists up to 100. A page is the rows from ``offset`` on, at most one
+    batch: each becomes a ready ``pair`` (a sentence and the one url or doi it
+    cites, cut from the API's own fields), and a row the API would refuse is left
+    out of the page and still counted. ``remaining`` counts the rows from
+    ``offset`` on, ``next_offset`` names where the following page starts and is
+    there only when one exists. With no rows, and unless ``always``, there is
+    nothing to report.
     """
     rows = data.get('more_citations')
-    if not isinstance(rows, list) or not rows:
+    rows = rows if isinstance(rows, list) else []
+    if not rows and not always:
         return None
+    window = rows[offset : offset + CITECHECK_MAX_PAIRS]
     candidates: list[dict[str, str]] = []
-    for row in rows:
-        if len(candidates) >= CITECHECK_MAX_PAIRS or not isinstance(row, dict):
+    for row in window:
+        if not isinstance(row, dict):
             continue
         statement = _text_or_none(row.get('sentence'))
         if not statement or len(statement) > CITECHECK_STATEMENT_MAX_CHARS:
@@ -2420,7 +2427,12 @@ def _more_citations(data: dict[str, Any]) -> dict[str, Any] | None:
             candidates.append({'statement': statement, 'doi': doi})
         elif url and url.lower().startswith(('http://', 'https://')) and len(url.encode()) <= 2000:
             candidates.append({'statement': statement, 'url': url})
-    return {'remaining': len(rows), 'candidates': candidates, 'next_step': CITECHECK_MORE_NEXT_STEP}
+    page: dict[str, Any] = {'remaining': max(len(rows) - offset, 0), 'candidates': candidates}
+    if window:
+        page['next_step'] = CITECHECK_MORE_NEXT_STEP
+    if offset + CITECHECK_MAX_PAIRS < len(rows):
+        page['next_offset'] = offset + CITECHECK_MAX_PAIRS
+    return page
 
 
 def _citecheck_failure(data: dict[str, Any]) -> dict[str, Any]:
@@ -2444,8 +2456,19 @@ def _citecheck_failure(data: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _finished_citecheck(data: dict[str, Any], citecheck_id: str) -> dict[str, Any]:
-    """A completed or failed check as the model gets it."""
+def _finished_citecheck(data: dict[str, Any], citecheck_id: str, offset: int = 0) -> dict[str, Any]:
+    """A completed or failed check as the model gets it.
+
+    From ``offset`` 1 on, a completed check is a re-read for the next page of
+    citations it did not cover: the page alone, without the rows already given.
+    """
+    if offset > 0 and data.get('status') == 'completed':
+        return {
+            'status': 'completed',
+            'citecheck_id': citecheck_id,
+            'more_citations': _more_citations(data, offset, always=True),
+            'source': 'Lenz citation check',
+        }
     rows = [_citation_row(r) for r in data.get('citations') or [] if isinstance(r, dict)]
     issues = [_citation_issue_row(r) for r in data.get('citation_issues') or [] if isinstance(r, dict)]
     credits = _dict(data.get('credits'))
@@ -2461,7 +2484,7 @@ def _finished_citecheck(data: dict[str, Any], citecheck_id: str) -> dict[str, An
         out['next_step'] = CITECHECK_FAILED_NEXT_STEP
     out['citation_issues'] = issues
     out['citations'] = rows
-    more = _more_citations(data)
+    more = _more_citations(data, offset)
     if more:
         out['more_citations'] = more
     if data.get('status') == 'completed':
@@ -2484,7 +2507,7 @@ def _running_citecheck(data: dict[str, Any], citecheck_id: str) -> dict[str, Any
     return out
 
 
-async def _citecheck_result(authorization: client.Authorization, citecheck_id: str) -> dict[str, Any]:
+async def _citecheck_result(authorization: client.Authorization, citecheck_id: str, offset: int = 0) -> dict[str, Any]:
     """Read a citation check once and map it to a tool result.
 
     A check still going (queued, checking, a status this code does not know) and
@@ -2503,7 +2526,7 @@ async def _citecheck_result(authorization: client.Authorization, citecheck_id: s
         return _error_result(resp)
     data = resp.data
     if data.get('status') in ('completed', 'failed'):
-        return _finished_citecheck(data, citecheck_id)
+        return _finished_citecheck(data, citecheck_id, offset)
     return _running_citecheck(data, citecheck_id)
 
 
@@ -2518,7 +2541,7 @@ def _citecheck_credential_lost(
 
 
 async def _await_citecheck(
-    ctx: Context, citecheck_id: str, *, started_at: float | None = None, tool: str = ''
+    ctx: Context, citecheck_id: str, *, started_at: float | None = None, tool: str = '', offset: int = 0
 ) -> dict[str, Any]:
     """Poll a citation check until it ends or the client's wait is spent.
 
@@ -2532,7 +2555,7 @@ async def _await_citecheck(
     deadline = (started_at if started_at is not None else time.monotonic()) + wait
     while True:
         try:
-            out = await _citecheck_result(_authorization(ctx), citecheck_id)
+            out = await _citecheck_result(_authorization(ctx), citecheck_id, offset)
         except (exchange.ExchangeFailed, exchange.ExchangeNotConfigured) as exc:
             return _citecheck_credential_lost(exc, citecheck_id)
         advice = out.pop('_poll_after', None)
@@ -2709,6 +2732,16 @@ async def get_citation_check(
         Field(description='The citecheck_id returned by check_citations (waits for the running check).'),
     ],
     ctx: Context,
+    offset: Annotated[
+        int,
+        Field(
+            ge=0,
+            description=(
+                'Leave at 0 to read the check. To page the draft citations a check did not cover, pass the '
+                "result's `next_offset`: the next batch of candidates comes back, starting there."
+            ),
+        ),
+    ] = 0,
 ) -> dict[str, Any]:
     """Get a `check_citations` result: wait for a running check by its ``citecheck_id``
     and return it the same way, with the findings per citation.
@@ -2716,9 +2749,12 @@ async def get_citation_check(
     Use it when `check_citations` returned ``status: running``, or to read an earlier
     check again. Still ``running`` after the wait means tell the user it is still
     running and call again. The citecheck_id belongs to a citation check only: a deep
-    check's id goes to `get_verification`. Read-only: it never starts a check.
+    check's id goes to `get_verification`. Use `offset` only to page the remaining draft
+    citations the user wants checked, one batch at a time. Read-only: it never starts a check.
     """
     started_at = time.monotonic()  # the wait budget covers the whole call
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        return {'status': 'invalid_request', 'message': 'offset is a whole number, 0 or more.'}
     ident = (citecheck_id or '').strip()
     if not _sendable_id(ident):
         return {
@@ -2728,7 +2764,7 @@ async def get_citation_check(
                 'exactly as the check returned it.'
             ),
         }
-    return await _await_citecheck(ctx, ident, started_at=started_at, tool='get_citation_check')
+    return await _await_citecheck(ctx, ident, started_at=started_at, tool='get_citation_check', offset=offset)
 
 
 # ── prompts ──────────────────────────────────────────────────────────

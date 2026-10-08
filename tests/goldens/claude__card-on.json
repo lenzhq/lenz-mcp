@@ -315,13 +315,20 @@
         "readOnlyHint": true,
         "title": "Get citation check result"
       },
-      "description": "Get a `check_citations` result: wait for a running check by its ``citecheck_id``\n    and return it the same way, with the findings per citation.\n\n    Use it when `check_citations` returned ``status: running``, or to read an earlier\n    check again. Still ``running`` after the wait means tell the user it is still\n    running and call again. The citecheck_id belongs to a citation check only: a deep\n    check's id goes to `get_verification`. Read-only: it never starts a check.\n    ",
+      "description": "Get a `check_citations` result: wait for a running check by its ``citecheck_id``\n    and return it the same way, with the findings per citation.\n\n    Use it when `check_citations` returned ``status: running``, or to read an earlier\n    check again. Still ``running`` after the wait means tell the user it is still\n    running and call again. The citecheck_id belongs to a citation check only: a deep\n    check's id goes to `get_verification`. Use `offset` only to page the remaining draft\n    citations the user wants checked, one batch at a time. Read-only: it never starts a check.\n    ",
       "inputSchema": {
         "properties": {
           "citecheck_id": {
             "description": "The citecheck_id returned by check_citations (waits for the running check).",
             "title": "Citecheck Id",
             "type": "string"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Leave at 0 to read the check. To page the draft citations a check did not cover, pass the result's `next_offset`: the next batch of candidates comes back, starting there.",
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
           }
         },
         "required": [
