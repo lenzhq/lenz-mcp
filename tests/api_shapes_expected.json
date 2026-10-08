@@ -527,6 +527,29 @@
   "resets_at": "2026-10-02T12:00:00.000000+00:00",
   "next": "To run a check the user can say, for example: \"Check with Lenz whether <a factual claim> is true\", or paste a draft and say \"Check the claims in this draft with Lenz.\""
  },
+ "synthetic__usage_pool_without_blocks": {
+  "status": "ok",
+  "plan": "pro",
+  "credits_remaining": 4990,
+  "costs": {
+   "verify": 10,
+   "assess": 1,
+   "ask": 1,
+   "extract": 0
+  },
+  "cost_options": {
+   "verify": {
+    "depth": {
+     "standard": 10,
+     "low": 5
+    }
+   }
+  },
+  "assess_remaining": null,
+  "verify_remaining": null,
+  "resets_at": null,
+  "next": "To run a check the user can say, for example: \"Check with Lenz whether <a factual claim> is true\", or paste a draft and say \"Check the claims in this draft with Lenz.\""
+ },
  "verify__list_200": {
   "status": "ok",
   "checks": [

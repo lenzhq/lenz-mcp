@@ -7,16 +7,22 @@ read the newer one, recorded once from that earlier code and frozen. Every
 scenario here runs the tool on both bodies and requires exactly the oracle's
 output from each, serialized byte for byte.
 
-Rebuild the oracle only from the code as it was before the change (a checkout
-of that commit with this file and the fixtures copied in):
+The oracle comes from the release before this server read the newer shape,
+commit b8da55d069e31e81dc7c6d61574a3dd722aeb5db, and the writer refuses to run
+on any other source. To rebuild it:
 
-    LENZ_MCP_WRITE_API_ORACLE=tests/api_shapes_expected.json uv run pytest tests/test_api_shapes.py
+    git worktree add --detach /tmp/lenz-mcp-oracle b8da55d069e31e81dc7c6d61574a3dd722aeb5db
+    cp tests/test_api_shapes.py tests/api_shapes.json /tmp/lenz-mcp-oracle/tests/
+    cd /tmp/lenz-mcp-oracle && uv sync --group dev
+    LENZ_MCP_WRITE_API_ORACLE=<this checkout>/tests/api_shapes_expected.json \
+        uv run pytest tests/test_api_shapes.py
 """
 
 import asyncio
 import json
 import os
 import pathlib
+import subprocess
 import types
 from collections.abc import Callable
 from typing import Any
@@ -30,6 +36,8 @@ HERE = pathlib.Path(__file__).parent
 SHAPES: dict[str, dict[str, Any]] = json.loads((HERE / 'api_shapes.json').read_text(encoding='utf-8'))
 ORACLE_PATH = HERE / 'api_shapes_expected.json'
 WRITE_ORACLE = os.environ.get('LENZ_MCP_WRITE_API_ORACLE', '')
+# The release whose behaviour the oracle records.
+ORACLE_COMMIT = 'b8da55d069e31e81dc7c6d61574a3dd722aeb5db'
 BOTH = ('legacy', 'canonical')
 
 
@@ -156,6 +164,9 @@ for _name, _runner in {
     'account__me_usage_pro_extra': _usage,
     'account__me_usage_free_partly_spent': _usage,
     'account__me_usage_extra_only': _usage,
+    # An older body with the pool and prices but no per-capability blocks is
+    # still the older shape (the same body stands in for both).
+    'synthetic__usage_pool_without_blocks': _usage,
     'verify__list_200': _list,
 }.items():
     SCENARIOS[_name] = (_name, _runner)
@@ -200,6 +211,20 @@ def _oracle() -> dict[str, Any]:
 
 @pytest.mark.skipif(not WRITE_ORACLE, reason='writes the oracle only when asked')
 def test_write_the_oracle():
+    # Provenance: the server under test must be exactly the oracle commit's.
+    source = pathlib.Path(server.__file__).resolve().parent
+
+    def git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(  # noqa: S603 — fixed git arguments
+            ['git', '-C', str(source), *args],  # noqa: S607 — git from PATH, a developer command
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    head = git('rev-parse', 'HEAD').stdout.strip()
+    assert head == ORACLE_COMMIT, f'the oracle is written only from {ORACLE_COMMIT}, not {head or "no git checkout"}'
+    assert git('diff', '--quiet', 'HEAD', '--', '.').returncode == 0, 'the server source differs from the commit'
     oracle = {scenario: _output(scenario, 'legacy') for scenario in SCENARIOS}
     pathlib.Path(WRITE_ORACLE).write_text(_serialized(oracle) + '\n', encoding='utf-8')
 

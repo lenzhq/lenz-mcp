@@ -1875,10 +1875,17 @@ async def check_usage(ctx: Context) -> dict[str, Any]:
     credits: dict[str, Any] = raw_credits if isinstance(raw_credits, dict) else {}
     raw_costs = data.get('costs')
     costs: dict[str, Any] = raw_costs if isinstance(raw_costs, dict) else {}
-    # The older body carries a block per capability and `quota_resets_at`; the
-    # newer one only the pool (with its own `resets_at`) and the price list,
-    # from which the same per-capability numbers follow.
-    older = any(key in data for key in ('assess', 'verify', 'quota_resets_at'))
+    # The older body carries a block per capability, `quota_resets_at` and a
+    # `bonus` in the pool; the newer one only the pool (with its own
+    # `resets_at`, no `bonus`) and the price list, from which the same
+    # per-capability numbers follow. The newer shape is recognised by what it
+    # has, so an older body that merely lacks a block reads as before.
+    newer = (
+        'resets_at' in credits
+        and 'bonus' not in credits
+        and not any(key in data for key in ('assess', 'verify', 'ask', 'quota_resets_at'))
+    )
+    older = not newer
 
     def _remaining(capability: str) -> int | None:
         block = data.get(capability)

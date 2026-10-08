@@ -2208,5 +2208,57 @@
     "hint": "h"
    }
   }
+ },
+ "synthetic__usage_pool_without_blocks": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "plan": "pro",
+    "credits": {
+     "remaining": 4990,
+     "total": 5000
+    },
+    "costs": {
+     "verify": 10,
+     "assess": 1,
+     "ask": 1,
+     "extract": 0
+    },
+    "cost_options": {
+     "verify": {
+      "depth": {
+       "standard": 10,
+       "low": 5
+      }
+     }
+    }
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "plan": "pro",
+    "credits": {
+     "remaining": 4990,
+     "total": 5000
+    },
+    "costs": {
+     "verify": 10,
+     "assess": 1,
+     "ask": 1,
+     "extract": 0
+    },
+    "cost_options": {
+     "verify": {
+      "depth": {
+       "standard": 10,
+       "low": 5
+      }
+     }
+    }
+   }
+  }
  }
 }
