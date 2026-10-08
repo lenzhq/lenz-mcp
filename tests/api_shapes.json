@@ -1,0 +1,2264 @@
+{
+ "assess__list_mixed_rows": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "claims": [
+     {
+      "claim": "Water boils at 100 C at sea level.",
+      "language": "en",
+      "verdict": "True",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": null,
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": null
+     },
+     {
+      "claim": "hello there",
+      "language": "en",
+      "verdict": "Error",
+      "confidence": "low",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": "no_claim",
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": "The input is a greeting. Send one factual claim, or run the text through /extract to enumerate its claims."
+     },
+     {
+      "claim": "vendor is down",
+      "language": "en",
+      "verdict": "Error",
+      "confidence": "low",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": "upstream_unavailable",
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": "A model provider was unavailable for this item. Retry it; nothing was charged."
+     },
+     {
+      "claim": "cannot frame",
+      "language": "en",
+      "verdict": "Error",
+      "confidence": "low",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": "framing_failed",
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": "This item could not be processed; retrying it as-is will not help. Send it rephrased as one factual statement; nothing was charged."
+     }
+    ],
+    "error": null,
+    "more_claims": []
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "ok",
+    "claims": [
+     {
+      "claim": "Water boils at 100 C at sea level.",
+      "language": "en",
+      "status": "completed",
+      "verdict": "True",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": null
+     },
+     {
+      "claim": "hello there",
+      "language": "en",
+      "status": "failed",
+      "verdict": null,
+      "confidence": null,
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": {
+       "code": "no_checkable_claim",
+       "detail": "No claim in the input could be checked against public evidence.",
+       "hint": "The input is a greeting. Send one factual claim, or run the text through /extract to enumerate its claims.",
+       "failure_class": "invalid_input",
+       "retryable": false,
+       "docs_url": "https://lenz.io/docs/errors#invalid-input"
+      }
+     },
+     {
+      "claim": "vendor is down",
+      "language": "en",
+      "status": "failed",
+      "verdict": null,
+      "confidence": null,
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": {
+       "code": "upstream_unavailable",
+       "detail": "A service the check depends on was unavailable.",
+       "hint": "A model provider was unavailable for this item. Retry it; nothing was charged.",
+       "failure_class": "upstream_unavailable",
+       "retryable": true,
+       "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
+      }
+     },
+     {
+      "claim": "cannot frame",
+      "language": "en",
+      "status": "failed",
+      "verdict": null,
+      "confidence": null,
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": {
+       "code": "framing_failed",
+       "detail": "The input could not be read as a claim.",
+       "hint": "This item could not be processed; retrying it as-is will not help. Send it rephrased as one factual statement; nothing was charged.",
+       "failure_class": "invalid_input",
+       "retryable": false,
+       "docs_url": "https://lenz.io/docs/errors#invalid-input"
+      }
+     }
+    ],
+    "failure": null,
+    "more_claims": []
+   }
+  }
+ },
+ "assess__single_no_claim": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "claims": [],
+    "error": "No verifiable claim detected",
+    "error_code": "no_claim",
+    "candidate_claims": [],
+    "more_claims": []
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "no_checkable_claim",
+    "claims": [],
+    "failure": {
+     "code": "no_checkable_claim",
+     "detail": "No claim in the input could be checked against public evidence.",
+     "hint": "The input is a greeting, not a statement that can be checked. Send one factual claim, or run the text through /extract to enumerate its claims.",
+     "failure_class": "invalid_input",
+     "retryable": false,
+     "docs_url": "https://lenz.io/docs/errors#invalid-input"
+    },
+    "more_claims": []
+   }
+  }
+ },
+ "assess__list_compound_item": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "claims": [
+     {
+      "claim": "Primary claim.",
+      "language": "en",
+      "verdict": "Mostly False",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": null,
+      "candidate_claims": [],
+      "identified_claims": [
+       "Second claim.",
+       "Third claim."
+      ],
+      "hint": "Assessed the main claim only. Send identified_claims as their own items to check the rest."
+     },
+     {
+      "claim": "A plain claim.",
+      "language": "en",
+      "verdict": "Mostly False",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": null,
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": null
+     }
+    ],
+    "error": null,
+    "more_claims": []
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "ok",
+    "claims": [
+     {
+      "claim": "Primary claim.",
+      "language": "en",
+      "status": "completed",
+      "verdict": "Mostly False",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [
+       "Second claim.",
+       "Third claim."
+      ],
+      "failure": null
+     },
+     {
+      "claim": "A plain claim.",
+      "language": "en",
+      "status": "completed",
+      "verdict": "Mostly False",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": null
+     }
+    ],
+    "failure": null,
+    "more_claims": []
+   }
+  }
+ },
+ "assess__single_one_claim": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "claims": [
+     {
+      "claim": "The registry reported 4,200 filings in 2024.",
+      "language": "en",
+      "verdict": "True",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": "The registry lists 4,200 filings for 2024 and has not revised the figure.",
+      "dissent": "The registry figure is provisional, so the 2024 total cannot yet be confirmed.",
+      "suggested_rewrite": null,
+      "error_code": null,
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": null
+     }
+    ],
+    "error": null,
+    "more_claims": []
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "ok",
+    "claims": [
+     {
+      "claim": "The registry reported 4,200 filings in 2024.",
+      "language": "en",
+      "status": "completed",
+      "verdict": "True",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": "The registry lists 4,200 filings for 2024 and has not revised the figure.",
+      "dissent": "The registry figure is provisional, so the 2024 total cannot yet be confirmed.",
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": null
+     }
+    ],
+    "failure": null,
+    "more_claims": []
+   }
+  }
+ },
+ "assess__single_text_several_claims": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "claims": [
+     {
+      "claim": "Water boils at 100 C at sea level.",
+      "language": "en",
+      "verdict": "True",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": null,
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": null
+     },
+     {
+      "claim": "The Moon is made of cheese.",
+      "language": "en",
+      "verdict": "False",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": null,
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": null
+     },
+     {
+      "claim": "The Pacific is the deepest ocean.",
+      "language": "en",
+      "verdict": "Mostly True",
+      "confidence": "medium",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": null,
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": null
+     }
+    ],
+    "error": null,
+    "more_claims": []
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "ok",
+    "claims": [
+     {
+      "claim": "Water boils at 100 C at sea level.",
+      "language": "en",
+      "status": "completed",
+      "verdict": "True",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": null
+     },
+     {
+      "claim": "The Moon is made of cheese.",
+      "language": "en",
+      "status": "completed",
+      "verdict": "False",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": null
+     },
+     {
+      "claim": "The Pacific is the deepest ocean.",
+      "language": "en",
+      "status": "completed",
+      "verdict": "Mostly True",
+      "confidence": "medium",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": null
+     }
+    ],
+    "failure": null,
+    "more_claims": []
+   }
+  }
+ },
+ "assess__list_all_error_rows": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "claims": [
+     {
+      "claim": "hi",
+      "language": "en",
+      "verdict": "Error",
+      "confidence": "low",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": "no_claim",
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": "The input is a greeting. Send one factual claim, or run the text through /extract to enumerate its claims."
+     },
+     {
+      "claim": "hello",
+      "language": "en",
+      "verdict": "Error",
+      "confidence": "low",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": "no_claim",
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": "The input is a greeting. Send one factual claim, or run the text through /extract to enumerate its claims."
+     }
+    ],
+    "error": null,
+    "more_claims": []
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "no_checkable_claim",
+    "claims": [
+     {
+      "claim": "hi",
+      "language": "en",
+      "status": "failed",
+      "verdict": null,
+      "confidence": null,
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": {
+       "code": "no_checkable_claim",
+       "detail": "No claim in the input could be checked against public evidence.",
+       "hint": "The input is a greeting. Send one factual claim, or run the text through /extract to enumerate its claims.",
+       "failure_class": "invalid_input",
+       "retryable": false,
+       "docs_url": "https://lenz.io/docs/errors#invalid-input"
+      }
+     },
+     {
+      "claim": "hello",
+      "language": "en",
+      "status": "failed",
+      "verdict": null,
+      "confidence": null,
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": {
+       "code": "no_checkable_claim",
+       "detail": "No claim in the input could be checked against public evidence.",
+       "hint": "The input is a greeting. Send one factual claim, or run the text through /extract to enumerate its claims.",
+       "failure_class": "invalid_input",
+       "retryable": false,
+       "docs_url": "https://lenz.io/docs/errors#invalid-input"
+      }
+     }
+    ],
+    "failure": null,
+    "more_claims": []
+   }
+  }
+ },
+ "verify__status_failed_live_retryable": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "error": "Pipeline stopped at: adjudication_failed",
+    "failure_reason": "adjudication_failed",
+    "failure_class": "upstream_unavailable",
+    "retryable": true,
+    "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "failure": {
+     "code": "adjudication_failed",
+     "detail": "The check stopped while the reviewers scored the evidence.",
+     "hint": null,
+     "failure_class": "upstream_unavailable",
+     "retryable": true,
+     "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
+    }
+   }
+  }
+ },
+ "verify__status_failed_live": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "error": "Pipeline stopped at: research_empty",
+    "failure_reason": "research_empty",
+    "failure_class": "insufficient_evidence",
+    "retryable": false,
+    "docs_url": "https://lenz.io/docs/errors#insufficient-evidence"
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "failure": {
+     "code": "research_empty",
+     "detail": "No sources about the claim were found.",
+     "hint": null,
+     "failure_class": "insufficient_evidence",
+     "retryable": false,
+     "docs_url": "https://lenz.io/docs/errors#insufficient-evidence"
+    }
+   }
+  }
+ },
+ "verify__status_not_a_claim": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "error": "Not a verifiable claim.",
+    "failure_reason": "not_a_claim",
+    "failure_class": "invalid_input",
+    "retryable": false,
+    "docs_url": "https://lenz.io/docs/errors#invalid-input",
+    "hint": "The input is a greeting, not a statement that can be checked. Send one factual claim, or run the text through /extract to enumerate its claims."
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "failure": {
+     "code": "no_checkable_claim",
+     "detail": "No claim in the input could be checked against public evidence.",
+     "hint": "The input is a greeting, not a statement that can be checked. Send one factual claim, or run the text through /extract to enumerate its claims.",
+     "failure_class": "invalid_input",
+     "retryable": false,
+     "docs_url": "https://lenz.io/docs/errors#invalid-input"
+    }
+   }
+  }
+ },
+ "verify__status_task_stuck": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "error": "The task was never completed and has been marked failed.",
+    "failure_reason": "task_stuck",
+    "failure_class": "upstream_unavailable",
+    "retryable": true,
+    "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "failure": {
+     "code": "task_stuck",
+     "detail": "The check stopped responding before it finished.",
+     "hint": null,
+     "failure_class": "upstream_unavailable",
+     "retryable": true,
+     "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
+    }
+   }
+  }
+ },
+ "verify__stored_progress_failed_crashed": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "error": "Pipeline failed.",
+    "failure_reason": "task_error",
+    "failure_class": "internal",
+    "retryable": false,
+    "docs_url": "https://lenz.io/docs/errors#internal"
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "failure": {
+     "code": "task_error",
+     "detail": "The check stopped on an error on our side.",
+     "hint": null,
+     "failure_class": "internal",
+     "retryable": false,
+     "docs_url": "https://lenz.io/docs/errors#internal"
+    }
+   }
+  }
+ },
+ "verify__stored_progress_failed_insufficient_evidence": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "error": "Pipeline stopped at: research_empty",
+    "failure_reason": "research_empty",
+    "failure_class": "insufficient_evidence",
+    "retryable": false,
+    "docs_url": "https://lenz.io/docs/errors#insufficient-evidence"
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "failure": {
+     "code": "research_empty",
+     "detail": "No sources about the claim were found.",
+     "hint": null,
+     "failure_class": "insufficient_evidence",
+     "retryable": false,
+     "docs_url": "https://lenz.io/docs/errors#insufficient-evidence"
+    }
+   }
+  }
+ },
+ "verify__status_failed_durable": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "error": "Pipeline stopped: conclusion_failed.",
+    "failure_reason": "conclusion_failed",
+    "failure_class": "internal",
+    "retryable": false,
+    "docs_url": "https://lenz.io/docs/errors#internal"
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "failure": {
+     "code": "conclusion_failed",
+     "detail": "The check stopped while writing the conclusion.",
+     "hint": null,
+     "failure_class": "internal",
+     "retryable": false,
+     "docs_url": "https://lenz.io/docs/errors#internal"
+    }
+   }
+  }
+ },
+ "verify__status_failed_durable_framing": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "error": "Pipeline stopped: framing_failed.",
+    "failure_reason": "framing_failed",
+    "failure_class": "upstream_unavailable",
+    "retryable": true,
+    "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "failure": {
+     "code": "framing_failed",
+     "detail": "The input could not be read as a claim.",
+     "hint": null,
+     "failure_class": "upstream_unavailable",
+     "retryable": true,
+     "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
+    }
+   }
+  }
+ },
+ "verify__status_not_a_claim_durable": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "error": "Pipeline stopped: not_a_claim.",
+    "failure_reason": "not_a_claim",
+    "failure_class": "invalid_input",
+    "retryable": false,
+    "docs_url": "https://lenz.io/docs/errors#invalid-input"
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "failure": {
+     "code": "no_checkable_claim",
+     "detail": "No claim in the input could be checked against public evidence.",
+     "hint": "No factual statement that can be checked against evidence was found in the input. Send one factual claim, or run the text through /extract to enumerate its claims.",
+     "failure_class": "invalid_input",
+     "retryable": false,
+     "docs_url": "https://lenz.io/docs/errors#invalid-input"
+    }
+   }
+  }
+ },
+ "verify__status_cancelled_durable": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "error": "Cancelled.",
+    "failure_reason": "cancelled",
+    "failure_class": "cancelled",
+    "retryable": false,
+    "docs_url": "https://lenz.io/docs/errors#cancelled"
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "failed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "failure": {
+     "code": "cancelled",
+     "detail": "The check was cancelled.",
+     "hint": null,
+     "failure_class": "cancelled",
+     "retryable": false,
+     "docs_url": "https://lenz.io/docs/errors#cancelled"
+    }
+   }
+  }
+ },
+ "verify__status_needs_input": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "needs_input",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "reason": "multi_claim",
+    "claims": [
+     {
+      "text": "The Earth is round.",
+      "domain": "Science"
+     },
+     {
+      "text": "Water boils at 100C at sea level.",
+      "domain": "Science"
+     }
+    ],
+    "hint": "The text holds several distinct claims. Send the ones to check to POST /verify/{task_id}/select."
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "needs_input",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "reason": "multi_claim",
+    "claims": [
+     {
+      "claim": "The Earth is round.",
+      "domain": "Science"
+     },
+     {
+      "claim": "Water boils at 100C at sea level.",
+      "domain": "Science"
+     }
+    ],
+    "hint": "The text holds several distinct claims. Send the ones to check to POST /verify/{task_id}/select."
+   }
+  }
+ },
+ "verify__status_completed": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "completed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "result": {
+     "verification_id": "4d44dfaf",
+     "claim": "The Earth is round.",
+     "visibility": "private",
+     "depth": "standard",
+     "domain": "Science",
+     "entities": [
+      {
+       "name": "Earth",
+       "qid": null
+      }
+     ],
+     "presumed_intent": "Verify a basic scientific fact",
+     "verdict": "True",
+     "confidence": "high",
+     "lenz_score": 9,
+     "key_finding": "The Earth is approximately spherical in shape.",
+     "executive_summary": "The claim is verified.",
+     "warnings": [
+      "Relies on limited sources"
+     ],
+     "suggested_rewrite": null,
+     "created_at": "2026-10-04T12:00:00.000000+00:00",
+     "modified_at": null,
+     "sources": [
+      {
+       "source_name": "NASA",
+       "title": "The shape of the Earth",
+       "url": "https://nasa.example/shape",
+       "snippet": "Satellite imagery shows an oblate spheroid.",
+       "date": "2025-01-15"
+      },
+      {
+       "source_name": "ESA",
+       "title": "Earth from space",
+       "url": "https://esa.example/earth",
+       "snippet": "Orbital measurements confirm the curvature.",
+       "date": "2025-01-16"
+      }
+     ],
+     "audit": {
+      "adjudication_summary": "Both reviewers agreed.",
+      "assessments": [
+       {
+        "panelist_name": "Reviewer A",
+        "focus_area": "Claim Precision & Quantitative Accuracy",
+        "score": 9.0,
+        "reasoning": "Precision analysis reasoning.",
+        "warnings": []
+       },
+       {
+        "panelist_name": "Reviewer B",
+        "focus_area": "Sources",
+        "score": 9.0,
+        "reasoning": "Source audit reasoning.",
+        "warnings": [
+         "weak source A"
+        ]
+       }
+      ],
+      "debate_pro": {
+       "role": "Advocate",
+       "argument": "Satellite imagery and geodesy agree.",
+       "rebuttal": "Flat-Earth objections do not hold."
+      },
+      "debate_con": {
+       "role": "Skeptic",
+       "argument": "The Earth is not a perfect sphere.",
+       "rebuttal": "Oblate, but round for the claim."
+      },
+      "panel_agreement": "unanimous"
+     },
+     "language": "en",
+     "coverage": {
+      "status": "uncovered",
+      "reasons": [
+       "plan"
+      ],
+      "certificate_id": null,
+      "certificate_url": null,
+      "as_of": null,
+      "currency": "EUR",
+      "cap": 10000,
+      "aggregate": 500000,
+      "terms_version": "v1"
+     }
+    }
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "completed",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "result": {
+     "verification_id": "4d44dfaf",
+     "claim": "The Earth is round.",
+     "visibility": "private",
+     "depth": "standard",
+     "domain": "Science",
+     "entities": [
+      {
+       "name": "Earth",
+       "qid": null
+      }
+     ],
+     "presumed_intent": "Verify a basic scientific fact",
+     "verdict": "True",
+     "confidence": "high",
+     "lenz_score": 9,
+     "key_finding": "The Earth is approximately spherical in shape.",
+     "executive_summary": "The claim is verified.",
+     "warnings": [
+      "Relies on limited sources"
+     ],
+     "suggested_rewrite": null,
+     "created_at": "2026-10-04T12:00:00.000000+00:00",
+     "completed_at": "2026-10-05T12:00:00.000000+00:00",
+     "sources": [
+      {
+       "source_name": "NASA",
+       "title": "The shape of the Earth",
+       "url": "https://nasa.example/shape",
+       "snippet": "Satellite imagery shows an oblate spheroid.",
+       "date": "2025-01-15"
+      },
+      {
+       "source_name": "ESA",
+       "title": "Earth from space",
+       "url": "https://esa.example/earth",
+       "snippet": "Orbital measurements confirm the curvature.",
+       "date": "2025-01-16"
+      }
+     ],
+     "audit": {
+      "adjudication_summary": "Both reviewers agreed.",
+      "assessments": [
+       {
+        "panelist_name": "Reviewer A",
+        "focus_area": "Claim Precision & Quantitative Accuracy",
+        "score": 9.0,
+        "reasoning": "Precision analysis reasoning.",
+        "warnings": []
+       },
+       {
+        "panelist_name": "Reviewer B",
+        "focus_area": "Sources",
+        "score": 9.0,
+        "reasoning": "Source audit reasoning.",
+        "warnings": [
+         "weak source A"
+        ]
+       }
+      ],
+      "debate_pro": {
+       "role": "Advocate",
+       "argument": "Satellite imagery and geodesy agree.",
+       "rebuttal": "Flat-Earth objections do not hold."
+      },
+      "debate_con": {
+       "role": "Skeptic",
+       "argument": "The Earth is not a perfect sphere.",
+       "rebuttal": "Oblate, but round for the claim."
+      },
+      "panel_agreement": "unanimous"
+     },
+     "language": "en",
+     "coverage": {
+      "status": "uncovered",
+      "reasons": [
+       "plan"
+      ],
+      "certificate_id": null,
+      "certificate_url": null,
+      "as_of": null,
+      "currency": "EUR",
+      "cap": 10000,
+      "aggregate": 500000,
+      "terms_version": "v1"
+     }
+    }
+   }
+  }
+ },
+ "verify__status_processing": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "processing",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "progress": {
+     "step": "research",
+     "index": 2,
+     "total": 5,
+     "elapsed_seconds": 41,
+     "poll_after_seconds": 5
+    }
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "processing",
+    "task_id": "7cff18da2d979d6370e54a160be121ad",
+    "progress": {
+     "step": "research",
+     "index": 2,
+     "total": 5,
+     "elapsed_seconds": 41,
+     "poll_after_seconds": 5
+    }
+   }
+  }
+ },
+ "verify__batch_202": {
+  "legacy": {
+   "status": 202,
+   "headers": {},
+   "body": {
+    "batch_id": "7ea9cdbd4064e3cf",
+    "items": [
+     {
+      "task_id": "0b92b443eb69b9c71434fdc64f2ca8be",
+      "claim_text": "The Earth is round."
+     },
+     {
+      "task_id": "13610f0b64b63e006dc66364e0e82c85",
+      "claim_text": "Water boils at 100C at sea level."
+     }
+    ]
+   }
+  },
+  "canonical": {
+   "status": 202,
+   "headers": {},
+   "body": {
+    "batch_id": "7ea9cdbd4064e3cf",
+    "items": [
+     {
+      "task_id": "0b92b443eb69b9c71434fdc64f2ca8be",
+      "claim": "The Earth is round."
+     },
+     {
+      "task_id": "13610f0b64b63e006dc66364e0e82c85",
+      "claim": "Water boils at 100C at sea level."
+     }
+    ]
+   }
+  }
+ },
+ "verify__select_202": {
+  "legacy": {
+   "status": 202,
+   "headers": {},
+   "body": {
+    "batch_id": "7ea9cdbd4064e3cf",
+    "items": [
+     {
+      "task_id": "0b92b443eb69b9c71434fdc64f2ca8be",
+      "claim_text": "The Earth is round."
+     },
+     {
+      "task_id": "13610f0b64b63e006dc66364e0e82c85",
+      "claim_text": "Water boils at 100C at sea level."
+     }
+    ]
+   }
+  },
+  "canonical": {
+   "status": 202,
+   "headers": {},
+   "body": {
+    "batch_id": "7ea9cdbd4064e3cf",
+    "items": [
+     {
+      "task_id": "0b92b443eb69b9c71434fdc64f2ca8be",
+      "claim": "The Earth is round."
+     },
+     {
+      "task_id": "13610f0b64b63e006dc66364e0e82c85",
+      "claim": "Water boils at 100C at sea level."
+     }
+    ]
+   }
+  }
+ },
+ "errors__rate_limited_extract": {
+  "legacy": {
+   "status": 429,
+   "headers": {
+    "retry-after": "900"
+   },
+   "body": {
+    "detail": "Daily /extract limit of 1000 reached for this account. The allowance is shared by every key on the account and by extractions run from the Lenz website.",
+    "code": "extract_daily_limit",
+    "limit": 1000,
+    "reset_in_seconds": 900,
+    "doc_url": "https://lenz.io/docs/errors#rate-limits",
+    "upgrade_url": "https://lenz.io/plans"
+   }
+  },
+  "canonical": {
+   "status": 429,
+   "headers": {
+    "retry-after": "900"
+   },
+   "body": {
+    "detail": "Daily /extract limit of 1000 reached for this account. The allowance is shared by every key on the account and by extractions run from the Lenz website.",
+    "code": "extract_daily_limit",
+    "limit": 1000,
+    "retry_after": 900,
+    "docs_url": "https://lenz.io/docs/errors#rate-limits",
+    "upgrade_url": "https://lenz.io/plans"
+   }
+  }
+ },
+ "review__429_review_in_flight": {
+  "legacy": {
+   "status": 429,
+   "headers": {
+    "retry-after": "60"
+   },
+   "body": {
+    "detail": "This account already has 3 reviews running. Retry when one completes.",
+    "code": "review_in_flight",
+    "retry_after_seconds": 60
+   }
+  },
+  "canonical": {
+   "status": 429,
+   "headers": {
+    "retry-after": "60"
+   },
+   "body": {
+    "detail": "This account already has 3 reviews running. Retry when one completes.",
+    "code": "review_in_flight",
+    "retry_after": 60
+   }
+  }
+ },
+ "verify__capacity_503": {
+  "legacy": {
+   "status": 503,
+   "headers": {
+    "retry-after": "90"
+   },
+   "body": {
+    "detail": "Lenz is at capacity right now — please resubmit after the stated wait. Nothing was charged.",
+    "code": "capacity",
+    "retry_after": 90,
+    "doc_url": "https://lenz.io/docs/errors#unavailable"
+   }
+  },
+  "canonical": {
+   "status": 503,
+   "headers": {
+    "retry-after": "90"
+   },
+   "body": {
+    "detail": "Lenz is at capacity right now — please resubmit after the stated wait. Nothing was charged.",
+    "code": "capacity",
+    "retry_after": 90,
+    "docs_url": "https://lenz.io/docs/errors#unavailable"
+   }
+  }
+ },
+ "errors__service_unavailable_ask": {
+  "legacy": {
+   "status": 503,
+   "headers": {
+    "retry-after": "90"
+   },
+   "body": {
+    "detail": "The chat model is unavailable right now. Retry shortly.",
+    "code": "upstream_unavailable",
+    "retry_after": 90,
+    "doc_url": "https://lenz.io/docs/errors#unavailable"
+   }
+  },
+  "canonical": {
+   "status": 503,
+   "headers": {
+    "retry-after": "90"
+   },
+   "body": {
+    "detail": "The chat model is unavailable right now. Retry shortly.",
+    "code": "upstream_unavailable",
+    "retry_after": 90,
+    "docs_url": "https://lenz.io/docs/errors#unavailable"
+   }
+  }
+ },
+ "errors__validation_wrong_type": {
+  "legacy": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": [
+     {
+      "type": "string_type",
+      "loc": [
+       "body",
+       "payload",
+       "text"
+      ],
+      "msg": "Input should be a valid string"
+     }
+    ]
+   }
+  },
+  "canonical": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": "text: Input should be a valid string",
+    "code": "validation_error",
+    "errors": [
+     {
+      "loc": [
+       "body",
+       "payload",
+       "text"
+      ],
+      "msg": "Input should be a valid string",
+      "type": "string_type"
+     }
+    ]
+   }
+  }
+ },
+ "verify__missing_claim_422": {
+  "legacy": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": [
+     {
+      "type": "missing",
+      "loc": [
+       "body",
+       "payload",
+       "text"
+      ],
+      "msg": "Field required"
+     }
+    ]
+   }
+  },
+  "canonical": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": "claim: Field required",
+    "code": "validation_error",
+    "errors": [
+     {
+      "loc": [
+       "body",
+       "payload",
+       "text"
+      ],
+      "msg": "Field required",
+      "type": "missing"
+     }
+    ]
+   }
+  }
+ },
+ "verify__invalid_depth_422": {
+  "legacy": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": [
+     {
+      "type": "literal_error",
+      "loc": [
+       "body",
+       "payload",
+       "depth"
+      ],
+      "msg": "Input should be 'standard' or 'low'",
+      "ctx": {
+       "expected": "'standard' or 'low'"
+      }
+     }
+    ]
+   }
+  },
+  "canonical": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": "depth: Input should be 'standard' or 'low'",
+    "code": "validation_error",
+    "errors": [
+     {
+      "loc": [
+       "body",
+       "payload",
+       "depth"
+      ],
+      "msg": "Input should be 'standard' or 'low'",
+      "type": "literal_error",
+      "ctx": {
+       "expected": "'standard' or 'low'"
+      }
+     }
+    ]
+   }
+  }
+ },
+ "verify__misnamed_field_422": {
+  "legacy": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": [
+     {
+      "type": "missing",
+      "loc": [
+       "body",
+       "payload",
+       "text"
+      ],
+      "msg": "Field required"
+     }
+    ],
+    "hint": "Required field 'claim' is missing. Unrecognised fields: statement.",
+    "doc_url": "https://lenz.io/docs/errors#validation",
+    "unrecognized_fields": [
+     "statement"
+    ]
+   }
+  },
+  "canonical": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": "claim: Field required",
+    "code": "validation_error",
+    "errors": [
+     {
+      "loc": [
+       "body",
+       "payload",
+       "text"
+      ],
+      "msg": "Field required",
+      "type": "missing"
+     }
+    ],
+    "hint": "Required field 'claim' is missing. Unrecognised fields: statement.",
+    "docs_url": "https://lenz.io/docs/errors#validation",
+    "unrecognized_fields": [
+     "statement"
+    ]
+   }
+  }
+ },
+ "assess__422_no_input_field": {
+  "legacy": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": [
+     {
+      "type": "missing",
+      "loc": [
+       "body",
+       "payload",
+       "text"
+      ],
+      "msg": "Field required"
+     }
+    ]
+   }
+  },
+  "canonical": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": "claim: Field required",
+    "code": "validation_error",
+    "errors": [
+     {
+      "loc": [
+       "body",
+       "payload",
+       "text"
+      ],
+      "msg": "Field required",
+      "type": "missing"
+     }
+    ]
+   }
+  }
+ },
+ "verify__blank_claim_422": {
+  "legacy": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": "Text is required."
+   }
+  },
+  "canonical": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": "claim is required.",
+    "code": "blank_input",
+    "errors": [
+     {
+      "loc": [
+       "body",
+       "claim"
+      ],
+      "msg": "claim is required.",
+      "type": "blank_input"
+     }
+    ]
+   }
+  }
+ },
+ "verify__batch_empty_422": {
+  "legacy": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": "claims is required and must be non-empty."
+   }
+  },
+  "canonical": {
+   "status": 422,
+   "headers": {},
+   "body": {
+    "detail": "claims is required and must be non-empty.",
+    "code": "validation_error",
+    "errors": [
+     {
+      "loc": [
+       "body",
+       "claims"
+      ],
+      "msg": "claims is required and must be non-empty.",
+      "type": "validation_error"
+     }
+    ]
+   }
+  }
+ },
+ "verify__select_no_selection_pending_409": {
+  "legacy": {
+   "status": 409,
+   "headers": {},
+   "body": {
+    "detail": "This task has no pending claim selection.",
+    "code": "no_selection_pending",
+    "error": "no_selection_pending"
+   }
+  },
+  "canonical": {
+   "status": 409,
+   "headers": {},
+   "body": {
+    "detail": "This task has no pending claim selection.",
+    "code": "no_selection_pending"
+   }
+  }
+ },
+ "account__me_usage_pro_extra": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "plan": "pro",
+    "plan_label": "Pro",
+    "quota_resets_at": "2026-10-02T12:00:00.000000+00:00",
+    "credits": {
+     "total": 6000,
+     "used": 0,
+     "remaining": 6000,
+     "extra": 1000,
+     "bonus": 1000,
+     "resets_at": "2026-10-02T12:00:00.000000+00:00"
+    },
+    "costs": {
+     "verify": 10,
+     "assess": 1,
+     "ask": 1,
+     "citation": 1,
+     "extract": 0
+    },
+    "cost_options": {
+     "verify": {
+      "depth": {
+       "standard": 10,
+       "low": 5
+      }
+     }
+    },
+    "verify": {
+     "quota_used": 0,
+     "quota_total": 600,
+     "quota_remaining": 600,
+     "bonus": 100,
+     "credits": 100,
+     "remaining": 600
+    },
+    "ask": {
+     "quota_used": 0,
+     "quota_total": 6000,
+     "quota_remaining": 6000,
+     "bonus": 1000,
+     "credits": 1000,
+     "remaining": 6000
+    },
+    "assess": {
+     "quota_used": 0,
+     "quota_total": 6000,
+     "quota_remaining": 6000,
+     "bonus": 1000,
+     "credits": 1000,
+     "remaining": 6000
+    },
+    "extract": {
+     "calls_today": 0,
+     "daily_limit": 1000,
+     "unlimited": false
+    },
+    "has_webhook_secret": false
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "plan": "pro",
+    "plan_label": "Pro",
+    "credits": {
+     "total": 6000,
+     "used": 0,
+     "remaining": 6000,
+     "extra": 1000,
+     "resets_at": "2026-10-02T12:00:00.000000+00:00"
+    },
+    "costs": {
+     "verify": 10,
+     "assess": 1,
+     "ask": 1,
+     "citation": 1,
+     "extract": 0
+    },
+    "cost_options": {
+     "verify": {
+      "depth": {
+       "standard": 10,
+       "low": 5
+      }
+     }
+    },
+    "extract": {
+     "calls_today": 0,
+     "daily_limit": 1000,
+     "unlimited": false
+    },
+    "has_webhook_secret": false
+   }
+  }
+ },
+ "account__me_usage_free_partly_spent": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "plan": "free",
+    "plan_label": "Free",
+    "quota_resets_at": "2026-10-02T12:00:00.000000+00:00",
+    "credits": {
+     "total": 100,
+     "used": 17,
+     "remaining": 83,
+     "extra": 0,
+     "bonus": 0,
+     "resets_at": "2026-10-02T12:00:00.000000+00:00"
+    },
+    "costs": {
+     "verify": 10,
+     "assess": 1,
+     "ask": 1,
+     "citation": 1,
+     "extract": 0
+    },
+    "cost_options": {
+     "verify": {
+      "depth": {
+       "standard": 10,
+       "low": 5
+      }
+     }
+    },
+    "verify": {
+     "quota_used": 2,
+     "quota_total": 10,
+     "quota_remaining": 8,
+     "bonus": 0,
+     "credits": 0,
+     "remaining": 8
+    },
+    "ask": {
+     "quota_used": 17,
+     "quota_total": 100,
+     "quota_remaining": 83,
+     "bonus": 0,
+     "credits": 0,
+     "remaining": 83
+    },
+    "assess": {
+     "quota_used": 17,
+     "quota_total": 100,
+     "quota_remaining": 83,
+     "bonus": 0,
+     "credits": 0,
+     "remaining": 83
+    },
+    "extract": {
+     "calls_today": 0,
+     "daily_limit": 1000,
+     "unlimited": false
+    },
+    "has_webhook_secret": false
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "plan": "free",
+    "plan_label": "Free",
+    "credits": {
+     "total": 100,
+     "used": 17,
+     "remaining": 83,
+     "extra": 0,
+     "resets_at": "2026-10-02T12:00:00.000000+00:00"
+    },
+    "costs": {
+     "verify": 10,
+     "assess": 1,
+     "ask": 1,
+     "citation": 1,
+     "extract": 0
+    },
+    "cost_options": {
+     "verify": {
+      "depth": {
+       "standard": 10,
+       "low": 5
+      }
+     }
+    },
+    "extract": {
+     "calls_today": 0,
+     "daily_limit": 1000,
+     "unlimited": false
+    },
+    "has_webhook_secret": false
+   }
+  }
+ },
+ "account__me_usage_extra_only": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "plan": "free",
+    "plan_label": "Free",
+    "quota_resets_at": "2026-10-02T12:00:00.000000+00:00",
+    "credits": {
+     "total": 137,
+     "used": 100,
+     "remaining": 37,
+     "extra": 37,
+     "bonus": 37,
+     "resets_at": "2026-10-02T12:00:00.000000+00:00"
+    },
+    "costs": {
+     "verify": 10,
+     "assess": 1,
+     "ask": 1,
+     "citation": 1,
+     "extract": 0
+    },
+    "cost_options": {
+     "verify": {
+      "depth": {
+       "standard": 10,
+       "low": 5
+      }
+     }
+    },
+    "verify": {
+     "quota_used": 10,
+     "quota_total": 13,
+     "quota_remaining": 3,
+     "bonus": 3,
+     "credits": 3,
+     "remaining": 3
+    },
+    "ask": {
+     "quota_used": 100,
+     "quota_total": 137,
+     "quota_remaining": 37,
+     "bonus": 37,
+     "credits": 37,
+     "remaining": 37
+    },
+    "assess": {
+     "quota_used": 100,
+     "quota_total": 137,
+     "quota_remaining": 37,
+     "bonus": 37,
+     "credits": 37,
+     "remaining": 37
+    },
+    "extract": {
+     "calls_today": 0,
+     "daily_limit": 1000,
+     "unlimited": false
+    },
+    "has_webhook_secret": false
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "plan": "free",
+    "plan_label": "Free",
+    "credits": {
+     "total": 137,
+     "used": 100,
+     "remaining": 37,
+     "extra": 37,
+     "resets_at": "2026-10-02T12:00:00.000000+00:00"
+    },
+    "costs": {
+     "verify": 10,
+     "assess": 1,
+     "ask": 1,
+     "citation": 1,
+     "extract": 0
+    },
+    "cost_options": {
+     "verify": {
+      "depth": {
+       "standard": 10,
+       "low": 5
+      }
+     }
+    },
+    "extract": {
+     "calls_today": 0,
+     "daily_limit": 1000,
+     "unlimited": false
+    },
+    "has_webhook_secret": false
+   }
+  }
+ },
+ "errors__payment_required_verify": {
+  "legacy": {
+   "status": 402,
+   "headers": {},
+   "body": {
+    "detail": "No remaining claim checks.",
+    "code": "no_credits",
+    "doc_url": "https://lenz.io/docs/errors#quota",
+    "upgrade_url": "https://lenz.io/plans?wall=3f6c2a1e-8b4d-4c7a-9e21-5d0b7f1a2c34",
+    "wall_id": "3f6c2a1e-8b4d-4c7a-9e21-5d0b7f1a2c34",
+    "remaining": 0,
+    "resets_at": "2026-10-03T12:00:00.000000+00:00",
+    "credits_remaining": 0,
+    "cost": 10
+   }
+  },
+  "canonical": {
+   "status": 402,
+   "headers": {},
+   "body": {
+    "detail": "No remaining claim checks.",
+    "code": "no_credits",
+    "docs_url": "https://lenz.io/docs/errors#quota",
+    "upgrade_url": "https://lenz.io/plans?wall=3f6c2a1e-8b4d-4c7a-9e21-5d0b7f1a2c34",
+    "wall_id": "3f6c2a1e-8b4d-4c7a-9e21-5d0b7f1a2c34",
+    "remaining": 0,
+    "resets_at": "2026-10-03T12:00:00.000000+00:00",
+    "credits_remaining": 0,
+    "cost": 10
+   }
+  }
+ },
+ "errors__not_found_verify_status": {
+  "legacy": {
+   "status": 404,
+   "headers": {},
+   "body": {
+    "detail": "Task not found."
+   }
+  },
+  "canonical": {
+   "status": 404,
+   "headers": {},
+   "body": {
+    "detail": "Task not found.",
+    "code": "not_found"
+   }
+  }
+ },
+ "verify__list_200": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "items": [
+     {
+      "verification_id": "68ca4aaf",
+      "claim": "The Earth is round.",
+      "domain": "Science",
+      "entities": [],
+      "verdict": "True",
+      "confidence": "high",
+      "lenz_score": 9,
+      "key_finding": "The Earth is approximately spherical in shape.",
+      "executive_summary": "The claim is verified.",
+      "suggested_rewrite": null,
+      "created_at": "2026-10-03T12:00:00.000000+00:00",
+      "modified_at": null,
+      "language": "en"
+     },
+     {
+      "verification_id": "7c83247c",
+      "claim": "The Earth is round.",
+      "domain": "Science",
+      "entities": [],
+      "verdict": "True",
+      "confidence": "high",
+      "lenz_score": 9,
+      "key_finding": "The Earth is approximately spherical in shape.",
+      "executive_summary": "The claim is verified.",
+      "suggested_rewrite": null,
+      "created_at": "2026-10-05T12:00:00.000000+00:00",
+      "modified_at": null,
+      "language": "en"
+     }
+    ],
+    "total": 2,
+    "page": 1,
+    "page_size": 20
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "items": [
+     {
+      "verification_id": "68ca4aaf",
+      "claim": "The Earth is round.",
+      "domain": "Science",
+      "entities": [],
+      "verdict": "True",
+      "confidence": "high",
+      "lenz_score": 9,
+      "key_finding": "The Earth is approximately spherical in shape.",
+      "executive_summary": "The claim is verified.",
+      "suggested_rewrite": null,
+      "created_at": "2026-10-03T12:00:00.000000+00:00",
+      "completed_at": "2026-10-04T12:00:00.000000+00:00",
+      "language": "en"
+     },
+     {
+      "verification_id": "7c83247c",
+      "claim": "The Earth is round.",
+      "domain": "Science",
+      "entities": [],
+      "verdict": "True",
+      "confidence": "high",
+      "lenz_score": 9,
+      "key_finding": "The Earth is approximately spherical in shape.",
+      "executive_summary": "The claim is verified.",
+      "suggested_rewrite": null,
+      "created_at": "2026-10-05T12:00:00.000000+00:00",
+      "completed_at": "2026-10-04T12:00:00.000000+00:00",
+      "language": "en"
+     }
+    ],
+    "total": 2,
+    "page": 1,
+    "page_size": 20
+   }
+  }
+ },
+ "synthetic__assess_low_confidence_row": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "claims": [
+     {
+      "claim": "c",
+      "language": "en",
+      "verdict": "Mixed",
+      "confidence": "low",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": null,
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": null
+     }
+    ],
+    "error": null,
+    "more_claims": []
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "ok",
+    "claims": [
+     {
+      "claim": "c",
+      "language": "en",
+      "status": "completed",
+      "verdict": "Mixed",
+      "confidence": "low",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": null
+     }
+    ],
+    "failure": null,
+    "more_claims": []
+   }
+  }
+ },
+ "synthetic__assess_failed_row_without_failure_block": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "claims": [
+     {
+      "claim": "c",
+      "language": "en",
+      "verdict": "Error",
+      "confidence": "low",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": "timeout",
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": null
+     }
+    ],
+    "error": null,
+    "more_claims": []
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "error",
+    "claims": [
+     {
+      "claim": "c",
+      "language": "en",
+      "status": "failed",
+      "verdict": null,
+      "confidence": null,
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": null,
+      "error_code": "timeout"
+     }
+    ],
+    "failure": null,
+    "more_claims": []
+   }
+  }
+ },
+ "synthetic__assess_empty_more_claims": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "claims": [
+     {
+      "claim": "c",
+      "language": "en",
+      "verdict": "Mixed",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "error_code": null,
+      "candidate_claims": [],
+      "identified_claims": [],
+      "hint": null
+     }
+    ],
+    "error": null,
+    "more_claims": []
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "ok",
+    "claims": [
+     {
+      "claim": "c",
+      "language": "en",
+      "status": "completed",
+      "verdict": "Mixed",
+      "confidence": "high",
+      "verification_url": null,
+      "rationale": null,
+      "dissent": null,
+      "suggested_rewrite": null,
+      "more_claims": [],
+      "failure": null,
+      "identified_claims": [
+       "stray"
+      ]
+     }
+    ],
+    "failure": null,
+    "more_claims": []
+   }
+  }
+ },
+ "synthetic__429_zero_wait_header": {
+  "legacy": {
+   "status": 429,
+   "headers": {
+    "retry-after": "30"
+   },
+   "body": {
+    "detail": "Slow down.",
+    "code": "extract_daily_limit",
+    "reset_in_seconds": 0
+   }
+  },
+  "canonical": {
+   "status": 429,
+   "headers": {
+    "retry-after": "30"
+   },
+   "body": {
+    "detail": "Slow down.",
+    "code": "extract_daily_limit",
+    "retry_after": 0
+   }
+  }
+ },
+ "synthetic__429_in_flight_no_header": {
+  "legacy": {
+   "status": 429,
+   "headers": {},
+   "body": {
+    "detail": "Too many running.",
+    "code": "review_in_flight",
+    "retry_after_seconds": 60
+   }
+  },
+  "canonical": {
+   "status": 429,
+   "headers": {},
+   "body": {
+    "detail": "Too many running.",
+    "code": "review_in_flight",
+    "retry_after": 60
+   }
+  }
+ },
+ "synthetic__needs_input_text_null": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "needs_input",
+    "task_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reason": "multi_claim",
+    "claims": [
+     {
+      "text": "X is Y.",
+      "domain": "Science"
+     }
+    ],
+    "hint": "h"
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "status": "needs_input",
+    "task_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reason": "multi_claim",
+    "claims": [
+     {
+      "text": null,
+      "claim": "X is Y.",
+      "domain": "Science"
+     }
+    ],
+    "hint": "h"
+   }
+  }
+ },
+ "synthetic__usage_pool_without_blocks": {
+  "legacy": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "plan": "pro",
+    "credits": {
+     "remaining": 4990,
+     "total": 5000
+    },
+    "costs": {
+     "verify": 10,
+     "assess": 1,
+     "ask": 1,
+     "extract": 0
+    },
+    "cost_options": {
+     "verify": {
+      "depth": {
+       "standard": 10,
+       "low": 5
+      }
+     }
+    }
+   }
+  },
+  "canonical": {
+   "status": 200,
+   "headers": {},
+   "body": {
+    "plan": "pro",
+    "credits": {
+     "remaining": 4990,
+     "total": 5000
+    },
+    "costs": {
+     "verify": 10,
+     "assess": 1,
+     "ask": 1,
+     "extract": 0
+    },
+    "cost_options": {
+     "verify": {
+      "depth": {
+       "standard": 10,
+       "low": 5
+      }
+     }
+    }
+   }
+  }
+ }
+}
