@@ -2520,7 +2520,15 @@ async def _citecheck_result(authorization: client.Authorization, citecheck_id: s
         return {'status': 'not_found', 'message': CITECHECK_NOT_FOUND}
     if resp.status == 410:
         return {'status': 'not_found', 'gone': True, 'message': CITECHECK_GONE}
-    if resp.status == 0 or resp.status == 429 or resp.status >= 500:
+    if resp.status == 429:
+        # Rate limited: the server states how long to leave it alone. The wait loop
+        # honours that, and gives the check back instead of asking again sooner.
+        backoff = _stated_wait(resp.data, resp, 0)
+        out: dict[str, Any] = {'status': 'running', 'message': CITECHECK_STILL_RUNNING}
+        if backoff > 0:
+            out['_backoff'] = backoff
+        return out
+    if resp.status == 0 or resp.status >= 500:
         return {'status': 'running', 'message': CITECHECK_STILL_RUNNING}
     if not resp.ok:
         return _error_result(resp)
@@ -2559,6 +2567,7 @@ async def _await_citecheck(
         except (exchange.ExchangeFailed, exchange.ExchangeNotConfigured) as exc:
             return _citecheck_credential_lost(exc, citecheck_id)
         advice = out.pop('_poll_after', None)
+        backoff = out.pop('_backoff', None)
         out.setdefault('citecheck_id', citecheck_id)
         if out.get('status') == 'auth_required':
             out['message'] = f'{out["message"]} {CITECHECK_CREDENTIAL_LOST}'
@@ -2568,7 +2577,12 @@ async def _await_citecheck(
         if remaining <= 0:
             _note_wait_exhausted(wait, tool)
             return out
-        await _sleep(min(_poll_interval(advice), remaining))
+        if backoff is not None and backoff >= remaining:
+            # Asked to stay away longer than this call may wait: hand the check back.
+            _note_wait_exhausted(wait, tool)
+            out['retry_after_seconds'] = backoff
+            return out
+        await _sleep(min(max(_poll_interval(advice), backoff or 0), remaining))
 
 
 def _stated_wait(data: dict[str, Any], resp: client.ApiResponse, default: int) -> int:

@@ -577,6 +577,24 @@ def test_a_poll_that_keeps_failing_ends_as_running_with_the_id(monkeypatch, stat
     assert out['citecheck_id'] == CHECK_ID
 
 
+def test_a_rate_limited_poll_waits_as_long_as_the_server_asks(monkeypatch, time_state):
+    limited = ApiResponse(status=429, data={}, headers={'retry-after': '10'})
+    api, out = _check(monkeypatch, 'canonical', [limited, 'get_completed_clean'])
+    assert out['status'] == 'completed'
+    assert len(api.polled) == 2
+    assert time_state.sleeps[0] >= 10
+
+
+def test_a_rate_limit_longer_than_the_wait_returns_without_hammering(monkeypatch, time_state):
+    limited = ApiResponse(status=429, data={'retry_after': 60}, headers={'retry-after': '60'})
+    api, out = _check(monkeypatch, 'canonical', [limited])
+    assert out['status'] == 'running'
+    assert out['citecheck_id'] == CHECK_ID
+    assert out['retry_after_seconds'] == 60
+    assert len(api.polled) == 1
+    assert time_state.sleeps == []
+
+
 def test_a_poll_refused_for_the_credential_keeps_the_id(monkeypatch):
     _api, out = _check(monkeypatch, 'canonical', [ApiResponse(status=401, data={})])
     assert out['status'] == 'auth_required'
