@@ -702,6 +702,61 @@ def _quota_exhausted(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+# ── reading the API's response shapes ────────────────────────────────
+#
+# The API serves two response shapes, an older one and a newer one, and this
+# server reads both: the newer field first, the older one as the fallback. What
+# a tool returns is the same either way, so the card and the model see one
+# vocabulary whichever shape arrived.
+
+# The newer API's single word for "the input states nothing checkable". The
+# tools keep the older per-endpoint words: `no_claim` on an assess row,
+# `not_a_claim` on a deep check's `failure_reason`.
+_NO_CHECKABLE_CLAIM = 'no_checkable_claim'
+
+
+def _failure_block(data: Any) -> dict[str, Any]:
+    """The newer shape's ``failure`` object on a failed item, or ``{}``."""
+    if not isinstance(data, dict):
+        return {}
+    failure = data.get('failure')
+    return failure if isinstance(failure, dict) else {}
+
+
+def _item_claim(item: dict[str, Any]) -> str:
+    """A receipt item's or an option's claim text: ``claim``, else ``claim_text`` / ``text``."""
+    for key in ('claim', 'claim_text', 'text'):
+        value = item.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return ''
+
+
+def _option(option: Any) -> Any:
+    """A claim-picker option as the tools give it: ``{text, domain, ...}``.
+
+    The newer API names the option's text ``claim``; the tools keep ``text``.
+    """
+    if not isinstance(option, dict) or 'text' in option or 'claim' not in option:
+        return option
+    return {('text' if key == 'claim' else key): value for key, value in option.items()}
+
+
+def _retryable(data: dict[str, Any]) -> Any:
+    """A failed deep check's retry signal, in either shape."""
+    failure = _failure_block(data)
+    return failure['retryable'] if 'retryable' in failure else data.get('retryable')
+
+
+def _retry_seconds(data: dict[str, Any], headers: Any) -> Any:
+    """A 429's stated wait: ``retry_after``, else the older names, else the header."""
+    for key in ('retry_after', 'reset_in_seconds', 'retry_after_seconds'):
+        value = data.get(key)
+        if value:
+            return value
+    return headers.get('retry-after')
+
+
 def _error_result(resp: client.ApiResponse) -> dict[str, Any]:
     """Map a non-2xx API response to a clean, agent-safe tool result."""
     status, data = resp.status, resp.data
@@ -744,7 +799,7 @@ def _error_result(resp: client.ApiResponse) -> dict[str, Any]:
     if status == 429:
         # Pass the real wait through when the server states one — "shortly" is
         # a lie in front of the /extract daily cap, which can be hours away.
-        retry_after = data.get('reset_in_seconds') or resp.headers.get('retry-after')
+        retry_after = _retry_seconds(data, resp.headers)
         message = 'Rate limited — slow down and retry shortly.'
         try:
             seconds = int(retry_after) if retry_after is not None else 0
@@ -867,30 +922,43 @@ async def assess_claim(
     if not raw_claims:
         return {
             'status': 'no_claim',
-            'message': data.get('error') or 'No verifiable factual claim was detected in the text.',
+            'message': _failure_block(data).get('detail')
+            or data.get('error')
+            or 'No verifiable factual claim was detected in the text.',
         }
 
     claims_out = []
     for c in raw_claims:
+        failure = _failure_block(c)
+        # A row with no verdict: the newer shape says `status: failed` with a
+        # null verdict and a `failure` block; the older one `verdict: "Error"`.
+        # The tool keeps the older reading either way.
+        newer_failed = c.get('status') == 'failed'
+        failed = newer_failed or bool(failure) or c.get('verdict') == 'Error'
+        error_code = failure.get('code') or c.get('error_code')
+        if error_code == _NO_CHECKABLE_CLAIM:
+            error_code = 'no_claim'
         entry = {
             'claim': c.get('claim', ''),
-            'verdict': c.get('verdict', ''),
-            'confidence': c.get('confidence', ''),
+            'verdict': (c.get('verdict') or 'Error') if newer_failed else c.get('verdict', ''),
+            'confidence': (c.get('confidence') or 'low') if newer_failed else c.get('confidence', ''),
         }
         # A list item that produced no verdict stays IN POSITION (the caller
         # matches rows to items by index) and says why, in the API's own
         # vocabulary: no_claim | framing_failed | upstream_unavailable | timeout
         # (open — a new code passes through untouched).
-        if c.get('error_code'):
-            entry['error'] = c['error_code']
+        if error_code:
+            entry['error'] = error_code
         # Claims found in the same item that were NOT assessed — resubmit
         # them as their own items if they matter.
-        if c.get('identified_claims'):
-            entry['identified_claims'] = list(c['identified_claims'])
+        more = c.get('more_claims') or c.get('identified_claims')
+        if more:
+            entry['identified_claims'] = list(more)
         # One sentence on what to send next; the API sets it on every error
         # row and on a compound row, never on a plain verdict.
-        if c.get('hint'):
-            entry['hint'] = c['hint']
+        hint = failure.get('hint') or c.get('hint')
+        if hint:
+            entry['hint'] = hint
         # The reviewer notes, forwarded only when set: a null note adds
         # nothing, and a row from an older API or a replayed stored body has
         # no such keys at all (the MCP server and the API deploy independently).
@@ -900,7 +968,7 @@ async def assess_claim(
         # The deep check reverses ~19% of low-confidence quick verdicts, so a
         # low row says so itself. Never on an Error row: it reads `low` too,
         # and there is no verdict to check.
-        if c.get('confidence') == 'low' and not c.get('error_code') and c.get('verdict') != 'Error':
+        if c.get('confidence') == 'low' and not error_code and not failed:
             entry['recommend_verify'] = True
             entry['next_step'] = LOW_CONFIDENCE_NEXT_STEP
         # Link only on a public result (the API returns verification_url only
@@ -1235,7 +1303,7 @@ async def select_claims(
         return _error_result(resp)
 
     items = resp.data.get('items') or []
-    started = [{'task_id': it.get('task_id'), 'claim': it.get('claim_text', '')} for it in items]
+    started = [{'task_id': it.get('task_id'), 'claim': _item_claim(it)} for it in items]
     partial = bool(resp.data.get('partial'))
 
     # One selection is the common case (the user picked the claim that matters):
@@ -1265,7 +1333,7 @@ async def select_claims(
 
 def _needs_input_message(data: dict[str, Any]) -> str:
     """The human-readable half of a multi_claim result: numbered options + what to do."""
-    texts = [c.get('text', '') if isinstance(c, dict) else str(c) for c in data.get('claims') or []]
+    texts = [_item_claim(c) if isinstance(c, dict) else str(c) for c in data.get('claims') or []]
     lead = (
         'The text contains several claims and each verification checks one. Show the user '
         'this list and ask which to check (or choose the one that matters to them), then call '
@@ -1308,7 +1376,7 @@ async def _verification_result(
         reason = data.get('reason', '')
         out = {'status': 'needs_input', 'task_id': task_id, 'reason': reason}
         if data.get('claims'):
-            out['claims'] = data['claims']
+            out['claims'] = [_option(c) for c in data['claims']]
         if reason == 'multi_claim':
             # The options ride in the TEXT, numbered, with the instruction to
             # put them to the user. When the picker card was the only path
@@ -1325,12 +1393,21 @@ async def _verification_result(
         return out
 
     if status == 'failed':
-        out = {'status': 'failed', 'message': data.get('error') or 'The verification failed.'}
+        failure = _failure_block(data)
+        out = {'status': 'failed', 'message': failure.get('detail') or data.get('error') or 'The verification failed.'}
         # Pass the REST contract's two axes through: where it stopped and why
         # (+ the derived retry signal), so an agent can branch on `retryable`
-        # instead of re-submitting blindly. Absent on older/odd bodies.
-        for key in ('failure_reason', 'failure_class', 'retryable'):
-            if key in data:
+        # instead of re-submitting blindly. Absent on older/odd bodies. The
+        # newer shape nests them in `failure`, with the reason as `code`.
+        if 'code' in failure:
+            reason = failure['code']
+            out['failure_reason'] = 'not_a_claim' if reason == _NO_CHECKABLE_CLAIM else reason
+        elif 'failure_reason' in data:
+            out['failure_reason'] = data['failure_reason']
+        for key in ('failure_class', 'retryable'):
+            if key in failure:
+                out[key] = failure[key]
+            elif key in data:
                 out[key] = data[key]
         return out
 
@@ -1504,7 +1581,7 @@ async def _start_verification_for_card(claim: str, ctx: Context, retry_of: str) 
             return {'status': 'invalid_request', 'message': 'That is not a check that can be tried again.'}
         # Ownership is the status API's: another user's task_id reads as not found.
         prior = await client.verify_status(authorization, task_id=retry_of)
-        if not (prior.ok and prior.data.get('status') == 'failed' and prior.data.get('retryable') is True):
+        if not (prior.ok and prior.data.get('status') == 'failed' and _retryable(prior.data) is True):
             return {'status': 'invalid_request', 'message': 'That is not a check that can be tried again.'}
 
     kwargs: dict[str, Any] = {'text': text, 'language': '', 'depth': config.CARD_VERIFY_DEPTH}
@@ -1587,7 +1664,7 @@ async def _select_claims_for_card(task_id: str, claims: list[str], ctx: Context)
         return _error_result(resp)
 
     started = [
-        {'task_id': item.get('task_id'), 'claim': item.get('claim_text', '')}
+        {'task_id': item.get('task_id'), 'claim': _item_claim(item)}
         for item in (resp.data.get('items') or [])
         if item.get('task_id')
     ]
@@ -1708,11 +1785,21 @@ async def check_usage(ctx: Context) -> dict[str, Any]:
 
     data = resp.data
 
-    def _remaining(block: Any) -> int | None:
-        return block.get('remaining') if isinstance(block, dict) else None
-
     raw_credits = data.get('credits')
     credits: dict[str, Any] = raw_credits if isinstance(raw_credits, dict) else {}
+    raw_costs = data.get('costs')
+    costs: dict[str, Any] = raw_costs if isinstance(raw_costs, dict) else {}
+
+    def _remaining(capability: str) -> int | None:
+        # The older shape carries a per-capability block; the newer one only
+        # the pool and the price list, from which the same projection follows.
+        block = data.get(capability)
+        if isinstance(block, dict):
+            return block.get('remaining')
+        pool, cost = credits.get('remaining'), costs.get(capability)
+        if isinstance(pool, int) and isinstance(cost, int) and cost > 0:
+            return pool // cost
+        return None
 
     return {
         'status': 'ok',
@@ -1722,9 +1809,9 @@ async def check_usage(ctx: Context) -> dict[str, Any]:
         'costs': data.get('costs') or {},
         'cost_options': data.get('cost_options') or {},
         # Kept: the same balance projected into each capability's own unit.
-        'assess_remaining': _remaining(data.get('assess')),
-        'verify_remaining': _remaining(data.get('verify')),
-        'resets_at': data.get('quota_resets_at') or data.get('resets_at'),
+        'assess_remaining': _remaining('assess'),
+        'verify_remaining': _remaining('verify'),
+        'resets_at': data.get('quota_resets_at') or credits.get('resets_at') or data.get('resets_at'),
         'next': USAGE_NEXT_NOTE,
     }
 
