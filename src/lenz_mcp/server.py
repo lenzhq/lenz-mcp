@@ -2079,6 +2079,8 @@ async def ask_followup(
     server-side per verification, so ask
     follow-ups sequentially rather than in parallel. Replies in English unless
     the user explicitly asked for another language — leave ``language`` unset.
+    The answer is markdown whose links point at the check's own sources: when you
+    relay it, keep its source links as links.
     """
     authorization = _authorization(ctx)  # gate enforced by @requires_auth
     verification_id = (verification_id or '').strip()
