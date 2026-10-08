@@ -155,6 +155,20 @@ export async function startHarness() {
       if (dark) await page.evaluate(() => { document.body.classList.add('dark'); document.documentElement.style.colorScheme = 'dark'; });
       return { page, context, errors };
     },
+    // A second host page in the SAME browser context as `context`: the sandbox
+    // origin's localStorage is shared, sessionStorage and the frames are not.
+    // That is what a new chat is to a card: the same storage as the last one,
+    // a different conversation.
+    async pageInContext(context) {
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(String(e)));
+      page.on('console', (m) => {
+        if (m.type() === 'error') errors.push(m.text());
+      });
+      await page.goto(`${base}/host.html`);
+      return { page, context, errors };
+    },
     async close() {
       await browser.close();
       await new Promise((resolve) => server.close(resolve));

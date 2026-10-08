@@ -113,19 +113,31 @@ export function createRowStore(storage, { claim, quickVerdict, now = () => Date.
 // The card's own record: how many checks the model has already been told about.
 // Keyed on the whole row set, so a card showing other claims has its own count,
 // and validated against that set on read, like a row record is.
-export function createCardStore(storage, { rows, now = () => Date.now() }) {
+//
+// A card the server stamped (logic/identity.js) is keyed on the CALL that
+// mounted it as well: the same claim asked again in another chat is a new call,
+// and the model of that chat has been told nothing, however many times the
+// rows' own text was seen before. A result the host shows again carries the same
+// call id, so it finds its own count and pushes nothing twice. An unstamped card
+// (an older server) keeps the record keyed on its rows alone.
+export function createCardStore(storage, { rows, callId = '', now = () => Date.now() }) {
   const joined = (Array.isArray(rows) ? rows : []).join('\u0001');
+  const call = typeof callId === 'string' ? callId : '';
   // `joined` first: asking whether storage works is itself a write, and a card
   // with no rows to remember must not make one.
   const available = !!joined && usable(storage);
-  const key = `${PREFIX}card:${fnv1a(joined)}${fnv1a(joined, 0x01000193)}`;
+  const scope = call ? `call:${fnv1a(call)}${fnv1a(call, 0x01000193)}:` : '';
+  const key = `${PREFIX}card:${scope}${fnv1a(joined)}${fnv1a(joined, 0x01000193)}`;
+  // The record names what it was made for, so a hash collision never reads
+  // another card's count.
+  const mine = (raw) => !!raw && raw.rows === joined && (raw.callId || '') === call;
   return {
     available,
     load() {
       if (!available) return 0;
       try {
         const raw = JSON.parse(storage.getItem(key));
-        if (!raw || raw.rows !== joined) return 0;
+        if (!mine(raw)) return 0;
         if (now() - (Number.isFinite(raw.savedAt) ? raw.savedAt : 0) > VERIFICATION_RECORD_TTL_MS) {
           storage.removeItem(key);
           return 0;
@@ -139,7 +151,7 @@ export function createCardStore(storage, { rows, now = () => Date.now() }) {
       if (!available || !Number.isInteger(pushedVersion) || pushedVersion <= 0) return;
       try {
         // Keep whatever else the record holds: the announced ids live here too.
-        storage.setItem(key, JSON.stringify({ ...read(), pushedVersion, rows: joined, savedAt: now() }));
+        storage.setItem(key, JSON.stringify({ ...read(), pushedVersion, rows: joined, callId: call, savedAt: now() }));
       } catch (_e) {
         /* best effort */
       }
@@ -150,7 +162,7 @@ export function createCardStore(storage, { rows, now = () => Date.now() }) {
   function read() {
     try {
       const raw = JSON.parse(storage.getItem(key));
-      return raw && raw.rows === joined ? raw : {};
+      return mine(raw) ? raw : {};
     } catch (_e) {
       return {};
     }
@@ -233,6 +245,12 @@ export function createPickStore(storage, { parent, now = () => Date.now() }) {
 // everything it had started. A ui/message is sent as the USER's turn, so a
 // duplicate is visible and cannot be taken back.
 //
+// The storage outlives the conversation, so the ledger is scoped to it when the
+// host named one (`conversation`, logic/identity.js): the same check in another
+// chat has not been announced THERE. A host that names none gets the single
+// shared ledger it always had — never worse, and a duplicate user turn is the
+// worse mistake.
+//
 // The ledger is re-read at RESERVE time, never cached at construction, because
 // a second card may have written it since. Two frames could still interleave
 // between the read and the write — localStorage offers no atomic test-and-set
@@ -240,8 +258,12 @@ export function createPickStore(storage, { parent, now = () => Date.now() }) {
 // (which is every real one measured) and not a same-instant tie.
 const ANNOUNCED_KEY = `${PREFIX}announced`;
 
-export function createAnnouncedStore(storage, { now = () => Date.now() } = {}) {
+export function createAnnouncedStore(storage, { now = () => Date.now(), conversation = '' } = {}) {
   const available = usable(storage);
+  // A scoped entry is `<conversation>:<id>`; an unscoped one is the bare id (verification ids hold no ':').
+  const scope = typeof conversation === 'string' && conversation ? `${conversation}:` : '';
+  const entry = (id) => `${scope}${id}`;
+  const mine = (name) => (scope ? name.startsWith(scope) : !name.includes(':'));
   const read = () => {
     if (!available) return {};
     try {
@@ -261,7 +283,10 @@ export function createAnnouncedStore(storage, { now = () => Date.now() } = {}) {
   };
   return {
     available,
-    announced: () => Object.keys(read()),
+    announced: () =>
+      Object.keys(read())
+        .filter(mine)
+        .map((name) => name.slice(scope.length)),
     // Claim these ids for THIS card. Returns the ones it may announce: any the
     // ledger already holds belong to whoever announced them first.
     reserve(ids) {
@@ -269,16 +294,16 @@ export function createAnnouncedStore(storage, { now = () => Date.now() } = {}) {
       if (!wanted.length) return [];
       if (!available) return wanted;
       const held = read();
-      const mine = wanted.filter((id) => !(id in held));
-      if (!mine.length) return [];
+      const taken = wanted.filter((id) => !(entry(id) in held));
+      if (!taken.length) return [];
       try {
         const at = now();
-        for (const id of mine) held[id] = at;
+        for (const id of taken) held[entry(id)] = at;
         storage.setItem(ANNOUNCED_KEY, JSON.stringify(held));
       } catch (_e) {
         /* a refusing storage means no protection, not no message */
       }
-      return mine;
+      return taken;
     },
   };
 }

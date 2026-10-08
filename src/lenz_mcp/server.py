@@ -27,7 +27,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from lenz_mcp import client, config, exchange, links
-from lenz_mcp.mcp_card import CARD_ONLY_TOOL_META, register_card_resources, with_delivery
+from lenz_mcp.card_identity import with_mounting_identity
+from lenz_mcp.mcp_card import CARD_ONLY_TOOL_META, CARD_TOOL_NAMES, register_card_resources, with_delivery
 from lenz_mcp.middleware import lenz_middleware
 from lenz_mcp.widget_resource import request_is_chatgpt
 
@@ -611,6 +612,21 @@ def _unsendable_id(kind: str, source: str) -> dict[str, Any]:
     }
 
 
+async def _gated(fn, ctx, args, kwargs):
+    """Run a tool behind the credential gate: the tool's own result, or the refusal."""
+    authorization = _authorization(ctx)
+    if not authorization:
+        return _auth_required()
+    if isinstance(authorization, str) and _AUTH_UNSENDABLE.search(authorization):
+        return _auth_unsendable()
+    try:
+        return await fn(*args, **kwargs)
+    except (exchange.ExchangeFailed, exchange.ExchangeNotConfigured) as exc:
+        # Only the exchange path raises these, from inside the client,
+        # whenever the call's API token could not be obtained.
+        return _exchange_failure_result(exc)
+
+
 def requires_auth(fn):
     """Enforce the API-key gate on a tool so a new tool can't forget it.
 
@@ -629,17 +645,12 @@ def requires_auth(fn):
         tool_token = _CALL_TOOL.set(fn.__name__)
         credential_token = _CALL_CREDENTIAL.set(None)
         try:
-            authorization = _authorization(ctx)
-            if not authorization:
-                return _auth_required()
-            if isinstance(authorization, str) and _AUTH_UNSENDABLE.search(authorization):
-                return _auth_unsendable()
-            try:
-                return await fn(*args, **kwargs)
-            except (exchange.ExchangeFailed, exchange.ExchangeNotConfigured) as exc:
-                # Only the exchange path raises these, from inside the client,
-                # whenever the call's API token could not be obtained.
-                return _exchange_failure_result(exc)
+            result = await _gated(fn, ctx, args, kwargs)
+            # Every result that MOUNTS a card, an error envelope included (the card
+            # renders those too), says which conversation and which call it is.
+            if fn.__name__ in CARD_TOOL_NAMES:
+                result = with_mounting_identity(result, ctx)
+            return result
         finally:
             _CALL_CREDENTIAL.reset(credential_token)
             _CALL_TOOL.reset(tool_token)
@@ -1091,6 +1102,12 @@ async def assess_claim(
         if c.get('confidence') == 'low' and not c.get('error_code') and c.get('verdict') != 'Error':
             entry['recommend_verify'] = True
             entry['next_step'] = LOW_CONFIDENCE_NEXT_STEP
+        # The language the quick check was answered in, as a code. The card
+        # sends it back with the deep check so both answer in the same one; it is
+        # never shown. Whatever the row names outside the served set is dropped.
+        language = str(c.get('language') or '').strip().lower()
+        if language in config.SUPPORTED_LANGUAGES and _card_active():
+            entry['language'] = language
         # Link only on a public result (the API returns verification_url only
         # for already-public cache-hits) — built from the verification_id, no DB.
         link = links.branded_link(links.verification_id_from_verification_url(c.get('verification_url')))
@@ -1688,6 +1705,15 @@ async def start_verification_widget(
         str,
         Field(description='The task_id of a failed check the card is trying again. Empty for a first run.'),
     ] = '',
+    language: Annotated[
+        LanguageCode,
+        Field(
+            description=(
+                'The language code of the quick check the card shows, so the deep check answers in it. '
+                'Empty when the quick check named none.'
+            )
+        ),
+    ] = '',
 ) -> dict[str, Any]:
     """Called by the Lenz card, never by the assistant: start a deep check and
     return its task_id at once.
@@ -1701,10 +1727,10 @@ async def start_verification_widget(
     retryable run of this user's to try again: it gets its own key, since the
     old key would replay the failure.
     """
-    return with_delivery(await _start_verification_for_card(claim, ctx, retry_of))
+    return with_delivery(await _start_verification_for_card(claim, ctx, retry_of, language))
 
 
-async def _start_verification_for_card(claim: str, ctx: Context, retry_of: str) -> dict[str, Any]:
+async def _start_verification_for_card(claim: str, ctx: Context, retry_of: str, language: str = '') -> dict[str, Any]:
     authorization = _authorization(ctx)  # gate enforced by @requires_auth
     if not config.CARD_ENABLED:
         # Unlisted while the card is off; refused if called anyway, so a paid
@@ -1722,7 +1748,7 @@ async def _start_verification_for_card(claim: str, ctx: Context, retry_of: str) 
         if not (prior.ok and prior.data.get('status') == 'failed' and _retryable(prior.data) is True):
             return {'status': 'invalid_request', 'message': 'That is not a check that can be tried again.'}
 
-    kwargs: dict[str, Any] = {'text': text, 'language': '', 'depth': config.CARD_VERIFY_DEPTH}
+    kwargs: dict[str, Any] = {'text': text, 'language': language or '', 'depth': config.CARD_VERIFY_DEPTH}
     if retry_of:
         kwargs['retry_of'] = retry_of
     resp = await client.verify(authorization, **kwargs)

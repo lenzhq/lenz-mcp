@@ -212,3 +212,66 @@ test('a corrupt ledger reads as empty, never as an error', () => {
   assert.deepEqual(ledger.announced(), []);
   assert.deepEqual(ledger.reserve(['v1']), ['v1']);
 });
+
+// A later card for the same claim, in a new conversation. Both "told the model"
+// records live in storage that outlives the conversation, so each is keyed on
+// what the server stamped on the mounting result.
+test('the card record is keyed on the call that mounted the card, when it has one', () => {
+  const storage = fakeStorage();
+  const rows = ['a\u0000False'];
+  const first = createCardStore(storage, { rows, callId: 'call-1' });
+  first.save(1);
+  assert.equal(first.load(), 1);
+  // The same rows under another call: a new card, and the model has heard nothing from it.
+  assert.equal(createCardStore(storage, { rows, callId: 'call-2' }).load(), 0);
+  // A replay of the first call finds its own count.
+  assert.equal(createCardStore(storage, { rows, callId: 'call-1' }).load(), 1);
+  // The record also names its rows, so a reused id never reads another card's count.
+  assert.equal(createCardStore(storage, { rows: ['b\u0000True'], callId: 'call-1' }).load(), 0);
+});
+
+test('a card with no call id keeps the record keyed on its rows', () => {
+  const storage = fakeStorage();
+  const rows = ['a\u0000False'];
+  createCardStore(storage, { rows }).save(2);
+  assert.equal(createCardStore(storage, { rows, callId: '' }).load(), 2);
+  // And a stamped card does not read (or write over) that unstamped record.
+  const stamped = createCardStore(storage, { rows, callId: 'call-1' });
+  assert.equal(stamped.load(), 0);
+  stamped.save(1);
+  assert.equal(createCardStore(storage, { rows }).load(), 2);
+});
+
+test('the same check is announced once per conversation, not once per storage', () => {
+  const storage = fakeStorage();
+  const a = createAnnouncedStore(storage, { conversation: 'conv-a' });
+  const b = createAnnouncedStore(storage, { conversation: 'conv-b' });
+  assert.deepEqual(a.reserve(['v1', 'v2']), ['v1', 'v2']);
+  assert.deepEqual(b.reserve(['v1']), ['v1'], 'a new conversation has not been told');
+  assert.deepEqual(b.reserve(['v1']), [], 'and is told once');
+  // Another card of the first conversation shares its ledger.
+  assert.deepEqual(createAnnouncedStore(storage, { conversation: 'conv-a' }).reserve(['v1', 'v3']), ['v3']);
+  assert.deepEqual(a.announced().sort(), ['v1', 'v2', 'v3']);
+  assert.deepEqual(b.announced(), ['v1']);
+});
+
+test('a ledger without a conversation id is the ledger it always was', () => {
+  const storage = fakeStorage();
+  const plain = createAnnouncedStore(storage);
+  assert.deepEqual(plain.reserve(['v1']), ['v1']);
+  assert.deepEqual(createAnnouncedStore(storage, { conversation: '' }).reserve(['v1']), []);
+  // It neither sees nor takes a conversation's entries.
+  createAnnouncedStore(storage, { conversation: 'conv-a' }).reserve(['v9']);
+  assert.deepEqual(plain.announced(), ['v1']);
+  assert.deepEqual(plain.reserve(['v9']), ['v9']);
+});
+
+test('a conversation ledger entry expires with the verification window too', () => {
+  const storage = fakeStorage();
+  let now = 1_000_000;
+  const ledger = createAnnouncedStore(storage, { conversation: 'conv-a', now: () => now });
+  ledger.reserve(['v1']);
+  now += VERIFICATION_RECORD_TTL_MS + 1;
+  assert.deepEqual(ledger.announced(), []);
+  assert.deepEqual(ledger.reserve(['v1']), ['v1']);
+});

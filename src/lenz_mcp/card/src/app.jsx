@@ -358,6 +358,7 @@ function useDeepCheck({ row, host, announce, registerCompleted, label = '', stor
   useEffect(() => {
     const check = createDeepCheck({
       claim: row.claim,
+      language: row.language,
       host,
       store,
       clock: { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (id) => clearTimeout(id) },

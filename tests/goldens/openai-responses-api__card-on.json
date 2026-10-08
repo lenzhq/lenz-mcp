@@ -4,7 +4,7 @@
     "mimeTypes": [
       "text/html;profile=mcp-app"
     ],
-    "uri": "ui://lenz/card-v7"
+    "uri": "ui://lenz/card-v8"
   },
   "client": "openai-responses-api",
   "declares_mcp_apps": true,
@@ -541,6 +541,27 @@
           "claim": {
             "description": "The claim the Lenz card shows, exactly as it shows it.",
             "title": "Claim",
+            "type": "string"
+          },
+          "language": {
+            "default": "",
+            "description": "The language code of the quick check the card shows, so the deep check answers in it. Empty when the quick check named none.",
+            "enum": [
+              "",
+              "en",
+              "es",
+              "de",
+              "fr",
+              "it",
+              "pt",
+              "nl",
+              "sv",
+              "da",
+              "no",
+              "fi",
+              "bg"
+            ],
+            "title": "Language",
             "type": "string"
           },
           "retry_of": {

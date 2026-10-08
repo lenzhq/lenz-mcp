@@ -16,6 +16,7 @@ import { buildChatMessage } from './logic/chat-message.js';
 import { createMessenger } from './logic/messenger.js';
 import { DELIVER_MESSAGE, readDelivery, watchDelivery } from './logic/delivery.js';
 import { createAnnouncedStore, createCardStore } from './logic/store.js';
+import { mountIdentity } from './logic/identity.js';
 import { isFullBleed } from './logic/bleed.js';
 
 const VARIABLE_NAME = /^--[a-z0-9-]+$/;
@@ -65,7 +66,6 @@ function Root({ host, dev }) {
   const live = useRef(undefined);
   const [, setConnected] = useState(false);
   const [message, setMessage] = useState('');
-  const completed = useRef(new Map());
 
   useEffect(() => {
     const theme = (ctx) => applyContext(ctx, globalThis.document, host.themeVariables ? host.themeVariables(ctx) : {});
@@ -87,16 +87,37 @@ function Root({ host, dev }) {
     return () => offs.forEach((off) => off());
   }, []);
 
+  // Which mounting this is (logic/identity.js): the conversation the server
+  // stamped, when the host named one, and the call that mounted the card. Storage
+  // outlives a conversation, so what the model "has been told" is scoped to these.
+  const identity = mountIdentity(payload);
+  const completed = useRef(new Map());
+  const pushed = useRef(0);
+  const pushing = useRef(Promise.resolve());
+  const generation = useRef(0);
+  const seen = useRef(identity.key);
+  // A different mounting delivered into this card (a host may show another tool
+  // result in a card that is already open) is a different card: nothing it
+  // completed, pushed or queued under the last one counts for it. Done while
+  // rendering, before any child can complete, so a check it recovers is counted
+  // against the new record. The rows' own records stay: they are how a
+  // running or finished check is found again.
+  if (seen.current !== identity.key) {
+    seen.current = identity.key;
+    generation.current += 1;
+    completed.current = new Map();
+    pushed.current = 0;
+    pushing.current = Promise.resolve();
+  }
+
   // What the model has been told is a fact about the CARD, not about one row: a
   // row that recovers late must never replace a bigger snapshot with a smaller one.
   // A model-run card gets no storage at all, not even the probe write that asks
   // whether storage works.
   const cardStore = useMemo(
-    () => createCardStore(modelRanIt(payload) ? null : safeStorage(), { rows: payloadRows(payload) }),
-    [payloadRows(payload).join('\u0001'), modelRanIt(payload)],
+    () => createCardStore(modelRanIt(payload) ? null : safeStorage(), { rows: payloadRows(payload), callId: identity.callId }),
+    [payloadRows(payload).join('\u0001'), modelRanIt(payload), identity.callId],
   );
-  const pushed = useRef(0);
-  const pushing = useRef(Promise.resolve());
   useEffect(() => {
     pushed.current = cardStore.load();
   }, [cardStore]);
@@ -106,8 +127,8 @@ function Root({ host, dev }) {
   // a chat message. Never both on any host.
   // The announcement ledger is per CONVERSATION, not per card: two cards
   // showing one check, and a picker whose card record is deliberately absent,
-  // must not each announce it.
-  const ledger = useMemo(() => createAnnouncedStore(safeStorage()), []);
+  // must not each announce it. A new conversation has its own.
+  const ledger = useMemo(() => createAnnouncedStore(safeStorage(), { conversation: identity.conversation }), [identity.conversation]);
   const messenger = useMemo(
     () =>
       createMessenger({
@@ -125,15 +146,18 @@ function Root({ host, dev }) {
   // Pushes are serialized: the host replaces the whole context with what it is
   // handed, so two in flight could land out of order and lose a verdict.
   const schedulePush = () => {
+    const mounting = generation.current;
     pushing.current = pushing.current
       .then(async () => {
+        if (mounting !== generation.current) return;
         const checks = [...completed.current.values()];
         if (!checks.length || checks.length <= pushed.current) return;
         if (!host.capabilities.updateModelContext) return;
         const version = checks.length;
         const snap = buildSnapshot({ checks });
         await host.updateModelContext({ text: snap.text, structured: snap.structured });
-        if (version > pushed.current) {
+        // A push that outlived its mounting must not count for the next one.
+        if (mounting === generation.current && version > pushed.current) {
           pushed.current = version;
           cardStore.save(version);
         }
@@ -197,7 +221,7 @@ function Root({ host, dev }) {
           }}
         />
       ) : null}
-      <Boundary key={devKey}>
+      <Boundary key={`${devKey}|${identity.key}`}>
         <App
           host={host}
           payload={payload}

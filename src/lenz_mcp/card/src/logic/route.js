@@ -20,6 +20,12 @@ function wholeSeconds(value) {
   return Number.isInteger(value) && value > 0 ? value : 0;
 }
 
+// The language code the quick check was answered in, as the server resolved it.
+// Never rendered and never a choice: it rides back to the server when this row's
+// deep check starts, so the two agree. Only a short lowercase code passes.
+const LANGUAGE_CODE = /^[a-z]{2}$/;
+const languageCode = (value) => (typeof value === 'string' && LANGUAGE_CODE.test(value) ? value : '');
+
 function quickRow(entry) {
   const e = entry && typeof entry === 'object' ? entry : {};
   const error = text(e.error) || (text(e.verdict) === 'Error' ? 'error' : '');
@@ -32,6 +38,7 @@ function quickRow(entry) {
     recommend: e.recommend_verify === true,
     error,
     hint: text(e.hint),
+    language: languageCode(e.language),
   };
 }
 

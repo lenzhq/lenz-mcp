@@ -30,6 +30,7 @@ test('a single quick-check row', () => {
     recommend: true,
     error: '',
     hint: '',
+    language: '',
   });
 });
 
@@ -246,4 +247,12 @@ test('a deep result carries the suggested rewrite as text, or nothing', () => {
   for (const value of [null, undefined, '', 7, { claim: 'x' }, ['x']]) {
     assert.equal(deepResult({ suggested_rewrite: value }).suggestedRewrite, '');
   }
+});
+
+test('a quick row carries the language code the server resolved, and only a short code', () => {
+  const rowOf = (language) =>
+    routeQuick({ status: 'ok', claims: [{ claim: 'Eine Aussage.', verdict: 'True', confidence: 'high', ...(language === undefined ? {} : { language }) }] }).row;
+  assert.equal(rowOf('de').language, 'de');
+  assert.equal(rowOf(undefined).language, '');
+  for (const bad of ['', 'DE', 'deu', 'd', 'de"; x', 42, null, {}, ['de']]) assert.equal(rowOf(bad).language, '', String(bad));
 });
