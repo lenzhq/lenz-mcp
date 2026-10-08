@@ -492,6 +492,7 @@ def _headers(authorization: str | None, idempotency_key: str | None = None) -> d
     headers = {
         'User-Agent': _user_agent(),
         'Accept': 'application/json',
+        config.API_VERSION_HEADER: config.API_VERSION,
     }
     # Only the write tools (assess/verify/select) pass a content-derived key;
     # GETs (status/usage) are idempotent by nature and need none.

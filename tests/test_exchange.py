@@ -54,9 +54,11 @@ class FakeLenz:
     revoke_at: float | None = None  # from this time, every token issued so far is refused
     exchanges: list[dict] = field(default_factory=list)
     api_calls: list[tuple[str, str, str]] = field(default_factory=list)  # (method, path, authorization)
+    versions: list[str] = field(default_factory=list)  # X-Lenz-API-Version of every request, exchange or API
     issued: dict[str, tuple[float, frozenset[str]]] = field(default_factory=dict)
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        self.versions.append(request.headers.get('x-lenz-api-version', ''))
         if str(request.url) == TOKEN_ENDPOINT:
             return self._token(request)
         return self._api(request)
@@ -352,6 +354,14 @@ def test_the_exchange_request_is_the_rfc_8693_shape(lenz):
     }
     expected = base64.b64encode(f'{CLIENT_ID}:{CLIENT_SECRET}'.encode()).decode()
     assert sent['authorization'] == f'Basic {expected}'
+
+
+def test_the_exchange_and_the_api_call_it_unlocks_name_the_api_version(lenz):
+    _run(server.check_usage(_ctx()))
+
+    assert lenz.exchange_count() == 1 and lenz.api_calls
+    assert lenz.versions == [config.API_VERSION] * len(lenz.versions)
+    assert len(lenz.versions) == lenz.exchange_count() + len(lenz.api_calls)
 
 
 # ── per-tool scopes ──────────────────────────────────────────────────
