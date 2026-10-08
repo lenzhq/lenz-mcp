@@ -75,7 +75,9 @@ def _run(fn_name: str, args: tuple, stubs: dict[str, Any], **kwargs: Any) -> dic
     return result
 
 
-def assess_row(claim: str, verdict: str, confidence: str, rationale: str = '', dissent: str = '') -> dict[str, Any]:
+def assess_row(
+    claim: str, verdict: str, confidence: str, rationale: str = '', dissent: str = '', rewrite: str = ''
+) -> dict[str, Any]:
     """One row of a `POST /assess` body, in the API's shape."""
     return {
         'hint': None,
@@ -89,6 +91,7 @@ def assess_row(claim: str, verdict: str, confidence: str, rationale: str = '', d
         'candidate_claims': [],
         'verification_url': None,
         'identified_claims': [],
+        'suggested_rewrite': rewrite or None,
     }
 
 

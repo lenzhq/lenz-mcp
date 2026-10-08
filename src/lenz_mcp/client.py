@@ -593,25 +593,39 @@ async def _request(
 
 
 async def assess(
-    authorization: Authorization, *, text: str = '', claims: list[str] | None = None, language: str
+    authorization: Authorization,
+    *,
+    text: str = '',
+    claims: list[str] | None = None,
+    language: str,
+    suggest_rewrite: bool = False,
 ) -> ApiResponse:
     # One text (`claim`, expanded server-side) or a list (`claims`, one row per
     # item). The idempotency key covers whichever was sent — the API rejects a
     # key reused with a different body — joined on a separator no claim
     # contains, so ["a b"] and ["a", "b"] never collide.
+    #
+    # `suggest_rewrite` asks for the claim rewritten with its wrong part
+    # corrected, on the rows that have one. It is part of the body, so it is
+    # part of the key: a call that does not send it keeps the key it always had
+    # (a repeat inside the replay window still replays), and one that does gets
+    # its own, since the API refuses a key reused with a different body.
     if claims:
         body: dict = {'claims': list(claims), 'language': language}
-        key = _idem_key('assess', 'claims', '\x1f'.join(claims), language)
+        parts: tuple[str, ...] = ('assess', 'claims', '\x1f'.join(claims), language)
     else:
         body = {'claim': text, 'language': language}
-        key = _idem_key('assess', text, language)
+        parts = ('assess', text, language)
+    if suggest_rewrite:
+        body['suggest_rewrite'] = True
+        parts = (*parts, 'suggest_rewrite')
     return await _request(
         'POST',
         '/assess',
         authorization,
         json=body,
         timeout=config.assess_timeout(client_identity()),
-        idempotency_key=key,
+        idempotency_key=_idem_key(*parts),
     )
 
 
