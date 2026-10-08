@@ -53,6 +53,8 @@ was given — so it complements retrieval/groundedness checkers rather than repl
 | **`get_citation_check`** | Wait for a running `check_citations` by `citecheck_id` and return the result the same way. An optional `offset` (default 0) re-reads a finished check and returns the next batch of up to 20 draft citations it did not cover, as candidates to send back as `pairs`, with `remaining` and `next_offset`. Read-only; free. |
 | **`check_usage`** | Remaining credits, the per-tool price list (`costs`, plus `cost_options` for prices that depend on a parameter such as `depth`), and the current plan. Never a prerequisite for a check. |
 
+**Language.** Lenz answers in the language of the text it is given, so pass the claim in the user's own words and language, not translated. The `language` argument is for a user who explicitly asks for the answer in another language (one of `en`, `es`, `de`, `fr`, `it`, `pt`, `nl`, `sv`, `da`, `no`, `fi`, `bg`); leave it unset otherwise. Verdicts and written results follow the language, and a quick check's reviewer note follows the text the reviewer saw. A self-hosted connector sends the choice to the API as `auto` only when `MCP_LANGUAGE_AUTO_ENABLED=True` is set, against an API that accepts it; otherwise an unset language is sent empty, which the API answers in English.
+
 **Prompts.** Clients that surface MCP prompts (Claude shows them under **+**) get two: **Check this text with Lenz** and **Check your last answer with Lenz**. Each takes the text to check and starts a quick check. Lenz cannot see the conversation, so **Check your last answer** needs the answer pasted in.
 
 > Verdicts are **directional, not absolute**: confidence is returned as bucketed

@@ -44,20 +44,27 @@ CONFIDENCE_NOTE = (
 
 # `language` on assess_claim / verify_claim / ask_followup.
 #
-# Both the type and the wording exist to stop the client filling this in
-# unasked. Typed as a bare `str` and described as an "ISO 639-1 code", it
-# advertised ~180 codes against the twelve the API serves and read as an
-# invitation to be helpful. A client could pass a code the API does not serve,
-# for example `ko`, and get a 422 it could only escape by reading the error and
-# retrying, several failed tool calls into the user's first session. A user
-# inside the twelve could fare worse in one way: a client inferring the locale
-# would get a verdict in a language nobody asked for, at no error.
+# The type and the wording exist to stop the client filling this in unasked.
+# Typed as a bare `str` and described as an "ISO 639-1 code", it advertised ~180
+# codes against the twelve the API serves and read as an invitation to be
+# helpful. A client could pass a code the API does not serve, for example `ko`,
+# and get a 422 it could only escape by reading the error and retrying, several
+# failed tool calls into the user's first session. A client inferring the
+# locale would get a verdict in a language nobody asked for, at no error.
+#
+# Left unset, the language is read from the text the user wrote: the connector
+# sends `auto` for an unset one when `config.LANGUAGE_AUTO_ENABLED` is on (see
+# `client.effective_language`). So the model's part is to pass the claim in the
+# user's own words and language, and to set `language` only for a user who
+# asked for the answer in another one. The description is the same with the
+# switch on or off; the switch only changes what is sent.
 #
 # The enum is built from `config.SUPPORTED_LANGUAGES`, so a thirteenth
-# language is a one-line change; `''` is "unset", which the API maps to English. Rejecting
-# an unsupported code here costs the model one local self-correction instead
-# of an API round trip, and tells a user who genuinely wants Korean that we
-# don't serve it rather than hiding it in a 422 they never see.
+# language is a one-line change; `''` is "unset". `auto` is deliberately NOT a
+# value: the connector sends it, the model never does. Rejecting an unsupported
+# code here costs the model one local self-correction instead of an API round
+# trip, and tells a user who genuinely wants Korean that we don't serve it
+# rather than hiding it in a 422 they never see.
 #
 # Deliberate narrowing: the API lowercases the code, so it accepts 'EN'
 # where this enum does not. Clients send '' or a lowercase code in
@@ -67,9 +74,9 @@ CONFIDENCE_NOTE = (
 LanguageCode = Literal[('', *config.SUPPORTED_LANGUAGES)]  # type: ignore[valid-type]
 
 LANGUAGE_FIELD_DESCRIPTION = (
-    'Leave unset. English is the default. Set this only if the user explicitly asked for the '
-    'answer in another language — not to match the language of the claim, the conversation, or '
-    f'the user locale. Supported: {", ".join(config.SUPPORTED_LANGUAGES)}.'
+    "Leave unset. Lenz uses the language of the user's text where it can, and English otherwise. Set this "
+    'only if the user explicitly asked for the answer in another language, never to match the conversation, '
+    f"the user's locale or the language of the claim. Supported: {', '.join(config.SUPPORTED_LANGUAGES)}."
 )
 
 # Appended only on assess_claim results — measured escalation guidance
@@ -982,7 +989,8 @@ async def assess_claim(
         str,
         Field(
             description=(
-                'ONE statement to fact-check, in natural language (e.g. "Honey never spoils"). '
+                'ONE statement to fact-check, in natural language (e.g. "Honey never spoils"), in the user\'s own '
+                'words and language, not translated or paraphrased into English. '
                 'If the text contains several atomic claims, each is verdicted separately (up to 20, one credit per verdict). '
                 'Leave empty when passing `claims`.'
             )
@@ -1031,7 +1039,8 @@ async def assess_claim(
     running it. On medium offer it; on high mention it. A vague claim is
     assessed on its most likely reading (the row's ``claim``). A row for a claim found
     false may carry ``suggested_rewrite``, a suggestion built from the reviewers'
-    reasoning and not verified. Leave ``language`` unset.
+    reasoning and not verified. Verdicts and written results follow the language of the
+    text; a reviewer's note follows the text it saw. Leave ``language`` unset.
     """
     authorization = _authorization(ctx)  # gate enforced by @requires_auth
 
@@ -1330,7 +1339,8 @@ async def verify_claim(
         str,
         Field(
             description=(
-                'ONE claim to check in depth against sources. Run it once the user agreed to a deep '
+                "ONE claim to check in depth against sources, in the user's own words and language, not "
+                'translated or paraphrased into English. Run it once the user agreed to a deep '
                 'check, or when they asked for sources, a deep check or a verification.'
             )
         ),
@@ -2122,8 +2132,8 @@ async def ask_followup(
     works on a completed `verify_claim` — not on `assess_claim` results. Costs
     credits at the cheap rate, same as `assess_claim`. The conversation is kept
     server-side per verification, so ask
-    follow-ups sequentially rather than in parallel. Replies in English unless
-    the user explicitly asked for another language — leave ``language`` unset.
+    follow-ups sequentially rather than in parallel. Replies in the language of the
+    check unless the user explicitly asked for another one — leave ``language`` unset.
     The answer is markdown whose links point at the check's own sources: when you
     relay it, keep its source links as links.
     """

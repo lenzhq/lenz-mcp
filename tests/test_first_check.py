@@ -257,9 +257,10 @@ INSTRUCTIONS_MAX_CHARS = 2372
 # sentence: each example phrase sits beside the intent it stands for, followed
 # by what the tool is not for, so the description states the user's intent
 # rather than a list of words to react to.
-ASSESS_DESCRIPTION_MAX_CHARS = 1694
+ASSESS_DESCRIPTION_MAX_CHARS = 1799
 # Raised from 1,575 for the sentence saying a row for a claim found false may carry a
 # `suggested_rewrite`: a suggestion built from the reviewers' reasoning, not verified.
+# Raised again to 1,799 for what follows the language of the text, and what does not.
 
 
 def _assess_description() -> str:
