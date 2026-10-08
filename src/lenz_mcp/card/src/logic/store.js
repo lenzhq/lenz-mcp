@@ -35,8 +35,12 @@ function fnv1a(s, seed = 0x811c9dc5) {
 // hand, and a collision does not only mis-read: the second row's save REPLACES
 // the first row's record, losing a paid check's ids. Reads still compare the
 // claim itself, so a collision can never show another row's result.
-export function rowKey(claim, quickVerdict) {
-  const text = `${claim}\u0000${quickVerdict}`;
+//
+// A row whose quick check named a language is a different row in another one:
+// the same claim and verdict assessed in French is not the German check. A row
+// with no language keeps exactly the key it always had.
+export function rowKey(claim, quickVerdict, language = '') {
+  const text = `${claim}\u0000${quickVerdict}${language ? `\u0000${language}` : ''}`;
   return `${PREFIX}${fnv1a(text)}${fnv1a(text, 0x01000193)}`;
 }
 
@@ -62,9 +66,9 @@ function clean(raw) {
   return rec.taskId || rec.verificationId ? rec : null;
 }
 
-export function createRowStore(storage, { claim, quickVerdict, now = () => Date.now() }) {
+export function createRowStore(storage, { claim, quickVerdict, language = '', now = () => Date.now() }) {
   const available = usable(storage);
-  const key = rowKey(claim, quickVerdict);
+  const key = rowKey(claim, quickVerdict, language);
   const clear = () => {
     try {
       storage.removeItem(key);
@@ -86,7 +90,7 @@ export function createRowStore(storage, { claim, quickVerdict, now = () => Date.
       if (!rec) return null;
       // The key is a 32-bit hash: the record also names the row it belongs to,
       // so a colliding claim never recovers another claim's check.
-      if (!raw || raw.claim !== claim || raw.quickVerdict !== quickVerdict) return null;
+      if (!raw || raw.claim !== claim || raw.quickVerdict !== quickVerdict || (raw.language || '') !== language) return null;
       const savedAt = raw && Number.isFinite(raw.savedAt) ? raw.savedAt : 0;
       const ttl = rec.verificationId ? VERIFICATION_RECORD_TTL_MS : TASK_RECORD_TTL_MS;
       if (now() - savedAt > ttl) {
@@ -99,7 +103,7 @@ export function createRowStore(storage, { claim, quickVerdict, now = () => Date.
       if (!available) return;
       const rec = clean(value);
       try {
-        if (rec) storage.setItem(key, JSON.stringify({ ...rec, claim, quickVerdict, savedAt: now() }));
+        if (rec) storage.setItem(key, JSON.stringify({ ...rec, claim, quickVerdict, ...(language ? { language } : {}), savedAt: now() }));
       } catch (_e) {
         /* quota or policy: persistence is best effort */
       }

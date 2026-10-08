@@ -352,6 +352,66 @@ test('ChatGPT: a new conversation delivered into a mounted card announces again,
   await page.context().close();
 });
 
+test('a mounting change never overlaps a host write still in flight: B\'s push waits for A\'s, and B\'s is the last', async () => {
+  const { page } = await harness.page();
+  const tools = {
+    start_verification_widget: [withDeliver({ status: 'submitted', task_id: 'task-1' }, 'context')],
+    get_verification_widget: [withDeliver(COMPLETED, 'context')],
+  };
+  await page.evaluate((c) => window.startCard('w', c), config({ tools, holdUpdates: true, toolResult: mounted(QUICK_LOW, { callId: 'a000000000000001' }) }));
+  const frame = await frameOf(page, 'w');
+  await frame.getByRole('button', { name: /Check against sources/ }).click();
+  await frame.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await waitForUpdates(page, 1);
+
+  // Another mounting is delivered while A's update is still pending on the host.
+  await page.evaluate((r) => window.pushResult('w', r), mounted(QUICK_LOW, { callId: 'a000000000000002' }));
+  await frame.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await page.waitForTimeout(800);
+  assert.equal((await updatesOf(page)).length, 1, 'B writes nothing while A\'s write is in flight');
+
+  await page.evaluate(() => window.releaseHeld('w'));
+  await waitForUpdates(page, 2);
+  const updates = await updatesOf(page);
+  assert.equal(updates.length, 2);
+  const releasedAt = await page.evaluate(() => window.releasedAt);
+  assert.ok(updates[1].at >= releasedAt, 'B\'s write started only after A\'s settled, so it is the one the host keeps');
+  await page.evaluate(() => window.releaseHeld('w'));
+  await page.context().close();
+});
+
+test('the same claim and verdict in another language is a different check: no recovery, the start button, and its own language', async () => {
+  const quick = (language) => ({ ...QUICK_LOW, claims: [{ ...QUICK_LOW.claims[0], language }] });
+  const tools = {
+    start_verification_widget: [{ status: 'submitted', task_id: 'task-1' }],
+    get_verification_widget: [COMPLETED],
+  };
+  const first = await harness.page();
+  await first.page.evaluate((c) => window.startCard('a', c), config({ tools, toolResult: quick('de') }));
+  const frameA = await frameOf(first.page, 'a');
+  await frameA.getByRole('button', { name: /Check against sources/ }).click();
+  await frameA.getByText('Claim checked').waitFor({ timeout: 12000 });
+
+  // French, same claim and verdict: the German check is not its check.
+  const second = await harness.pageInContext(first.context);
+  await second.page.evaluate((c) => window.startCard('b', c), config({ tools: { start_verification_widget: [{ status: 'submitted', task_id: 'task-2' }], get_verification_widget: [PROCESSING('research', 2, 5)] }, toolResult: quick('fr') }));
+  const frameB = await frameOf(second.page, 'b');
+  const button = frameB.getByRole('button', { name: /Check against sources/ });
+  await button.waitFor();
+  await second.page.waitForTimeout(400);
+  assert.deepEqual(await calls(second.page, 'b'), [], 'nothing recovered for another language');
+  await button.click();
+  const [start] = await waitForCalls(second.page, 'b', 'start_verification_widget', 1);
+  assert.equal(start.params.arguments.language, 'fr');
+
+  // German again: its own check is found.
+  const third = await harness.pageInContext(first.context);
+  await third.page.evaluate((c) => window.startCard('c', c), config({ tools: { get_verification_widget: [COMPLETED] }, toolResult: quick('de') }));
+  const frameC = await frameOf(third.page, 'c');
+  await frameC.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await first.context.close();
+});
+
 test('the quick check\'s language rides to the card\'s deep check; without one nothing extra is sent', async () => {
   const german = { ...QUICK_LOW, claims: [{ ...QUICK_LOW.claims[0], language: 'de' }] };
   const { page } = await harness.page();

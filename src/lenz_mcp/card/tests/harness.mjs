@@ -53,6 +53,8 @@ window.addEventListener('message', (event) => {
     const delay = (answer && answer.__delay) || 0;
     setTimeout(() => reply(card.frame, msg.id, { content: [{ type: 'text', text: JSON.stringify(answer) }], structuredContent: answer }), delay);
   } else if (msg.id !== undefined && msg.method) {
+    // A host slow to take a context update: hold the answer until released.
+    if (cfg.holdUpdates && msg.method === 'ui/update-model-context') { (card.held = card.held || []).push(msg.id); return; }
     reply(card.frame, msg.id, {});
   }
 });
@@ -76,6 +78,13 @@ window.startCard = (name, config) => {
 window.teardown = (name) => {
   const card = window.cards[name];
   card.frame.contentWindow.postMessage({ jsonrpc: '2.0', id: 9001, method: 'ui/resource-teardown', params: { reason: 'test' } }, '*');
+};
+window.releaseHeld = (name) => {
+  const card = window.cards[name];
+  const held = card.held || [];
+  card.held = [];
+  window.releasedAt = Date.now();
+  for (const id of held) reply(card.frame, id, {});
 };
 window.removeCard = (name) => { window.cards[name].frame.remove(); delete window.cards[name]; };
 // A host may deliver another tool result into a card that is already mounted

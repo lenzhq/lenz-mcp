@@ -107,7 +107,9 @@ function Root({ host, dev }) {
     generation.current += 1;
     completed.current = new Map();
     pushed.current = 0;
-    pushing.current = Promise.resolve();
+    // `pushing` is NOT reset: host writes stay one chain for the life of the
+    // frame. A write already in flight cannot be taken back, and a new one
+    // started beside it could finish first and be overwritten by it.
   }
 
   // What the model has been told is a fact about the CARD, not about one row: a

@@ -348,8 +348,8 @@ const TERMINAL = new Set(['failed', 'quota', 'unavailable', 'unrecoverable']);
 // announcements. The single card and every list row use this same hook.
 function useDeepCheck({ row, host, announce, registerCompleted, label = '', store: given, checkKey = '', order = 0, reportState }) {
   const own = useMemo(
-    () => (given === null ? null : createRowStore(safeStorage(), { claim: row.claim, quickVerdict: row.verdict })),
-    [row.claim, row.verdict, given === null],
+    () => (given === null ? null : createRowStore(safeStorage(), { claim: row.claim, quickVerdict: row.verdict, language: row.language })),
+    [row.claim, row.verdict, row.language, given === null],
   );
   const store = given === null ? null : own;
   const [state, setState] = useState({ kind: 'idle' });
@@ -377,7 +377,7 @@ function useDeepCheck({ row, host, announce, registerCompleted, label = '', stor
       onAdopted: () => reportState && checkKey && reportState(checkKey, 'running'),
     });
     return () => check.dispose();
-  }, [row.claim, row.verdict]);
+  }, [row.claim, row.verdict, row.language]);
 
   // Announce stage changes and the result, once each, through the one status region.
   const lastStage = useRef('');
@@ -606,7 +606,7 @@ function Row({ index, row, host, open, hidden, onToggle, announce, registerCompl
   );
 }
 
-const rowId = (row) => `${row.claim}\u0000${row.verdict}`;
+const rowId = (row) => `${row.claim}\u0000${row.verdict}\u0000${row.language || ''}`;
 
 function ListCard({ rows, host, announce, registerCompleted, reportState }) {
   const [allRows, setAllRows] = useState(false);
@@ -1000,7 +1000,7 @@ export function App({ host, payload, announce, registerCompleted, reportState })
     case 'waiting':
       return <Frame heading={copy.WAITING} />;
     case 'single':
-      return <SingleCard key={`${route.row.claim}|${route.row.verdict}`} row={route.row} host={host} announce={announce} registerCompleted={registerCompleted} reportState={reportState} />;
+      return <SingleCard key={`${route.row.claim}|${route.row.verdict}|${route.row.language}`} row={route.row} host={host} announce={announce} registerCompleted={registerCompleted} reportState={reportState} />;
     case 'list':
       return <ListCard rows={route.rows} host={host} announce={announce} registerCompleted={registerCompleted} reportState={reportState} />;
     case 'row-error':

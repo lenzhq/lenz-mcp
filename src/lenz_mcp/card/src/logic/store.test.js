@@ -275,3 +275,31 @@ test('a conversation ledger entry expires with the verification window too', () 
   assert.deepEqual(ledger.announced(), []);
   assert.deepEqual(ledger.reserve(['v1']), ['v1']);
 });
+
+// A row's identity is its claim, its quick verdict and, when the quick check
+// named one, the language it answered in: the same claim assessed in another
+// language is another check.
+test('a row without a language keeps exactly the key it always had', () => {
+  assert.equal(rowKey('The claim.', 'False'), 'lenz-card:v1:ed306fad5c54de33');
+  assert.equal(rowKey('The claim.', 'False', ''), rowKey('The claim.', 'False'));
+  assert.notEqual(rowKey('The claim.', 'False', 'de'), rowKey('The claim.', 'False'));
+  assert.notEqual(rowKey('The claim.', 'False', 'de'), rowKey('The claim.', 'False', 'fr'));
+});
+
+test('a record is recovered only by a row of the same language', () => {
+  const storage = fakeStorage();
+  const de = createRowStore(storage, { claim: 'C', quickVerdict: 'True', language: 'de' });
+  de.save({ taskId: 't1', verificationId: 'abcd1234' });
+  assert.deepEqual(createRowStore(storage, { claim: 'C', quickVerdict: 'True', language: 'de' }).load(), { taskId: 't1', verificationId: 'abcd1234' });
+  assert.equal(createRowStore(storage, { claim: 'C', quickVerdict: 'True', language: 'fr' }).load(), null);
+  assert.equal(createRowStore(storage, { claim: 'C', quickVerdict: 'True' }).load(), null);
+  // Even a forced key collision does not cross languages.
+  storage.setItem(rowKey('C', 'True', 'fr'), storage.getItem(rowKey('C', 'True', 'de')));
+  assert.equal(createRowStore(storage, { claim: 'C', quickVerdict: 'True', language: 'fr' }).load(), null);
+});
+
+test('an old record with no language is still found by a row with none', () => {
+  const storage = fakeStorage();
+  storage.setItem(rowKey('C', 'True'), JSON.stringify({ taskId: 't1', claim: 'C', quickVerdict: 'True', savedAt: Date.now() }));
+  assert.deepEqual(createRowStore(storage, { claim: 'C', quickVerdict: 'True' }).load(), { taskId: 't1' });
+});
