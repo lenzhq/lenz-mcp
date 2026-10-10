@@ -140,7 +140,11 @@ function Root({ host, dev }) {
           return text ? host.sendMessage(text) : Promise.resolve();
         },
       }),
-    [ledger],
+    // One messenger per MOUNTING: its running set and ceiling belong to the
+    // checks of the card that is on screen, so a mounting delivered into this
+    // frame must not inherit a row the last one left running. The ledger is
+    // the conversation's and survives.
+    [ledger, identity.key],
   );
   useEffect(() => () => messenger.dispose(), [messenger]);
 
