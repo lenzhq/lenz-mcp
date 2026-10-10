@@ -26,12 +26,13 @@ change. The deep-check wait still keys on the identity, on purpose
 Two rules from measuring Claude (scripts/probe, 2026-09-17):
 
 - **The URI is a published identity, bumped by hand.** Claude caches the card by
-  URI, and the tool list (which carries the URI) per connector. A rebuilt
-  bundle under the same URI is invisible to users until they re-add the
-  connector, and old chats re-mount whatever HTML their URI names. So every
-  release gets a new literal ``CARD_URI``, every earlier URI keeps serving its
-  own committed bundle (``dist/versions.json``), and a test fails when a bundle
-  changes without a new URI.
+  URI, and the tool list (which carries the URI) per connector. A version is
+  published once a release tag has it; one that is only on main may still be
+  rebuilt. A tagged bundle rebuilt under the same URI is invisible to users
+  until they re-add the connector, and old chats re-mount whatever HTML their
+  URI names. So every release gets a new literal ``CARD_URI``, every earlier
+  URI keeps serving its own committed bundle (``dist/versions.json``), and a
+  test fails when a bundle changes without a new URI.
 - **The card is served on read and never listed.** Claude lists resources once
   at connect and offers every listed one under "+ → Add from Lenz", where
   picking it pastes the raw HTML into the chat. The card is read by URI when a
