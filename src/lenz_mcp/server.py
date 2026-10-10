@@ -53,11 +53,9 @@ CONFIDENCE_NOTE = (
 # locale would get a verdict in a language nobody asked for, at no error.
 #
 # Left unset, the language is read from the text the user wrote: the connector
-# sends `auto` for an unset one when `config.LANGUAGE_AUTO_ENABLED` is on (see
-# `client.effective_language`). So the model's part is to pass the claim in the
-# user's own words and language, and to set `language` only for a user who
-# asked for the answer in another one. The description is the same with the
-# switch on or off; the switch only changes what is sent.
+# sends `auto` for an unset one (see `client.effective_language`). So the
+# model's part is to pass the claim in the user's own words and language, and
+# to set `language` only for a user who asked for the answer in another one.
 #
 # The enum is built from `config.SUPPORTED_LANGUAGES`, so a thirteenth
 # language is a one-line change; `''` is "unset". `auto` is deliberately NOT a

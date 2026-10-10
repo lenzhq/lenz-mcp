@@ -548,10 +548,10 @@ def test_client_verify_puts_retry_of_in_the_key_not_the_body(monkeypatch):
 
     monkeypatch.setattr(client, '_request', _request)
     _run(client.verify('Bearer k', text='The claim.', language='', retry_of='f' * 32))
-    assert sent['json'] == {'claim': 'The claim.', 'language': '', 'depth': 'standard'}
-    assert sent['key'] == client._idem_key('verify', 'The claim.', '', 'retry_of', 'f' * 32)
+    assert sent['json'] == {'claim': 'The claim.', 'language': 'auto', 'depth': 'standard'}
+    assert sent['key'] == client._idem_key('verify', 'The claim.', 'auto', 'retry_of', 'f' * 32)
     _run(client.verify('Bearer k', text='The claim.', language=''))
-    assert sent['key'] == client._idem_key('verify', 'The claim.', '')
+    assert sent['key'] == client._idem_key('verify', 'The claim.', 'auto')
 
 
 def test_the_card_poll_tool_names_a_gone_task(monkeypatch, authed):

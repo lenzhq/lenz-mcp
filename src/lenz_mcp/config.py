@@ -236,14 +236,6 @@ def verify_wait_seconds(identity: str) -> float:
 # ── Claude verdict card (MCP Apps) kill-switch ───────────────────────
 # Off = today's manifest for every client.
 CARD_ENABLED: bool = _env_flag('MCP_CARD_ENABLED')
-# ── Output language from the text ────────────────────────────────────
-# Off (the default): an unset `language` is sent as '', which the API reads as
-# English, exactly as before. On: it is sent as 'auto', and the API picks the
-# language from the claim text. A model-set code is sent unchanged either way.
-# It is a switch because an API that does not accept `auto` answers 422 for it:
-# turn it on only against one that does. It changes what is SENT, never what
-# the tools say, so the tool descriptions are the same in both positions.
-LANGUAGE_AUTO_ENABLED: bool = _env_flag('MCP_LANGUAGE_AUTO_ENABLED')
 # The depth the card's "Check against sources" button asks for. Standard: the
 # person pressing it asked for sources, so they get the full check. The running
 # state's line (card copy USUALLY) follows this depth; the button itself

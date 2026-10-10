@@ -122,23 +122,23 @@ def test_it_is_not_an_argument_the_model_can_see():
 
 def test_the_body_carries_the_flag_only_when_asked(monkeypatch):
     body, _key = _sent(monkeypatch, text='a b', language='', suggest_rewrite=True)
-    assert body == {'claim': 'a b', 'language': '', 'suggest_rewrite': True}
+    assert body == {'claim': 'a b', 'language': 'auto', 'suggest_rewrite': True}
     body, _key = _sent(monkeypatch, claims=['a', 'b'], language='', suggest_rewrite=True)
-    assert body == {'claims': ['a', 'b'], 'language': '', 'suggest_rewrite': True}
+    assert body == {'claims': ['a', 'b'], 'language': 'auto', 'suggest_rewrite': True}
     # A call that does not ask sends what it always sent.
     body, _key = _sent(monkeypatch, text='a b', language='')
-    assert body == {'claim': 'a b', 'language': ''}
+    assert body == {'claim': 'a b', 'language': 'auto'}
 
 
 def test_a_key_from_before_the_flag_is_unchanged_and_the_flag_makes_a_new_one(monkeypatch):
     _body, plain = _sent(monkeypatch, text='a b', language='')
-    assert plain == client._idem_key('assess', 'a b', '')
+    assert plain == client._idem_key('assess', 'a b', 'auto')
     _body, plain_list = _sent(monkeypatch, claims=['a', 'b'], language='')
-    assert plain_list == client._idem_key('assess', 'claims', '\x1f'.join(['a', 'b']), '')
+    assert plain_list == client._idem_key('assess', 'claims', '\x1f'.join(['a', 'b']), 'auto')
     _body, flagged = _sent(monkeypatch, text='a b', language='', suggest_rewrite=True)
     _body, flagged_again = _sent(monkeypatch, text='a b', language='', suggest_rewrite=True)
     _body, flagged_list = _sent(monkeypatch, claims=['a', 'b'], language='', suggest_rewrite=True)
-    assert flagged == flagged_again == client._idem_key('assess', 'a b', '', 'suggest_rewrite')
+    assert flagged == flagged_again == client._idem_key('assess', 'a b', 'auto', 'suggest_rewrite')
     # A body with the flag never reuses the key of one without it, or the API would refuse it.
     assert flagged != plain and flagged_list != plain_list
 

@@ -593,15 +593,13 @@ async def _request(
 
 
 def effective_language(language: str) -> str:
-    """The language a request carries: the caller's code, else ``auto`` when the switch is on.
+    """The language a request carries: the caller's code, else ``auto``.
 
     Applied where a request is built, so the body and the idempotency key
     describe the same thing: ``auto``, an explicit code and nothing are three
-    different requests with three keys. With the switch off, nothing changes.
+    different requests with three keys.
     """
-    if language or not config.LANGUAGE_AUTO_ENABLED:
-        return language
-    return 'auto'
+    return language or 'auto'
 
 
 async def assess(

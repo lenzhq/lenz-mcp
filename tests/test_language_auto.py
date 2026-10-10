@@ -1,10 +1,8 @@
 """The connector sends `language: "auto"` when the model leaves `language` unset.
 
-Behind its own switch (`MCP_LANGUAGE_AUTO_ENABLED`, off by default): an API
-that does not accept `auto` answers 422 for it, so the connector only sends it
-once the switch is on. Off, every body and every key is what it always was.
-A code the model sets, because the user asked for one, is sent unchanged and
-always wins. The tool descriptions do not depend on the switch.
+Always on: there is no switch. The API reads `auto` from the text; a code the
+model sets, because the user asked for one, is sent unchanged and always wins.
+`select` and `citecheck` are never sent a language.
 """
 
 from __future__ import annotations
@@ -72,16 +70,10 @@ def _keys(sent, suffix):
     return [r.headers['idempotency-key'] for r in sent if r.url.path.endswith(suffix)]
 
 
-def test_the_switch_is_off_by_default_and_named_like_the_others():
-    assert config.LANGUAGE_AUTO_ENABLED is False
-
-
 # ── the client ───────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize('on', [True, False])
-def test_a_code_the_caller_sets_is_sent_unchanged(monkeypatch, api, on):
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', on)
+def test_a_code_the_caller_sets_is_sent_unchanged(api):
     _run(client.assess('Bearer k', text='hi', language='en'))
     _run(client.verify('Bearer k', text='hi', language='de'))
     _run(client.ask('Bearer k', verification_id='abcd1234', message='why?', language='fr'))
@@ -90,8 +82,7 @@ def test_a_code_the_caller_sets_is_sent_unchanged(monkeypatch, api, on):
     assert _bodies(api, 'abcd1234')[0]['language'] == 'fr'
 
 
-def test_unset_becomes_auto_on_assess_verify_and_ask_when_the_switch_is_on(monkeypatch, api):
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', True)
+def test_unset_becomes_auto_on_assess_verify_and_ask(api):
     _run(client.assess('Bearer k', text='hi', language=''))
     _run(client.assess('Bearer k', claims=['a', 'b'], language=''))
     _run(client.verify('Bearer k', text='hi', language=''))
@@ -101,34 +92,17 @@ def test_unset_becomes_auto_on_assess_verify_and_ask_when_the_switch_is_on(monke
     assert _bodies(api, 'abcd1234')[0]['language'] == 'auto'
 
 
-def test_the_bodies_are_what_they_always_were_when_the_switch_is_off(monkeypatch, api):
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', False)
-    _run(client.assess('Bearer k', text='hi', language=''))
-    _run(client.verify('Bearer k', text='hi', language=''))
-    _run(client.ask('Bearer k', verification_id='abcd1234', message='why?'))
-    assert _bodies(api, '/assess') == [{'claim': 'hi', 'language': ''}]
-    assert _bodies(api, '/verify') == [{'claim': 'hi', 'language': '', 'depth': 'standard'}]
-    assert _bodies(api, 'abcd1234') == [{'message': 'why?', 'language': ''}]
-    assert _keys(api, '/assess')[0] == client._idem_key('assess', 'hi', '')
-    assert _keys(api, '/verify')[0] == client._idem_key('verify', 'hi', '')
-
-
-def test_auto_is_part_of_the_key_and_differs_from_unset_and_from_a_code(monkeypatch, api):
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', True)
+def test_auto_is_part_of_the_key_and_differs_from_a_code(api):
     _run(client.assess('Bearer k', text='hi', language=''))
     _run(client.assess('Bearer k', text='hi', language=''))
     _run(client.assess('Bearer k', text='hi', language='en'))
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', False)
-    _run(client.assess('Bearer k', text='hi', language=''))
-    auto, auto_again, explicit, unset = _keys(api, '/assess')
+    auto, auto_again, explicit = _keys(api, '/assess')
     assert auto == auto_again
-    assert len({auto, explicit, unset}) == 3
+    assert auto != explicit
     assert auto == client._idem_key('assess', 'hi', 'auto')
-    assert unset == client._idem_key('assess', 'hi', '')
 
 
 def test_a_select_or_a_citation_check_is_never_sent_a_language(monkeypatch, api):
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', True)
     sent = []
 
     async def _spy(method, path, authorization, *, json=None, **kwargs):
@@ -144,20 +118,16 @@ def test_a_select_or_a_citation_check_is_never_sent_a_language(monkeypatch, api)
 # ── the tools ────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(('on', 'expected'), [(True, 'auto'), (False, '')])
-def test_the_tools_send_the_effective_language_for_an_unset_one(monkeypatch, api, on, expected):
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', on)
+def test_the_tools_send_auto_for_an_unset_language(api):
     _run(server.assess_claim('Der Rhein ist der längste Fluss Deutschlands.', _ctx()))
     _run(server.verify_claim('Der Rhein ist der längste Fluss Deutschlands.', _ctx()))
     _run(server.ask_followup('abcd1234', 'Welche Quelle ist am stärksten?', _ctx()))
-    assert _bodies(api, '/assess')[0]['language'] == expected
-    assert _bodies(api, '/verify')[0]['language'] == expected
-    assert _bodies(api, 'abcd1234')[0]['language'] == expected
+    assert _bodies(api, '/assess')[0]['language'] == 'auto'
+    assert _bodies(api, '/verify')[0]['language'] == 'auto'
+    assert _bodies(api, 'abcd1234')[0]['language'] == 'auto'
 
 
-@pytest.mark.parametrize('on', [True, False])
-def test_an_explicit_code_is_never_replaced(monkeypatch, api, on):
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', on)
+def test_an_explicit_code_is_never_replaced(api):
     text = 'Der Rhein ist der längste Fluss Deutschlands.'
     _run(server.assess_claim(text, _ctx(), language='en'))
     _run(server.verify_claim(text, _ctx(), language='en'))
@@ -167,17 +137,14 @@ def test_an_explicit_code_is_never_replaced(monkeypatch, api, on):
     assert _bodies(api, 'abcd1234')[0]['language'] == 'en'
 
 
-def test_the_claim_text_goes_to_the_api_as_it_was_given(monkeypatch, api):
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', True)
+def test_the_claim_text_goes_to_the_api_as_it_was_given(api):
     text = 'Der Rhein ist der längste Fluss Deutschlands.'
     _run(server.assess_claim(text, _ctx()))
     assert _bodies(api, '/assess')[0]['claim'] == text
 
 
 @pytest.mark.parametrize('tool', ['assess_claim', 'verify_claim', 'ask_followup'])
-@pytest.mark.parametrize('on', [True, False])
-def test_an_unsupported_code_never_reaches_the_api(monkeypatch, api, tool, on):
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', on)
+def test_an_unsupported_code_never_reaches_the_api(api, tool):
     arguments = {
         'assess_claim': {'claim': 'x'},
         'verify_claim': {'claim': 'x'},
@@ -198,26 +165,20 @@ def test_auto_is_not_a_value_the_model_can_pass():
 # ── the card's deep check ────────────────────────────────────────────
 
 
-def _start(monkeypatch, api, *, language, on):
+def _start(monkeypatch, api, *, language):
     monkeypatch.setattr(config, 'CARD_ENABLED', True)
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', on)
     return _run(server._start_verification_for_card('Der Rhein ist lang.', _ctx(), '', language))
 
 
 def test_the_card_passes_the_quick_checks_language_on_unchanged(monkeypatch, api):
-    out = _start(monkeypatch, api, language='de', on=True)
+    out = _start(monkeypatch, api, language='de')
     assert out['status'] == 'submitted'
     assert _bodies(api, '/verify')[0]['language'] == 'de'
 
 
-def test_the_card_with_no_language_sends_auto_when_the_switch_is_on(monkeypatch, api):
-    _start(monkeypatch, api, language='', on=True)
+def test_the_card_with_no_language_sends_auto(monkeypatch, api):
+    _start(monkeypatch, api, language='')
     assert _bodies(api, '/verify')[0]['language'] == 'auto'
-
-
-def test_the_card_with_no_language_sends_what_it_always_sent_when_the_switch_is_off(monkeypatch, api):
-    _start(monkeypatch, api, language='', on=False)
-    assert _bodies(api, '/verify')[0]['language'] == ''
 
 
 # ── what the model is told ───────────────────────────────────────────
@@ -225,18 +186,6 @@ def test_the_card_with_no_language_sends_what_it_always_sent_when_the_switch_is_
 
 def _tools():
     return {t.name: t for t in _run(server.mcp.list_tools())}
-
-
-@pytest.mark.parametrize('on', [True, False])
-def test_the_descriptions_do_not_depend_on_the_switch(monkeypatch, on):
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', on)
-    snapshot = {
-        name: (tool.description, json.dumps(tool.input_schema, sort_keys=True)) for name, tool in _tools().items()
-    }
-    monkeypatch.setattr(config, 'LANGUAGE_AUTO_ENABLED', not on)
-    assert snapshot == {
-        name: (tool.description, json.dumps(tool.input_schema, sort_keys=True)) for name, tool in _tools().items()
-    }
 
 
 def test_the_field_description_states_the_rule():
