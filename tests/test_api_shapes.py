@@ -1,25 +1,26 @@
-"""The tools read both shapes of the Lenz API's responses, and say the same thing.
+"""The tools read the Lenz API's response shape, and say exactly what they said.
 
-The API answers in an older shape and a newer one. `api_shapes.json` holds the
-same response in each (endpoint and outcome). `api_shapes_expected.json` is the
-oracle: what each tool returned for the OLDER body before this server could
-read the newer one, recorded once from that earlier code and frozen. Every
-scenario here runs the tool on both bodies and requires exactly the oracle's
-output from each, serialized byte for byte.
+`api_shapes.json` holds one response per endpoint and outcome, in the shape
+the API serves (`config.API_VERSION`). `api_shapes_expected.json` is the oracle:
+what each tool returned for that body, recorded once and frozen. Every scenario
+here runs the tool on the body and requires exactly the oracle's output,
+serialized byte for byte.
 
-The newer body is also served over HTTP, through the real client (the lenz-io
-SDK) on an `httpx.MockTransport`: the answer the SDK hands back must give the
-tools exactly what the raw body gave them. Keys are compared sorted there,
-because the SDK's models order the keys they dump.
+The body is also served over HTTP, through the real client (the lenz-io SDK)
+on an `httpx.MockTransport`: the answer the SDK hands back must give the tools
+exactly what the raw body gave them. Keys are compared sorted there, because
+the SDK's models order the keys they dump.
 
-The oracle comes from the release before this server read the newer shape,
-commit b8da55d069e31e81dc7c6d61574a3dd722aeb5db, and the writer refuses to run
-on any other source. To rebuild it:
+The oracle comes from commit 392f0470696bdbf5d3d65ffc61c548b8d6b5ea59, the last
+release that also read the API's older shape. That commit's own tests held the
+same outputs equal to the outputs its predecessor gave for the older bodies
+(b8da55d069e31e81dc7c6d61574a3dd722aeb5db), so what the tools say has not
+moved since then. The writer refuses to run on any other source. To rebuild it:
 
-    git worktree add --detach /tmp/lenz-mcp-oracle b8da55d069e31e81dc7c6d61574a3dd722aeb5db
-    cp tests/test_api_shapes.py tests/api_shapes.json /tmp/lenz-mcp-oracle/tests/
+    git worktree add --detach /tmp/lenz-mcp-oracle 392f0470696bdbf5d3d65ffc61c548b8d6b5ea59
+    cp tests/test_api_shapes.py tests/api_shapes.json tests/citecheck_shapes.json /tmp/lenz-mcp-oracle/tests/
     cd /tmp/lenz-mcp-oracle && uv sync --group dev
-    LENZ_MCP_WRITE_API_ORACLE=<this checkout>/tests/api_shapes_expected.json \
+    LENZ_MCP_WRITE_API_ORACLE=<this checkout>/tests/api_shapes_expected.json \\
         uv run pytest tests/test_api_shapes.py
 """
 
@@ -43,8 +44,7 @@ SHAPES: dict[str, dict[str, Any]] = json.loads((HERE / 'api_shapes.json').read_t
 ORACLE_PATH = HERE / 'api_shapes_expected.json'
 WRITE_ORACLE = os.environ.get('LENZ_MCP_WRITE_API_ORACLE', '')
 # The release whose behaviour the oracle records.
-ORACLE_COMMIT = 'b8da55d069e31e81dc7c6d61574a3dd722aeb5db'
-BOTH = ('legacy', 'canonical')
+ORACLE_COMMIT = '392f0470696bdbf5d3d65ffc61c548b8d6b5ea59'
 
 
 @pytest.fixture(autouse=True)
@@ -63,8 +63,8 @@ def _ctx():
     return types.SimpleNamespace(request_context=types.SimpleNamespace(request=request))
 
 
-def _response(fixture: str, shape: str) -> ApiResponse:
-    entry = SHAPES[fixture][shape]
+def _response(fixture: str) -> ApiResponse:
+    entry = SHAPES[fixture]
     # Lowercased like the real client's headers.
     headers = {key.lower(): value for key, value in entry['headers'].items()}
     return ApiResponse(status=entry['status'], data=entry['body'], headers=headers)
@@ -112,18 +112,20 @@ def _api_of(request: Any) -> str:
     raise AssertionError(f'unexpected request {request.method} {path}')
 
 
-def _served(routes: dict[str, ApiResponse]) -> Callable[[Any], Any]:
+def _served(routes: dict[str, ApiResponse], version_headers: dict[str, str] | None = None) -> Callable[[Any], Any]:
     """An HTTP handler answering each request with its endpoint's response, in
-    the API version the connector reads."""
+    the API version the connector reads unless told otherwise."""
 
     def handler(request):
         response = routes[_api_of(request)]
-        return api_wire.answer(response.status, response.data, response.headers)
+        return api_wire.answer(response.status, response.data, {**response.headers, **(version_headers or {})})
 
     return handler
 
 
-def run_through_the_wire(runner: Callable[[pytest.MonkeyPatch], Any]) -> Any:
+def run_through_the_wire(
+    runner: Callable[[pytest.MonkeyPatch], Any], version_headers: dict[str, str] | None = None
+) -> Any:
     """Run a tool scenario whose `_stub` answers come over HTTP, through the SDK."""
     global _WIRE_ROUTES
     routes: dict[str, ApiResponse] = {}
@@ -131,7 +133,7 @@ def run_through_the_wire(runner: Callable[[pytest.MonkeyPatch], Any]) -> Any:
     try:
         with pytest.MonkeyPatch.context() as m:
             wire = api_wire.install(m)
-            wire.respond(_served(routes))
+            wire.respond(_served(routes, version_headers))
             # No client identity bound, as in the stubbed runs: the same card
             # and wait decisions on both paths.
             return asyncio.run(runner(m))
@@ -232,8 +234,7 @@ for _name, _runner in {
     'account__me_usage_pro_extra': _usage,
     'account__me_usage_free_partly_spent': _usage,
     'account__me_usage_extra_only': _usage,
-    # An older body with the pool and prices but no per-capability blocks is
-    # still the older shape (the same body stands in for both).
+    # A pool that does not say when it resets is not projected per capability.
     'synthetic__usage_pool_without_blocks': _usage,
     'verify__list_200': _list,
 }.items():
@@ -248,66 +249,17 @@ for _name in (
 ):
     SCENARIOS[f'card_retry:{_name}'] = (_name, _card_retry)
 
-# Where the newer body cannot say what the older one said word for word,
-# because the older text is not derivable from it. Each entry names the one
-# field that differs and the value the newer body gives instead.
-KNOWN_DIFFERENCES: dict[str, dict[str, Any]] = {
-    # The older API wrote a failure read back from storage as "Pipeline
-    # stopped: <code>." and a live one as "Pipeline stopped at: <code>"; the
-    # newer body does not say which it was, so both read as the live form.
-    'verify__status_failed_durable': {'message': 'Pipeline stopped at: conclusion_failed'},
-    'verify__status_failed_durable_framing': {'message': 'Pipeline stopped at: framing_failed'},
-    'verify__status_not_a_claim_durable': {'message': 'Not a verifiable claim.'},
-    # The API's own sentence for a blank claim changed with the newer shape.
-    'verify__blank_claim_422': {'message': 'claim is required.'},
-}
 
-
-# Deliberate behaviour changes made after the oracle was recorded. The oracle
-# stays frozen; each change is applied to it here, by name, so the shape tests
-# keep checking everything else byte for byte.
-#
-# `dissent` is deprecated (the API always sends null): the confidence note no
-# longer describes it.
-_OLD_ESCALATION_CLAUSE = 'on medium confidence or a dissent offer one;'
-_NEW_ESCALATION_CLAUSE = 'on medium confidence offer one;'
-_OLD_NOTES_NOTE = (
-    " `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when "
-    "set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked "
-    'sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.'
-)
-
-
-def _since_the_oracle(value: Any) -> Any:
-    if not isinstance(value, dict):
-        return value
-    out = dict(value)
-    note = out.get('confidence_note')
-    if isinstance(note, str):
-        note = note.replace(_OLD_ESCALATION_CLAUSE, _NEW_ESCALATION_CLAUSE)
-        out['confidence_note'] = note.replace(_OLD_NOTES_NOTE, server.ASSESS_NOTES_NOTE)
-    return out
-
-
-def test_the_oracle_changes_still_apply():
-    """Each deliberate change names text the oracle really holds, and the new
-    text is what the server says now."""
-    raw = ORACLE_PATH.read_text(encoding='utf-8')
-    assert _OLD_ESCALATION_CLAUSE in raw
-    assert json.dumps(_OLD_NOTES_NOTE, ensure_ascii=False)[1:-1] in raw
-    assert _NEW_ESCALATION_CLAUSE in server.ASSESS_ESCALATION_NOTE
-
-
-def _output(scenario: str, shape: str) -> Any:
+def _output(scenario: str) -> Any:
     fixture, runner = SCENARIOS[scenario]
     with pytest.MonkeyPatch.context() as m:
-        return asyncio.run(runner(m, _response(fixture, shape)))
+        return asyncio.run(runner(m, _response(fixture)))
 
 
 def _wire_output(scenario: str) -> Any:
-    """The scenario with the newer body served over HTTP, through the SDK."""
+    """The scenario with its body served over HTTP, through the SDK."""
     fixture, runner = SCENARIOS[scenario]
-    return run_through_the_wire(lambda m: runner(m, _response(fixture, 'canonical')))
+    return run_through_the_wire(lambda m: runner(m, _response(fixture)))
 
 
 def sorted_json(value: Any) -> str:
@@ -338,7 +290,7 @@ def test_write_the_oracle():
     head = git('rev-parse', 'HEAD').stdout.strip()
     assert head == ORACLE_COMMIT, f'the oracle is written only from {ORACLE_COMMIT}, not {head or "no git checkout"}'
     assert git('diff', '--quiet', 'HEAD', '--', '.').returncode == 0, 'the server source differs from the commit'
-    oracle = {scenario: _output(scenario, 'legacy') for scenario in SCENARIOS}
+    oracle = {scenario: _output(scenario) for scenario in SCENARIOS}
     pathlib.Path(WRITE_ORACLE).write_text(_serialized(oracle) + '\n', encoding='utf-8')
 
 
@@ -346,51 +298,105 @@ skip_while_writing = pytest.mark.skipif(bool(WRITE_ORACLE), reason='the oracle i
 
 
 @skip_while_writing
-def test_every_scenario_has_an_oracle_entry_and_both_shapes():
+def test_every_scenario_has_an_oracle_entry_and_a_body():
     assert set(_oracle()) == set(SCENARIOS)
     for fixture, _runner in SCENARIOS.values():
-        assert set(SHAPES[fixture]) == set(BOTH), fixture
+        assert set(SHAPES[fixture]) == {'status', 'headers', 'body'}, fixture
 
 
 @skip_while_writing
 @pytest.mark.parametrize('scenario', sorted(SCENARIOS))
-def test_the_older_body_gives_what_it_gave_before(scenario):
-    assert _serialized(_output(scenario, 'legacy')) == _serialized(_since_the_oracle(_oracle()[scenario]))
+def test_the_body_gives_what_it_gave_before(scenario):
+    assert _serialized(_output(scenario)) == _serialized(_oracle()[scenario])
 
 
 @skip_while_writing
 @pytest.mark.parametrize('scenario', sorted(SCENARIOS))
-def test_the_newer_body_gives_the_same(scenario):
-    expected = _since_the_oracle(_oracle()[scenario])
-    if scenario in KNOWN_DIFFERENCES:
-        expected = {**expected, **KNOWN_DIFFERENCES[scenario]}
-    assert _serialized(_output(scenario, 'canonical')) == _serialized(expected)
+def test_the_body_through_the_sdk_gives_the_same(scenario):
+    assert sorted_json(_wire_output(scenario)) == sorted_json(_oracle()[scenario])
 
 
-@skip_while_writing
-@pytest.mark.parametrize('scenario', sorted(SCENARIOS))
-def test_the_newer_body_through_the_sdk_gives_the_same(scenario):
-    expected = _since_the_oracle(_oracle()[scenario])
-    if scenario in KNOWN_DIFFERENCES:
-        expected = {**expected, **KNOWN_DIFFERENCES[scenario]}
-    assert sorted_json(_wire_output(scenario)) == sorted_json(expected)
+# ── an answer in the older shape never reaches the tools ─────────────
+#
+# The API's older version (2026-05-13) wrote these bodies. The SDK refuses a
+# successful answer in any version but the one the connector names, so the
+# tools never read one: each gives the connector's plain error, and nothing of
+# the body.
+
+OLDER_VERSION = {config.API_VERSION_HEADER: '2026-05-13'}
+OLDER_SUCCESSES: dict[str, tuple[Runner, ApiResponse]] = {
+    'assess': (
+        _assess,
+        ApiResponse(
+            status=200,
+            data={
+                'claims': [
+                    {
+                        'claim': 'hello there',
+                        'verdict': 'Error',
+                        'confidence': 'low',
+                        'error_code': 'no_claim',
+                        'identified_claims': [],
+                        'hint': 'The input is a greeting.',
+                    }
+                ],
+                'error': None,
+            },
+        ),
+    ),
+    'failed_poll': (
+        _poll,
+        ApiResponse(
+            status=200,
+            data={
+                'status': 'failed',
+                'error': 'Pipeline stopped at: research_empty',
+                'failure_reason': 'research_empty',
+                'failure_class': 'insufficient_evidence',
+                'retryable': False,
+            },
+        ),
+    ),
+    'picker': (
+        _poll,
+        ApiResponse(
+            status=200,
+            data={'status': 'needs_input', 'reason': 'multi_claim', 'claims': [{'text': 'A.'}, {'text': 'B.'}]},
+        ),
+    ),
+    'select': (
+        _select,
+        ApiResponse(status=202, data={'batch_id': 'b1', 'items': [{'task_id': 't' * 32, 'claim_text': 'first'}]}),
+    ),
+    'usage': (
+        _usage,
+        ApiResponse(
+            status=200,
+            data={
+                'plan': 'free',
+                'credits': {'remaining': 83, 'bonus': 0},
+                'assess': {'remaining': 83},
+                'verify': {'remaining': 8},
+                'quota_resets_at': '2026-10-02T12:00:00+00:00',
+            },
+        ),
+    ),
+}
 
 
-@skip_while_writing
-def test_each_known_difference_is_one_message_that_really_differs():
-    oracle = _oracle()
-    for scenario, override in KNOWN_DIFFERENCES.items():
-        assert scenario in SCENARIOS
-        assert set(override) == {'message'}
-        assert oracle[scenario]['message'] != override['message'], scenario
+@pytest.mark.parametrize('name', sorted(OLDER_SUCCESSES))
+def test_a_success_in_the_older_version_never_reaches_the_tools(name):
+    runner, response = OLDER_SUCCESSES[name]
+    out = run_through_the_wire(lambda m: runner(m, response), OLDER_VERSION)
+    assert out == {'status': 'error', 'message': client._API_VERSION_DETAIL}
 
 
 # ── ask and citation checks: the raw body and the SDK give the same ──
 #
-# These endpoints have no oracle from before the newer shape. Each scenario runs
-# twice on the newer body: once with the client function stubbed to return it
-# as it came, once with it served over HTTP and read by the SDK. The tool
-# results must be the same (keys sorted).
+# These endpoints have no recorded oracle. Each scenario runs twice on the
+# API's body: once with the client function stubbed to return it as it came,
+# once with it served over HTTP and read by the SDK. The tool results must be
+# the same (keys sorted).
 
 CITECHECK_SHAPES: dict[str, dict[str, Any]] = json.loads((HERE / 'citecheck_shapes.json').read_text(encoding='utf-8'))
 ASK_BODIES: dict[str, ApiResponse] = {
@@ -430,7 +436,7 @@ ASK_BODIES: dict[str, ApiResponse] = {
 
 
 def _citecheck_response(name: str) -> ApiResponse:
-    entry = CITECHECK_SHAPES[name]['canonical']
+    entry = CITECHECK_SHAPES[name]
     headers = {key.lower(): value for key, value in entry.get('headers', {}).items()}
     return ApiResponse(status=entry['status'], data=entry['body'], headers=headers)
 

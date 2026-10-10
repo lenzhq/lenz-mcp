@@ -1,1695 +1,815 @@
 {
  "receipt_202": {
-  "legacy": {
-   "status": 202,
-   "headers": {
-    "Retry-After": "20",
-    "Location": "/api/v1/citechecks/ab12cd34"
-   },
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "queued"
-   }
+  "status": 202,
+  "headers": {
+   "Retry-After": "20",
+   "Location": "/api/v1/citechecks/ab12cd34"
   },
-  "canonical": {
-   "status": 202,
-   "headers": {
-    "Retry-After": "20",
-    "Location": "/api/v1/citechecks/ab12cd34"
-   },
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "queued"
-   }
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "queued"
   }
  },
  "idempotent_replay_202": {
-  "legacy": {
-   "status": 202,
-   "headers": {
-    "Retry-After": "20",
-    "Location": "/api/v1/citechecks/ab12cd34"
-   },
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "queued"
-   }
+  "status": 202,
+  "headers": {
+   "Retry-After": "20",
+   "Location": "/api/v1/citechecks/ab12cd34"
   },
-  "canonical": {
-   "status": 202,
-   "headers": {
-    "Retry-After": "20",
-    "Location": "/api/v1/citechecks/ab12cd34"
-   },
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "queued"
-   }
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "queued"
   }
  },
  "get_queued": {
-  "legacy": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "queued",
-    "outcome": null,
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": null,
-    "language": "en",
-    "poll_after_seconds": 10,
-    "policy": {
-     "max_citations": 1
+  "status": 200,
+  "headers": {},
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "queued",
+   "outcome": null,
+   "created_at": "2026-10-09T10:00:00.000000Z",
+   "completed_at": null,
+   "language": "en",
+   "poll_after_seconds": 10,
+   "policy": {
+    "max_citations": 1
+   },
+   "summary": {
+    "citations_found": 1,
+    "citations_selected": 1,
+    "citation_limit": 1,
+    "citation_limit_exceeded": false,
+    "citation_checks": {
+     "checked": 0,
+     "unchecked": 0,
+     "failed": 0
     },
-    "summary": {
-     "citations_found": 1,
-     "citations_selected": 1,
-     "citation_limit": 1,
-     "citation_limit_reached": false,
-     "citation_checks": {
-      "checked": 0,
-      "unchecked": 0,
-      "failed": 0
-     },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 0
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "https://example.gov/report-2024",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024.",
-      "quotes": [],
-      "position": null,
-      "result": null,
-      "check": {
-       "status": "pending",
-       "page_read": null,
-       "page_title": null,
-       "page_published_date": null,
-       "page_language": null,
-       "source_url": null,
-       "source_version": null,
-       "support": null,
-       "snippet": null,
-       "rationale": null,
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
+    "citation_issues": 0
+   },
+   "credits": {
+    "charged": 0
+   },
+   "citations": [
+    {
+     "index": 0,
+     "reference": "https://example.gov/report-2024",
+     "cited_url": "https://example.gov/report-2024",
+     "doi": null,
+     "statement": "Unemployment fell to 4.1% in 2024.",
+     "quotes": [],
+     "position": null,
+     "result": null,
+     "check": {
+      "status": "pending",
+      "page_read": null,
+      "page_title": null,
+      "page_published_date": null,
+      "page_language": null,
+      "source_url": null,
+      "source_version": null,
+      "support": null,
+      "snippet": null,
+      "rationale": null,
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
-  },
-  "canonical": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "queued",
-    "outcome": null,
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": null,
-    "language": "en",
-    "poll_after_seconds": 10,
-    "policy": {
-     "max_citations": 1
-    },
-    "summary": {
-     "citations_found": 1,
-     "citations_selected": 1,
-     "citation_limit": 1,
-     "citation_limit_exceeded": false,
-     "citation_checks": {
-      "checked": 0,
-      "unchecked": 0,
-      "failed": 0
-     },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 0
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "https://example.gov/report-2024",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024.",
-      "quotes": [],
-      "position": null,
-      "result": null,
-      "check": {
-       "status": "pending",
-       "page_read": null,
-       "page_title": null,
-       "page_published_date": null,
-       "page_language": null,
-       "source_url": null,
-       "source_version": null,
-       "support": null,
-       "snippet": null,
-       "rationale": null,
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
+    }
+   ],
+   "citation_issues": [],
+   "citation_failures": [],
+   "failure": null,
+   "more_citations": []
   }
  },
  "get_checking": {
-  "legacy": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "checking",
-    "outcome": null,
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": null,
-    "language": "en",
-    "poll_after_seconds": 10,
-    "policy": {
-     "max_citations": 2
+  "status": 200,
+  "headers": {},
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "checking",
+   "outcome": null,
+   "created_at": "2026-10-09T10:00:00.000000Z",
+   "completed_at": null,
+   "language": "en",
+   "poll_after_seconds": 10,
+   "policy": {
+    "max_citations": 2
+   },
+   "summary": {
+    "citations_found": 2,
+    "citations_selected": 2,
+    "citation_limit": 2,
+    "citation_limit_exceeded": false,
+    "citation_checks": {
+     "checked": 0,
+     "unchecked": 0,
+     "failed": 0
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 2,
-     "citation_limit_reached": false,
-     "citation_checks": {
-      "checked": 0,
-      "unchecked": 0,
-      "failed": 0
-     },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 0
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "https://example.gov/report-2024",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024.",
-      "quotes": [],
-      "position": null,
-      "result": null,
-      "check": {
-       "status": "pending",
-       "page_read": null,
-       "page_title": null,
-       "page_published_date": null,
-       "page_language": null,
-       "source_url": null,
-       "source_version": null,
-       "support": null,
-       "snippet": null,
-       "rationale": null,
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "https://example.org/statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": "The agency said so in a statement.",
-      "quotes": [],
-      "position": null,
-      "result": null,
-      "check": {
-       "status": "pending",
-       "page_read": null,
-       "page_title": null,
-       "page_published_date": null,
-       "page_language": null,
-       "source_url": null,
-       "source_version": null,
-       "support": null,
-       "snippet": null,
-       "rationale": null,
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
+    "citation_issues": 0
+   },
+   "credits": {
+    "charged": 0
+   },
+   "citations": [
+    {
+     "index": 0,
+     "reference": "https://example.gov/report-2024",
+     "cited_url": "https://example.gov/report-2024",
+     "doi": null,
+     "statement": "Unemployment fell to 4.1% in 2024.",
+     "quotes": [],
+     "position": null,
+     "result": null,
+     "check": {
+      "status": "pending",
+      "page_read": null,
+      "page_title": null,
+      "page_published_date": null,
+      "page_language": null,
+      "source_url": null,
+      "source_version": null,
+      "support": null,
+      "snippet": null,
+      "rationale": null,
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
-  },
-  "canonical": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "checking",
-    "outcome": null,
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": null,
-    "language": "en",
-    "poll_after_seconds": 10,
-    "policy": {
-     "max_citations": 2
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 2,
-     "citation_limit_exceeded": false,
-     "citation_checks": {
-      "checked": 0,
-      "unchecked": 0,
-      "failed": 0
-     },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 0
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "https://example.gov/report-2024",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024.",
-      "quotes": [],
-      "position": null,
-      "result": null,
-      "check": {
-       "status": "pending",
-       "page_read": null,
-       "page_title": null,
-       "page_published_date": null,
-       "page_language": null,
-       "source_url": null,
-       "source_version": null,
-       "support": null,
-       "snippet": null,
-       "rationale": null,
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "https://example.org/statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": "The agency said so in a statement.",
-      "quotes": [],
-      "position": null,
-      "result": null,
-      "check": {
-       "status": "pending",
-       "page_read": null,
-       "page_title": null,
-       "page_published_date": null,
-       "page_language": null,
-       "source_url": null,
-       "source_version": null,
-       "support": null,
-       "snippet": null,
-       "rationale": null,
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
+    {
+     "index": 1,
+     "reference": "https://example.org/statement",
+     "cited_url": "https://example.org/statement",
+     "doi": null,
+     "statement": "The agency said so in a statement.",
+     "quotes": [],
+     "position": null,
+     "result": null,
+     "check": {
+      "status": "pending",
+      "page_read": null,
+      "page_title": null,
+      "page_published_date": null,
+      "page_language": null,
+      "source_url": null,
+      "source_version": null,
+      "support": null,
+      "snippet": null,
+      "rationale": null,
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
+    }
+   ],
+   "citation_issues": [],
+   "citation_failures": [],
+   "failure": null,
+   "more_citations": []
   }
  },
  "get_completed_clean": {
-  "legacy": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "clean",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 2
+  "status": 200,
+  "headers": {},
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "completed",
+   "outcome": "clean",
+   "created_at": "2026-10-09T10:00:00.000000Z",
+   "completed_at": "2026-10-09T10:00:00.000000Z",
+   "language": "en",
+   "poll_after_seconds": null,
+   "policy": {
+    "max_citations": 2
+   },
+   "summary": {
+    "citations_found": 2,
+    "citations_selected": 2,
+    "citation_limit": 2,
+    "citation_limit_exceeded": false,
+    "citation_checks": {
+     "checked": 2,
+     "unchecked": 0,
+     "failed": 0
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 2,
-     "citation_limit_reached": false,
-     "citation_checks": {
-      "checked": 2,
-      "unchecked": 0,
-      "failed": 0
+    "citation_issues": 0
+   },
+   "credits": {
+    "charged": 2
+   },
+   "citations": [
+    {
+     "index": 0,
+     "reference": "https://example.gov/report-2024",
+     "cited_url": "https://example.gov/report-2024",
+     "doi": null,
+     "statement": "Unemployment fell to 4.1% in 2024.",
+     "quotes": [],
+     "position": null,
+     "result": {
+      "finding": "supported",
+      "source": "support",
+      "is_issue": false
      },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 2
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "https://example.gov/report-2024",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.gov/report-2024",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.gov/report-2024",
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "https://example.org/statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": "The agency said so in a statement.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.org/statement",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.org/statement",
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
+     "check": {
+      "status": "completed",
+      "page_read": "full",
+      "page_title": "Page at https://example.gov/report-2024",
+      "page_published_date": null,
+      "page_language": "en",
+      "source_url": "https://example.gov/report-2024",
+      "source_version": null,
+      "support": "supported",
+      "snippet": "The source says so.",
+      "rationale": "The page states it.",
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
-  },
-  "canonical": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "clean",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 2
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 2,
-     "citation_limit_exceeded": false,
-     "citation_checks": {
-      "checked": 2,
-      "unchecked": 0,
-      "failed": 0
+    {
+     "index": 1,
+     "reference": "https://example.org/statement",
+     "cited_url": "https://example.org/statement",
+     "doi": null,
+     "statement": "The agency said so in a statement.",
+     "quotes": [],
+     "position": null,
+     "result": {
+      "finding": "supported",
+      "source": "support",
+      "is_issue": false
      },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 2
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "https://example.gov/report-2024",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.gov/report-2024",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.gov/report-2024",
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "https://example.org/statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": "The agency said so in a statement.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.org/statement",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.org/statement",
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
+     "check": {
+      "status": "completed",
+      "page_read": "full",
+      "page_title": "Page at https://example.org/statement",
+      "page_published_date": null,
+      "page_language": "en",
+      "source_url": "https://example.org/statement",
+      "source_version": null,
+      "support": "supported",
+      "snippet": "The source says so.",
+      "rationale": "The page states it.",
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
+    }
+   ],
+   "citation_issues": [],
+   "citation_failures": [],
+   "failure": null,
+   "more_citations": []
   }
  },
  "get_completed_issues_found": {
-  "legacy": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "issues_found",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 20
+  "status": 200,
+  "headers": {},
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "completed",
+   "outcome": "issues_found",
+   "created_at": "2026-10-09T10:00:00.000000Z",
+   "completed_at": "2026-10-09T10:00:00.000000Z",
+   "language": "en",
+   "poll_after_seconds": null,
+   "policy": {
+    "max_citations": 20
+   },
+   "summary": {
+    "citations_found": 2,
+    "citations_selected": 2,
+    "citation_limit": 20,
+    "citation_limit_exceeded": false,
+    "citation_checks": {
+     "checked": 2,
+     "unchecked": 0,
+     "failed": 0
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 20,
-     "citation_limit_reached": false,
-     "citation_checks": {
-      "checked": 2,
-      "unchecked": 0,
-      "failed": 0
+    "citation_issues": 1
+   },
+   "credits": {
+    "charged": 2
+   },
+   "citations": [
+    {
+     "index": 0,
+     "reference": "a report from the ministry",
+     "cited_url": "https://example.gov/report-2024",
+     "doi": null,
+     "statement": "Unemployment fell to 4.1% in 2024, according to a report from the ministry.",
+     "quotes": [],
+     "position": {
+      "start": 0,
+      "end": 110,
+      "text": null
      },
-     "citation_issues": 1
-    },
-    "credits": {
-     "charged": 2
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "a report from the ministry",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024, according to a report from the ministry.",
-      "quotes": [],
-      "position": {
-       "start": 0,
-       "end": 110,
-       "text": null
-      },
-      "result": {
-       "finding": "contradicted",
-       "source": "support",
-       "is_issue": true
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.gov/report-2024",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.gov/report-2024",
-       "source_version": null,
-       "support": "contradicted",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "a statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": "The agency said so in a statement.",
-      "quotes": [],
-      "position": {
-       "start": 111,
-       "end": 178,
-       "text": null
-      },
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.org/statement",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.org/statement",
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     }
-    ],
-    "citation_issues": [
-     {
-      "citation_index": 0,
-      "reference": "a report from the ministry",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024, according to a report from the ministry.",
-      "quotes": [],
-      "position": {
-       "start": 0,
-       "end": 110,
-       "text": null
-      },
+     "result": {
       "finding": "contradicted",
       "source": "support",
+      "is_issue": true
+     },
+     "check": {
+      "status": "completed",
+      "page_read": "full",
+      "page_title": "Page at https://example.gov/report-2024",
+      "page_published_date": null,
+      "page_language": "en",
+      "source_url": "https://example.gov/report-2024",
+      "source_version": null,
+      "support": "contradicted",
       "snippet": "The source says so.",
       "rationale": "The page states it.",
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
       "metadata_differences": [],
-      "missing_quote": null,
-      "page_title": "Page at https://example.gov/report-2024",
-      "failure": null
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
-  },
-  "canonical": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "issues_found",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 20
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 20,
-     "citation_limit_exceeded": false,
-     "citation_checks": {
-      "checked": 2,
-      "unchecked": 0,
-      "failed": 0
+    {
+     "index": 1,
+     "reference": "a statement",
+     "cited_url": "https://example.org/statement",
+     "doi": null,
+     "statement": "The agency said so in a statement.",
+     "quotes": [],
+     "position": {
+      "start": 111,
+      "end": 178,
+      "text": null
      },
-     "citation_issues": 1
-    },
-    "credits": {
-     "charged": 2
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "a report from the ministry",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024, according to a report from the ministry.",
-      "quotes": [],
-      "position": {
-       "start": 0,
-       "end": 110,
-       "text": null
-      },
-      "result": {
-       "finding": "contradicted",
-       "source": "support",
-       "is_issue": true
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.gov/report-2024",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.gov/report-2024",
-       "source_version": null,
-       "support": "contradicted",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "a statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": "The agency said so in a statement.",
-      "quotes": [],
-      "position": {
-       "start": 111,
-       "end": 178,
-       "text": null
-      },
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.org/statement",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.org/statement",
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     }
-    ],
-    "citation_issues": [
-     {
-      "citation_index": 0,
-      "reference": "a report from the ministry",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024, according to a report from the ministry.",
-      "quotes": [],
-      "position": {
-       "start": 0,
-       "end": 110,
-       "text": null
-      },
-      "finding": "contradicted",
+     "result": {
+      "finding": "supported",
       "source": "support",
+      "is_issue": false
+     },
+     "check": {
+      "status": "completed",
+      "page_read": "full",
+      "page_title": "Page at https://example.org/statement",
+      "page_published_date": null,
+      "page_language": "en",
+      "source_url": "https://example.org/statement",
+      "source_version": null,
+      "support": "supported",
       "snippet": "The source says so.",
       "rationale": "The page states it.",
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
       "metadata_differences": [],
-      "missing_quote": null,
-      "page_title": "Page at https://example.gov/report-2024",
-      "failure": null
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
+    }
+   ],
+   "citation_issues": [
+    {
+     "citation_index": 0,
+     "reference": "a report from the ministry",
+     "cited_url": "https://example.gov/report-2024",
+     "doi": null,
+     "statement": "Unemployment fell to 4.1% in 2024, according to a report from the ministry.",
+     "quotes": [],
+     "position": {
+      "start": 0,
+      "end": 110,
+      "text": null
+     },
+     "finding": "contradicted",
+     "source": "support",
+     "snippet": "The source says so.",
+     "rationale": "The page states it.",
+     "metadata_differences": [],
+     "missing_quote": null,
+     "page_title": "Page at https://example.gov/report-2024",
+     "failure": null
+    }
+   ],
+   "citation_failures": [],
+   "failure": null,
+   "more_citations": []
   }
  },
  "get_completed_partly_supported": {
-  "legacy": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "clean",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 2
+  "status": 200,
+  "headers": {},
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "completed",
+   "outcome": "clean",
+   "created_at": "2026-10-09T10:00:00.000000Z",
+   "completed_at": "2026-10-09T10:00:00.000000Z",
+   "language": "en",
+   "poll_after_seconds": null,
+   "policy": {
+    "max_citations": 2
+   },
+   "summary": {
+    "citations_found": 2,
+    "citations_selected": 2,
+    "citation_limit": 2,
+    "citation_limit_exceeded": false,
+    "citation_checks": {
+     "checked": 2,
+     "unchecked": 0,
+     "failed": 0
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 2,
-     "citation_limit_reached": false,
-     "citation_checks": {
-      "checked": 2,
-      "unchecked": 0,
-      "failed": 0
+    "citation_issues": 0
+   },
+   "credits": {
+    "charged": 2
+   },
+   "citations": [
+    {
+     "index": 0,
+     "reference": "https://example.gov/report-2024",
+     "cited_url": "https://example.gov/report-2024",
+     "doi": null,
+     "statement": "Unemployment fell to 4.1% in 2024.",
+     "quotes": [],
+     "position": null,
+     "result": {
+      "finding": "partly_supported",
+      "source": "support",
+      "is_issue": false
      },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 2
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "https://example.gov/report-2024",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "partly_supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.gov/report-2024",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.gov/report-2024",
-       "source_version": null,
-       "support": "partly_supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "https://example.org/statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": "The agency said so in a statement.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.org/statement",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.org/statement",
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
+     "check": {
+      "status": "completed",
+      "page_read": "full",
+      "page_title": "Page at https://example.gov/report-2024",
+      "page_published_date": null,
+      "page_language": "en",
+      "source_url": "https://example.gov/report-2024",
+      "source_version": null,
+      "support": "partly_supported",
+      "snippet": "The source says so.",
+      "rationale": "The page states it.",
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
-  },
-  "canonical": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "clean",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 2
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 2,
-     "citation_limit_exceeded": false,
-     "citation_checks": {
-      "checked": 2,
-      "unchecked": 0,
-      "failed": 0
+    {
+     "index": 1,
+     "reference": "https://example.org/statement",
+     "cited_url": "https://example.org/statement",
+     "doi": null,
+     "statement": "The agency said so in a statement.",
+     "quotes": [],
+     "position": null,
+     "result": {
+      "finding": "supported",
+      "source": "support",
+      "is_issue": false
      },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 2
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "https://example.gov/report-2024",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "partly_supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.gov/report-2024",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.gov/report-2024",
-       "source_version": null,
-       "support": "partly_supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "https://example.org/statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": "The agency said so in a statement.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.org/statement",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.org/statement",
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
+     "check": {
+      "status": "completed",
+      "page_read": "full",
+      "page_title": "Page at https://example.org/statement",
+      "page_published_date": null,
+      "page_language": "en",
+      "source_url": "https://example.org/statement",
+      "source_version": null,
+      "support": "supported",
+      "snippet": "The source says so.",
+      "rationale": "The page states it.",
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
+    }
+   ],
+   "citation_issues": [],
+   "citation_failures": [],
+   "failure": null,
+   "more_citations": []
   }
  },
  "get_completed_unchecked": {
-  "legacy": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "unchecked",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 2
+  "status": 200,
+  "headers": {},
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "completed",
+   "outcome": "unchecked",
+   "created_at": "2026-10-09T10:00:00.000000Z",
+   "completed_at": "2026-10-09T10:00:00.000000Z",
+   "language": "en",
+   "poll_after_seconds": null,
+   "policy": {
+    "max_citations": 2
+   },
+   "summary": {
+    "citations_found": 2,
+    "citations_selected": 2,
+    "citation_limit": 2,
+    "citation_limit_exceeded": false,
+    "citation_checks": {
+     "checked": 0,
+     "unchecked": 2,
+     "failed": 0
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 2,
-     "citation_limit_reached": false,
-     "citation_checks": {
-      "checked": 0,
-      "unchecked": 2,
-      "failed": 0
+    "citation_issues": 0
+   },
+   "credits": {
+    "charged": 0
+   },
+   "citations": [
+    {
+     "index": 0,
+     "reference": "https://example.gov/report-2024",
+     "cited_url": "https://example.gov/report-2024",
+     "doi": null,
+     "statement": "Unemployment fell to 4.1% in 2024.",
+     "quotes": [],
+     "position": null,
+     "result": {
+      "finding": "unchecked",
+      "source": null,
+      "is_issue": false
      },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 0
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "https://example.gov/report-2024",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "unchecked",
-       "source": null,
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.gov/report-2024",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.gov/report-2024",
-       "source_version": null,
-       "support": "unchecked",
-       "snippet": null,
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": "no_text",
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "https://example.org/statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": "The agency said so in a statement.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "unchecked",
-       "source": null,
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.org/statement",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.org/statement",
-       "source_version": null,
-       "support": "unchecked",
-       "snippet": null,
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": "no_text",
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
+     "check": {
+      "status": "completed",
+      "page_read": "full",
+      "page_title": "Page at https://example.gov/report-2024",
+      "page_published_date": null,
+      "page_language": "en",
+      "source_url": "https://example.gov/report-2024",
+      "source_version": null,
+      "support": "unchecked",
+      "snippet": null,
+      "rationale": "The page states it.",
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": "no_text",
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
-  },
-  "canonical": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "unchecked",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 2
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 2,
-     "citation_limit_exceeded": false,
-     "citation_checks": {
-      "checked": 0,
-      "unchecked": 2,
-      "failed": 0
+    {
+     "index": 1,
+     "reference": "https://example.org/statement",
+     "cited_url": "https://example.org/statement",
+     "doi": null,
+     "statement": "The agency said so in a statement.",
+     "quotes": [],
+     "position": null,
+     "result": {
+      "finding": "unchecked",
+      "source": null,
+      "is_issue": false
      },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 0
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "https://example.gov/report-2024",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "unchecked",
-       "source": null,
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.gov/report-2024",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.gov/report-2024",
-       "source_version": null,
-       "support": "unchecked",
-       "snippet": null,
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": "no_text",
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "https://example.org/statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": "The agency said so in a statement.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "unchecked",
-       "source": null,
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.org/statement",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.org/statement",
-       "source_version": null,
-       "support": "unchecked",
-       "snippet": null,
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": "no_text",
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
+     "check": {
+      "status": "completed",
+      "page_read": "full",
+      "page_title": "Page at https://example.org/statement",
+      "page_published_date": null,
+      "page_language": "en",
+      "source_url": "https://example.org/statement",
+      "source_version": null,
+      "support": "unchecked",
+      "snippet": null,
+      "rationale": "The page states it.",
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": "no_text",
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
+    }
+   ],
+   "citation_issues": [],
+   "citation_failures": [],
+   "failure": null,
+   "more_citations": []
   }
  },
  "get_completed_doi_pair": {
-  "legacy": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "clean",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 1
+  "status": 200,
+  "headers": {},
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "completed",
+   "outcome": "clean",
+   "created_at": "2026-10-09T10:00:00.000000Z",
+   "completed_at": "2026-10-09T10:00:00.000000Z",
+   "language": "en",
+   "poll_after_seconds": null,
+   "policy": {
+    "max_citations": 1
+   },
+   "summary": {
+    "citations_found": 1,
+    "citations_selected": 1,
+    "citation_limit": 1,
+    "citation_limit_exceeded": false,
+    "citation_checks": {
+     "checked": 1,
+     "unchecked": 0,
+     "failed": 0
     },
-    "summary": {
-     "citations_found": 1,
-     "citations_selected": 1,
-     "citation_limit": 1,
-     "citation_limit_reached": false,
-     "citation_checks": {
-      "checked": 1,
-      "unchecked": 0,
-      "failed": 0
+    "citation_issues": 0
+   },
+   "credits": {
+    "charged": 1
+   },
+   "citations": [
+    {
+     "index": 0,
+     "reference": "10.1038/nature12373",
+     "cited_url": "https://doi.org/10.1038/nature12373",
+     "doi": "10.1038/nature12373",
+     "statement": "Diamond sensors measure heat in cells.",
+     "quotes": [],
+     "position": null,
+     "result": {
+      "finding": "supported",
+      "source": "support",
+      "is_issue": false
      },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 1
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "10.1038/nature12373",
-      "cited_url": "https://doi.org/10.1038/nature12373",
-      "doi": "10.1038/nature12373",
-      "statement": "Diamond sensors measure heat in cells.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at None",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": null,
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
+     "check": {
+      "status": "completed",
+      "page_read": "full",
+      "page_title": "Page at None",
+      "page_published_date": null,
+      "page_language": "en",
+      "source_url": null,
+      "source_version": null,
+      "support": "supported",
+      "snippet": "The source says so.",
+      "rationale": "The page states it.",
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
-  },
-  "canonical": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "clean",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 1
-    },
-    "summary": {
-     "citations_found": 1,
-     "citations_selected": 1,
-     "citation_limit": 1,
-     "citation_limit_exceeded": false,
-     "citation_checks": {
-      "checked": 1,
-      "unchecked": 0,
-      "failed": 0
-     },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 1
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "10.1038/nature12373",
-      "cited_url": "https://doi.org/10.1038/nature12373",
-      "doi": "10.1038/nature12373",
-      "statement": "Diamond sensors measure heat in cells.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at None",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": null,
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": []
-   }
+    }
+   ],
+   "citation_issues": [],
+   "citation_failures": [],
+   "failure": null,
+   "more_citations": []
   }
  },
  "get_completed_incomplete": {
-  "legacy": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "incomplete",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 2
+  "status": 200,
+  "headers": {},
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "completed",
+   "outcome": "incomplete",
+   "created_at": "2026-10-09T10:00:00.000000Z",
+   "completed_at": "2026-10-09T10:00:00.000000Z",
+   "language": "en",
+   "poll_after_seconds": null,
+   "policy": {
+    "max_citations": 2
+   },
+   "summary": {
+    "citations_found": 2,
+    "citations_selected": 2,
+    "citation_limit": 2,
+    "citation_limit_exceeded": false,
+    "citation_checks": {
+     "checked": 1,
+     "unchecked": 0,
+     "failed": 1
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 2,
-     "citation_limit_reached": false,
-     "citation_checks": {
-      "checked": 1,
-      "unchecked": 0,
-      "failed": 1
+    "citation_issues": 0
+   },
+   "credits": {
+    "charged": 1
+   },
+   "citations": [
+    {
+     "index": 0,
+     "reference": "https://example.gov/report-2024",
+     "cited_url": "https://example.gov/report-2024",
+     "doi": null,
+     "statement": "Unemployment fell to 4.1% in 2024.",
+     "quotes": [],
+     "position": null,
+     "result": {
+      "finding": "supported",
+      "source": "support",
+      "is_issue": false
      },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 1
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "https://example.gov/report-2024",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.gov/report-2024",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.gov/report-2024",
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "https://example.org/statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": "The agency said so in a statement.",
-      "quotes": [],
-      "position": null,
-      "result": null,
-      "check": {
-       "status": "failed",
-       "page_read": null,
-       "page_title": null,
-       "page_published_date": null,
-       "page_language": null,
-       "source_url": null,
-       "source_version": null,
-       "support": null,
-       "snippet": null,
-       "rationale": null,
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": "The check failed on our side. Try again later.",
-       "failure": {
-        "hint": "The check failed on our side. Try again later.",
-        "docs_url": "https://lenz.io/docs/errors#internal",
-        "retryable": false,
-        "failure_class": "internal",
-        "failure_reason": "internal"
-       },
-       "missing_quote": null
-      }
+     "check": {
+      "status": "completed",
+      "page_read": "full",
+      "page_title": "Page at https://example.gov/report-2024",
+      "page_published_date": null,
+      "page_language": "en",
+      "source_url": "https://example.gov/report-2024",
+      "source_version": null,
+      "support": "supported",
+      "snippet": "The source says so.",
+      "rationale": "The page states it.",
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_issues": [],
-    "citation_failures": [
-     {
-      "citation_index": 1,
-      "reference": "https://example.org/statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "failure": {
-       "hint": "The check failed on our side. Try again later.",
-       "docs_url": "https://lenz.io/docs/errors#internal",
-       "retryable": false,
-       "failure_class": "internal",
-       "failure_reason": "internal"
-      }
-     }
-    ],
-    "failure": null,
-    "more_citations": []
-   }
-  },
-  "canonical": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "incomplete",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 2
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 2,
-     "citation_limit_exceeded": false,
-     "citation_checks": {
-      "checked": 1,
-      "unchecked": 0,
-      "failed": 1
-     },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 1
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "https://example.gov/report-2024",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024.",
-      "quotes": [],
-      "position": null,
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.gov/report-2024",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.gov/report-2024",
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "https://example.org/statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": "The agency said so in a statement.",
-      "quotes": [],
-      "position": null,
-      "result": null,
-      "check": {
-       "status": "failed",
-       "page_read": null,
-       "page_title": null,
-       "page_published_date": null,
-       "page_language": null,
-       "source_url": null,
-       "source_version": null,
-       "support": null,
-       "snippet": null,
-       "rationale": null,
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": "The check failed on our side. Try again later.",
-       "failure": {
-        "code": "internal",
-        "detail": "The check failed on our side.",
-        "hint": "The check failed on our side. Try again later.",
-        "failure_class": "internal",
-        "retryable": false,
-        "docs_url": "https://lenz.io/docs/errors#internal"
-       },
-       "missing_quote": null
-      }
-     }
-    ],
-    "citation_issues": [],
-    "citation_failures": [
-     {
-      "citation_index": 1,
-      "reference": "https://example.org/statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
+    {
+     "index": 1,
+     "reference": "https://example.org/statement",
+     "cited_url": "https://example.org/statement",
+     "doi": null,
+     "statement": "The agency said so in a statement.",
+     "quotes": [],
+     "position": null,
+     "result": null,
+     "check": {
+      "status": "failed",
+      "page_read": null,
+      "page_title": null,
+      "page_published_date": null,
+      "page_language": null,
+      "source_url": null,
+      "source_version": null,
+      "support": null,
+      "snippet": null,
+      "rationale": null,
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": "The check failed on our side. Try again later.",
       "failure": {
        "code": "internal",
        "detail": "The check failed on our side.",
@@ -1697,352 +817,128 @@
        "failure_class": "internal",
        "retryable": false,
        "docs_url": "https://lenz.io/docs/errors#internal"
-      }
+      },
+      "missing_quote": null
      }
-    ],
-    "failure": null,
-    "more_citations": []
-   }
+    }
+   ],
+   "citation_issues": [],
+   "citation_failures": [
+    {
+     "citation_index": 1,
+     "reference": "https://example.org/statement",
+     "cited_url": "https://example.org/statement",
+     "doi": null,
+     "failure": {
+      "code": "internal",
+      "detail": "The check failed on our side.",
+      "hint": "The check failed on our side. Try again later.",
+      "failure_class": "internal",
+      "retryable": false,
+      "docs_url": "https://lenz.io/docs/errors#internal"
+     }
+    }
+   ],
+   "failure": null,
+   "more_citations": []
   }
  },
  "get_failed_no_citations": {
-  "legacy": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "failed",
-    "outcome": "unchecked",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 20
-    },
-    "summary": {
-     "citations_found": null,
-     "citations_selected": null,
-     "citation_limit": 20,
-     "citation_limit_reached": null,
-     "citation_checks": null,
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 0
-    },
-    "citations": [],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": {
-     "failure_reason": "no_citations",
-     "failure_class": "invalid_input",
-     "retryable": false,
-     "hint": "The text has no citation to check: no link, DOI or numbered reference with one.",
-     "docs_url": "https://lenz.io/docs/errors#invalid-input"
-    },
-    "more_citations": null
-   }
-  },
-  "canonical": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "failed",
-    "outcome": "unchecked",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 20
-    },
-    "summary": {
-     "citations_found": null,
-     "citations_selected": null,
-     "citation_limit": 20,
-     "citation_limit_exceeded": null,
-     "citation_checks": null,
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 0
-    },
-    "citations": [],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": {
-     "code": "no_citations",
-     "detail": "The text holds no citation to check.",
-     "hint": "The text has no citation to check: no link, DOI or numbered reference with one.",
-     "failure_class": "invalid_input",
-     "retryable": false,
-     "docs_url": "https://lenz.io/docs/errors#invalid-input"
-    },
-    "more_citations": null
-   }
+  "status": 200,
+  "headers": {},
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "failed",
+   "outcome": "unchecked",
+   "created_at": "2026-10-09T10:00:00.000000Z",
+   "completed_at": "2026-10-09T10:00:00.000000Z",
+   "language": "en",
+   "poll_after_seconds": null,
+   "policy": {
+    "max_citations": 20
+   },
+   "summary": {
+    "citations_found": null,
+    "citations_selected": null,
+    "citation_limit": 20,
+    "citation_limit_exceeded": null,
+    "citation_checks": null,
+    "citation_issues": 0
+   },
+   "credits": {
+    "charged": 0
+   },
+   "citations": [],
+   "citation_issues": [],
+   "citation_failures": [],
+   "failure": {
+    "code": "no_citations",
+    "detail": "The text holds no citation to check.",
+    "hint": "The text has no citation to check: no link, DOI or numbered reference with one.",
+    "failure_class": "invalid_input",
+    "retryable": false,
+    "docs_url": "https://lenz.io/docs/errors#invalid-input"
+   },
+   "more_citations": null
   }
  },
  "get_failed_upstream_unavailable": {
-  "legacy": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "failed",
-    "outcome": "unchecked",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 20
+  "status": 200,
+  "headers": {},
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "failed",
+   "outcome": "unchecked",
+   "created_at": "2026-10-09T10:00:00.000000Z",
+   "completed_at": "2026-10-09T10:00:00.000000Z",
+   "language": "en",
+   "poll_after_seconds": null,
+   "policy": {
+    "max_citations": 20
+   },
+   "summary": {
+    "citations_found": 2,
+    "citations_selected": 2,
+    "citation_limit": 20,
+    "citation_limit_exceeded": false,
+    "citation_checks": {
+     "checked": 0,
+     "unchecked": 0,
+     "failed": 2
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 20,
-     "citation_limit_reached": false,
-     "citation_checks": {
-      "checked": 0,
-      "unchecked": 0,
-      "failed": 2
-     },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 0
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "a report from the ministry",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": null,
-      "quotes": [],
-      "position": null,
-      "result": null,
-      "check": {
-       "status": "failed",
-       "page_read": null,
-       "page_title": null,
-       "page_published_date": null,
-       "page_language": null,
-       "source_url": null,
-       "source_version": null,
-       "support": null,
-       "snippet": null,
-       "rationale": null,
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": "Lenz could not reach this source just now. Try again later.",
-       "failure": {
-        "hint": "Lenz could not reach this source just now. Try again later.",
-        "docs_url": "https://lenz.io/docs/errors#upstream-unavailable",
-        "retryable": true,
-        "failure_class": "upstream_unavailable",
-        "failure_reason": "upstream_unavailable"
-       },
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "a statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": null,
-      "quotes": [],
-      "position": null,
-      "result": null,
-      "check": {
-       "status": "failed",
-       "page_read": null,
-       "page_title": null,
-       "page_published_date": null,
-       "page_language": null,
-       "source_url": null,
-       "source_version": null,
-       "support": null,
-       "snippet": null,
-       "rationale": null,
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": "Lenz could not reach this source just now. Try again later.",
-       "failure": {
-        "hint": "Lenz could not reach this source just now. Try again later.",
-        "docs_url": "https://lenz.io/docs/errors#upstream-unavailable",
-        "retryable": true,
-        "failure_class": "upstream_unavailable",
-        "failure_reason": "upstream_unavailable"
-       },
-       "missing_quote": null
-      }
-     }
-    ],
-    "citation_issues": [],
-    "citation_failures": [
-     {
-      "citation_index": 0,
-      "reference": "a report from the ministry",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "failure": {
-       "hint": "Lenz could not reach this source just now. Try again later.",
-       "docs_url": "https://lenz.io/docs/errors#upstream-unavailable",
-       "retryable": true,
-       "failure_class": "upstream_unavailable",
-       "failure_reason": "upstream_unavailable"
-      }
-     },
-     {
-      "citation_index": 1,
-      "reference": "a statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "failure": {
-       "hint": "Lenz could not reach this source just now. Try again later.",
-       "docs_url": "https://lenz.io/docs/errors#upstream-unavailable",
-       "retryable": true,
-       "failure_class": "upstream_unavailable",
-       "failure_reason": "upstream_unavailable"
-      }
-     }
-    ],
-    "failure": {
-     "failure_reason": "upstream_unavailable",
-     "failure_class": "upstream_unavailable",
-     "retryable": true,
-     "hint": null,
-     "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
-    },
-    "more_citations": []
-   }
-  },
-  "canonical": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "failed",
-    "outcome": "unchecked",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 20
-    },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 2,
-     "citation_limit": 20,
-     "citation_limit_exceeded": false,
-     "citation_checks": {
-      "checked": 0,
-      "unchecked": 0,
-      "failed": 2
-     },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 0
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "a report from the ministry",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": null,
-      "quotes": [],
-      "position": null,
-      "result": null,
-      "check": {
-       "status": "failed",
-       "page_read": null,
-       "page_title": null,
-       "page_published_date": null,
-       "page_language": null,
-       "source_url": null,
-       "source_version": null,
-       "support": null,
-       "snippet": null,
-       "rationale": null,
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": "Lenz could not reach this source just now. Try again later.",
-       "failure": {
-        "code": "upstream_unavailable",
-        "detail": "A service the check depends on was unavailable.",
-        "hint": "Lenz could not reach this source just now. Try again later.",
-        "failure_class": "upstream_unavailable",
-        "retryable": true,
-        "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
-       },
-       "missing_quote": null
-      }
-     },
-     {
-      "index": 1,
-      "reference": "a statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "statement": null,
-      "quotes": [],
-      "position": null,
-      "result": null,
-      "check": {
-       "status": "failed",
-       "page_read": null,
-       "page_title": null,
-       "page_published_date": null,
-       "page_language": null,
-       "source_url": null,
-       "source_version": null,
-       "support": null,
-       "snippet": null,
-       "rationale": null,
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": "Lenz could not reach this source just now. Try again later.",
-       "failure": {
-        "code": "upstream_unavailable",
-        "detail": "A service the check depends on was unavailable.",
-        "hint": "Lenz could not reach this source just now. Try again later.",
-        "failure_class": "upstream_unavailable",
-        "retryable": true,
-        "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
-       },
-       "missing_quote": null
-      }
-     }
-    ],
-    "citation_issues": [],
-    "citation_failures": [
-     {
-      "citation_index": 0,
-      "reference": "a report from the ministry",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
+    "citation_issues": 0
+   },
+   "credits": {
+    "charged": 0
+   },
+   "citations": [
+    {
+     "index": 0,
+     "reference": "a report from the ministry",
+     "cited_url": "https://example.gov/report-2024",
+     "doi": null,
+     "statement": null,
+     "quotes": [],
+     "position": null,
+     "result": null,
+     "check": {
+      "status": "failed",
+      "page_read": null,
+      "page_title": null,
+      "page_published_date": null,
+      "page_language": null,
+      "source_url": null,
+      "source_version": null,
+      "support": null,
+      "snippet": null,
+      "rationale": null,
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": "Lenz could not reach this source just now. Try again later.",
       "failure": {
        "code": "upstream_unavailable",
        "detail": "A service the check depends on was unavailable.",
@@ -2050,13 +946,37 @@
        "failure_class": "upstream_unavailable",
        "retryable": true,
        "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
-      }
-     },
-     {
-      "citation_index": 1,
-      "reference": "a statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
+      },
+      "missing_quote": null
+     }
+    },
+    {
+     "index": 1,
+     "reference": "a statement",
+     "cited_url": "https://example.org/statement",
+     "doi": null,
+     "statement": null,
+     "quotes": [],
+     "position": null,
+     "result": null,
+     "check": {
+      "status": "failed",
+      "page_read": null,
+      "page_title": null,
+      "page_published_date": null,
+      "page_language": null,
+      "source_url": null,
+      "source_version": null,
+      "support": null,
+      "snippet": null,
+      "rationale": null,
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": "Lenz could not reach this source just now. Try again later.",
       "failure": {
        "code": "upstream_unavailable",
        "detail": "A service the check depends on was unavailable.",
@@ -2064,513 +984,283 @@
        "failure_class": "upstream_unavailable",
        "retryable": true,
        "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
-      }
+      },
+      "missing_quote": null
      }
-    ],
-    "failure": {
-     "code": "upstream_unavailable",
-     "detail": "A service the check depends on was unavailable.",
-     "hint": null,
-     "failure_class": "upstream_unavailable",
-     "retryable": true,
-     "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
+    }
+   ],
+   "citation_issues": [],
+   "citation_failures": [
+    {
+     "citation_index": 0,
+     "reference": "a report from the ministry",
+     "cited_url": "https://example.gov/report-2024",
+     "doi": null,
+     "failure": {
+      "code": "upstream_unavailable",
+      "detail": "A service the check depends on was unavailable.",
+      "hint": "Lenz could not reach this source just now. Try again later.",
+      "failure_class": "upstream_unavailable",
+      "retryable": true,
+      "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
+     }
     },
-    "more_citations": []
-   }
+    {
+     "citation_index": 1,
+     "reference": "a statement",
+     "cited_url": "https://example.org/statement",
+     "doi": null,
+     "failure": {
+      "code": "upstream_unavailable",
+      "detail": "A service the check depends on was unavailable.",
+      "hint": "Lenz could not reach this source just now. Try again later.",
+      "failure_class": "upstream_unavailable",
+      "retryable": true,
+      "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
+     }
+    }
+   ],
+   "failure": {
+    "code": "upstream_unavailable",
+    "detail": "A service the check depends on was unavailable.",
+    "hint": null,
+    "failure_class": "upstream_unavailable",
+    "retryable": true,
+    "docs_url": "https://lenz.io/docs/errors#upstream-unavailable"
+   },
+   "more_citations": []
   }
  },
  "get_text_limit_reached": {
-  "legacy": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "clean",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 1
+  "status": 200,
+  "headers": {},
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "completed",
+   "outcome": "clean",
+   "created_at": "2026-10-09T10:00:00.000000Z",
+   "completed_at": "2026-10-09T10:00:00.000000Z",
+   "language": "en",
+   "poll_after_seconds": null,
+   "policy": {
+    "max_citations": 1
+   },
+   "summary": {
+    "citations_found": 2,
+    "citations_selected": 1,
+    "citation_limit": 1,
+    "citation_limit_exceeded": true,
+    "citation_checks": {
+     "checked": 1,
+     "unchecked": 0,
+     "failed": 0
     },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 1,
-     "citation_limit": 1,
-     "citation_limit_reached": true,
-     "citation_checks": {
-      "checked": 1,
-      "unchecked": 0,
-      "failed": 0
+    "citation_issues": 0
+   },
+   "credits": {
+    "charged": 1
+   },
+   "citations": [
+    {
+     "index": 0,
+     "reference": "a report from the ministry",
+     "cited_url": "https://example.gov/report-2024",
+     "doi": null,
+     "statement": "Unemployment fell to 4.1% in 2024, according to a report from the ministry.",
+     "quotes": [],
+     "position": {
+      "start": 0,
+      "end": 110,
+      "text": null
      },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 1
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "a report from the ministry",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024, according to a report from the ministry.",
-      "quotes": [],
-      "position": {
-       "start": 0,
-       "end": 110,
-       "text": null
-      },
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.gov/report-2024",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.gov/report-2024",
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
-     }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": [
-     {
-      "index": 1,
-      "reference": "a statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "sentence": "The agency said so in a statement.",
-      "position": {
-       "start": 111,
-       "end": 178,
-       "text": null
-      }
-     }
-    ]
-   }
-  },
-  "canonical": {
-   "status": 200,
-   "headers": {},
-   "body": {
-    "citecheck_id": "ab12cd34",
-    "status": "completed",
-    "outcome": "clean",
-    "created_at": "2026-10-09T10:00:00.000000Z",
-    "completed_at": "2026-10-09T10:00:00.000000Z",
-    "language": "en",
-    "poll_after_seconds": null,
-    "policy": {
-     "max_citations": 1
-    },
-    "summary": {
-     "citations_found": 2,
-     "citations_selected": 1,
-     "citation_limit": 1,
-     "citation_limit_exceeded": true,
-     "citation_checks": {
-      "checked": 1,
-      "unchecked": 0,
-      "failed": 0
+     "result": {
+      "finding": "supported",
+      "source": "support",
+      "is_issue": false
      },
-     "citation_issues": 0
-    },
-    "credits": {
-     "charged": 1
-    },
-    "citations": [
-     {
-      "index": 0,
-      "reference": "a report from the ministry",
-      "cited_url": "https://example.gov/report-2024",
-      "doi": null,
-      "statement": "Unemployment fell to 4.1% in 2024, according to a report from the ministry.",
-      "quotes": [],
-      "position": {
-       "start": 0,
-       "end": 110,
-       "text": null
-      },
-      "result": {
-       "finding": "supported",
-       "source": "support",
-       "is_issue": false
-      },
-      "check": {
-       "status": "completed",
-       "page_read": "full",
-       "page_title": "Page at https://example.gov/report-2024",
-       "page_published_date": null,
-       "page_language": "en",
-       "source_url": "https://example.gov/report-2024",
-       "source_version": null,
-       "support": "supported",
-       "snippet": "The source says so.",
-       "rationale": "The page states it.",
-       "quote": null,
-       "doi_registered": null,
-       "metadata": null,
-       "metadata_differences": [],
-       "registered": null,
-       "unchecked_reason": null,
-       "hint": null,
-       "failure": null,
-       "missing_quote": null
-      }
+     "check": {
+      "status": "completed",
+      "page_read": "full",
+      "page_title": "Page at https://example.gov/report-2024",
+      "page_published_date": null,
+      "page_language": "en",
+      "source_url": "https://example.gov/report-2024",
+      "source_version": null,
+      "support": "supported",
+      "snippet": "The source says so.",
+      "rationale": "The page states it.",
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": null,
+      "hint": null,
+      "failure": null,
+      "missing_quote": null
      }
-    ],
-    "citation_issues": [],
-    "citation_failures": [],
-    "failure": null,
-    "more_citations": [
-     {
-      "index": 1,
-      "reference": "a statement",
-      "cited_url": "https://example.org/statement",
-      "doi": null,
-      "sentence": "The agency said so in a statement.",
-      "position": {
-       "start": 111,
-       "end": 178,
-       "text": null
-      }
+    }
+   ],
+   "citation_issues": [],
+   "citation_failures": [],
+   "failure": null,
+   "more_citations": [
+    {
+     "index": 1,
+     "reference": "a statement",
+     "cited_url": "https://example.org/statement",
+     "doi": null,
+     "sentence": "The agency said so in a statement.",
+     "position": {
+      "start": 111,
+      "end": 178,
+      "text": null
      }
-    ]
-   }
+    }
+   ]
   }
  },
  "402_no_credits": {
-  "legacy": {
-   "status": 402,
-   "headers": {},
-   "body": {
-    "detail": "No remaining credits for citation checks.",
-    "code": "no_credits",
-    "doc_url": "https://lenz.io/docs/errors#quota",
-    "upgrade_url": "https://lenz.io/plans?wall=00000000-0000-4000-8000-000000000000",
-    "wall_id": "00000000-0000-4000-8000-000000000000",
-    "remaining": 100,
-    "resets_at": "2026-11-01T00:00:00+00:00",
-    "credits_remaining": 100,
-    "cost": 1
-   }
-  },
-  "canonical": {
-   "status": 402,
-   "headers": {},
-   "body": {
-    "detail": "No remaining credits for citation checks.",
-    "code": "no_credits",
-    "docs_url": "https://lenz.io/docs/errors#quota",
-    "upgrade_url": "https://lenz.io/plans?wall=00000000-0000-4000-8000-000000000000",
-    "wall_id": "00000000-0000-4000-8000-000000000000",
-    "resets_at": "2026-11-01T00:00:00+00:00",
-    "credits_remaining": 100,
-    "cost": 1
-   }
+  "status": 402,
+  "headers": {},
+  "body": {
+   "detail": "No remaining credits for citation checks.",
+   "code": "no_credits",
+   "docs_url": "https://lenz.io/docs/errors#quota",
+   "upgrade_url": "https://lenz.io/plans?wall=00000000-0000-4000-8000-000000000000",
+   "wall_id": "00000000-0000-4000-8000-000000000000",
+   "resets_at": "2026-11-01T00:00:00+00:00",
+   "credits_remaining": 100,
+   "cost": 1
   }
  },
  "422_url_input": {
-  "legacy": {
-   "status": 422,
-   "headers": {},
-   "body": {
-    "detail": "Send the page's text, with its links, to check the sources it cites.",
-    "code": "url_input",
-    "errors": [
-     {
-      "loc": [
-       "body",
-       "text"
-      ],
-      "msg": "Send the page's text, with its links, to check the sources it cites."
-     }
-    ]
-   }
-  },
-  "canonical": {
-   "status": 422,
-   "headers": {},
-   "body": {
-    "detail": "Send the page's text, with its links, to check the sources it cites.",
-    "code": "url_input",
-    "errors": [
-     {
-      "loc": [
-       "body",
-       "text"
-      ],
-      "msg": "Send the page's text, with its links, to check the sources it cites.",
-      "type": "url_input"
-     }
-    ]
-   }
+  "status": 422,
+  "headers": {},
+  "body": {
+   "detail": "Send the page's text, with its links, to check the sources it cites.",
+   "code": "url_input",
+   "errors": [
+    {
+     "loc": [
+      "body",
+      "text"
+     ],
+     "msg": "Send the page's text, with its links, to check the sources it cites.",
+     "type": "url_input"
+    }
+   ]
   }
  },
  "422_invalid_doi": {
-  "legacy": {
-   "status": 422,
-   "headers": {},
-   "body": {
-    "detail": "payload.pairs.0.doi: Send the DOI alone, like 10.1038/nature12373.",
-    "code": "invalid_doi",
-    "errors": [
-     {
-      "loc": [
-       "body",
-       "payload",
-       "pairs",
-       0,
-       "doi"
-      ],
-      "msg": "Send the DOI alone, like 10.1038/nature12373."
-     }
-    ]
-   }
-  },
-  "canonical": {
-   "status": 422,
-   "headers": {},
-   "body": {
-    "detail": "pairs[0].doi: Send the DOI alone, like 10.1038/nature12373.",
-    "code": "invalid_doi",
-    "errors": [
-     {
-      "loc": [
-       "body",
-       "payload",
-       "pairs",
-       0,
-       "doi"
-      ],
-      "msg": "Send the DOI alone, like 10.1038/nature12373.",
-      "type": "invalid_doi"
-     }
-    ]
-   }
+  "status": 422,
+  "headers": {},
+  "body": {
+   "detail": "pairs[0].doi: Send the DOI alone, like 10.1038/nature12373.",
+   "code": "invalid_doi",
+   "errors": [
+    {
+     "loc": [
+      "body",
+      "payload",
+      "pairs",
+      0,
+      "doi"
+     ],
+     "msg": "Send the DOI alone, like 10.1038/nature12373.",
+     "type": "invalid_doi"
+    }
+   ]
   }
  },
  "422_unknown_field": {
-  "legacy": {
-   "status": 422,
-   "headers": {},
-   "body": {
-    "detail": "payload.pairs.0.extra: Extra inputs are not permitted",
-    "code": "validation_error",
-    "errors": [
-     {
-      "loc": [
-       "body",
-       "payload",
-       "pairs",
-       0,
-       "extra"
-      ],
-      "msg": "Extra inputs are not permitted"
-     }
-    ]
-   }
-  },
-  "canonical": {
-   "status": 422,
-   "headers": {},
-   "body": {
-    "detail": "pairs[0].extra: Extra inputs are not permitted",
-    "code": "validation_error",
-    "errors": [
-     {
-      "loc": [
-       "body",
-       "payload",
-       "pairs",
-       0,
-       "extra"
-      ],
-      "msg": "Extra inputs are not permitted",
-      "type": "extra_forbidden"
-     }
-    ]
-   }
+  "status": 422,
+  "headers": {},
+  "body": {
+   "detail": "pairs[0].extra: Extra inputs are not permitted",
+   "code": "validation_error",
+   "errors": [
+    {
+     "loc": [
+      "body",
+      "payload",
+      "pairs",
+      0,
+      "extra"
+     ],
+     "msg": "Extra inputs are not permitted",
+     "type": "extra_forbidden"
+    }
+   ]
   }
  },
  "idempotency_body_mismatch_422": {
-  "legacy": {
-   "status": 422,
-   "headers": {},
-   "body": {
-    "detail": "Idempotency-Key reused with a different request body.",
-    "code": "idempotency_body_mismatch",
-    "errors": [
-     {
-      "loc": [
-       "header"
-      ],
-      "msg": "Idempotency-Key reused with a different request body."
-     }
-    ]
-   }
-  },
-  "canonical": {
-   "status": 422,
-   "headers": {},
-   "body": {
-    "detail": "Idempotency-Key reused with a different request body.",
-    "code": "idempotency_body_mismatch"
-   }
+  "status": 422,
+  "headers": {},
+  "body": {
+   "detail": "Idempotency-Key reused with a different request body.",
+   "code": "idempotency_body_mismatch"
   }
  },
  "idempotency_conflict_409": {
-  "legacy": {
-   "status": 409,
-   "headers": {},
-   "body": {
-    "detail": "A check with this Idempotency-Key is still being created. Retry shortly.",
-    "code": "idempotency_conflict",
-    "citecheck_id": null
-   }
-  },
-  "canonical": {
-   "status": 409,
-   "headers": {},
-   "body": {
-    "detail": "A check with this Idempotency-Key is still being created. Retry shortly.",
-    "code": "idempotency_conflict",
-    "citecheck_id": null
-   }
+  "status": 409,
+  "headers": {},
+  "body": {
+   "detail": "A check with this Idempotency-Key is still being created. Retry shortly.",
+   "code": "idempotency_conflict",
+   "citecheck_id": null
   }
  },
  "429_citecheck_in_flight": {
-  "legacy": {
-   "status": 429,
-   "headers": {
-    "Retry-After": "60"
-   },
-   "body": {
-    "detail": "This account already has 3 citation checks running. Wait for one to finish.",
-    "code": "citecheck_in_flight",
-    "retry_after_seconds": 60
-   }
+  "status": 429,
+  "headers": {
+   "Retry-After": "60"
   },
-  "canonical": {
-   "status": 429,
-   "headers": {
-    "Retry-After": "60"
-   },
-   "body": {
-    "detail": "This account already has 3 citation checks running. Wait for one to finish.",
-    "code": "citecheck_in_flight",
-    "retry_after": 60
-   }
+  "body": {
+   "detail": "This account already has 3 citation checks running. Wait for one to finish.",
+   "code": "citecheck_in_flight",
+   "retry_after": 60
   }
  },
  "503_capacity": {
-  "legacy": {
-   "status": 503,
-   "headers": {
-    "Retry-After": "90"
-   },
-   "body": {
-    "detail": "Lenz is at capacity right now — please resubmit after the stated wait. Nothing was charged.",
-    "code": "capacity",
-    "retry_after": 90,
-    "doc_url": "https://lenz.io/docs/errors#unavailable"
-   }
+  "status": 503,
+  "headers": {
+   "Retry-After": "90"
   },
-  "canonical": {
-   "status": 503,
-   "headers": {
-    "Retry-After": "90"
-   },
-   "body": {
-    "detail": "Lenz is at capacity right now — please resubmit after the stated wait. Nothing was charged.",
-    "code": "capacity",
-    "retry_after": 90,
-    "docs_url": "https://lenz.io/docs/errors#unavailable"
-   }
+  "body": {
+   "detail": "Lenz is at capacity right now — please resubmit after the stated wait. Nothing was charged.",
+   "code": "capacity",
+   "retry_after": 90,
+   "docs_url": "https://lenz.io/docs/errors#unavailable"
   }
  },
  "503_citations_unavailable": {
-  "legacy": {
-   "status": 503,
-   "headers": {
-    "Retry-After": "300"
-   },
-   "body": {
-    "detail": "Citation checking is switched off right now. Retry later; nothing was charged.",
-    "code": "citations_unavailable",
-    "retry_after": 300,
-    "doc_url": "https://lenz.io/docs/errors#unavailable"
-   }
+  "status": 503,
+  "headers": {
+   "Retry-After": "300"
   },
-  "canonical": {
-   "status": 503,
-   "headers": {
-    "Retry-After": "300"
-   },
-   "body": {
-    "detail": "Citation checking is switched off right now. Retry later; nothing was charged.",
-    "code": "citations_unavailable",
-    "retry_after": 300,
-    "docs_url": "https://lenz.io/docs/errors#unavailable"
-   }
+  "body": {
+   "detail": "Citation checking is switched off right now. Retry later; nothing was charged.",
+   "code": "citations_unavailable",
+   "retry_after": 300,
+   "docs_url": "https://lenz.io/docs/errors#unavailable"
   }
  },
  "get_404_not_found": {
-  "legacy": {
-   "status": 404,
-   "headers": {},
-   "body": {
-    "detail": "Citation check not found.",
-    "code": "not_found"
-   }
-  },
-  "canonical": {
-   "status": 404,
-   "headers": {},
-   "body": {
-    "detail": "Citation check not found.",
-    "code": "not_found"
-   }
+  "status": 404,
+  "headers": {},
+  "body": {
+   "detail": "Citation check not found.",
+   "code": "not_found"
   }
  },
  "get_410_purged": {
-  "legacy": {
-   "status": 410,
-   "headers": {},
-   "body": {
-    "detail": "This check is no longer available: its account removes content after a set period.",
-    "code": "purged",
-    "purged_at": "2026-10-09T10:00:00.000000Z"
-   }
-  },
-  "canonical": {
-   "status": 410,
-   "headers": {},
-   "body": {
-    "detail": "This check is no longer available: its account removes content after a set period.",
-    "code": "purged",
-    "purged_at": "2026-10-09T10:00:00.000000Z"
-   }
+  "status": 410,
+  "headers": {},
+  "body": {
+   "detail": "This check is no longer available: its account removes content after a set period.",
+   "code": "purged",
+   "purged_at": "2026-10-09T10:00:00.000000Z"
   }
  }
 }

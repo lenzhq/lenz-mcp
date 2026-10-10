@@ -29,7 +29,7 @@
     "hint": "This item could not be processed; retrying it as-is will not help. Send it rephrased as one factual statement; nothing was charged."
    }
   ],
-  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence or a dissent offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
+  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict. It is a reviewer's note, not a checked source. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
   "source": "Lenz fast fact-check (3-model panel)"
  },
  "assess__single_no_claim": {
@@ -55,7 +55,7 @@
     "confidence": "high"
    }
   ],
-  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence or a dissent offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
+  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict. It is a reviewer's note, not a checked source. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
   "source": "Lenz fast fact-check (3-model panel)"
  },
  "assess__single_one_claim": {
@@ -69,7 +69,7 @@
     "dissent": "The registry figure is provisional, so the 2024 total cannot yet be confirmed."
    }
   ],
-  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence or a dissent offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
+  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict. It is a reviewer's note, not a checked source. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
   "source": "Lenz fast fact-check (3-model panel)"
  },
  "assess__single_text_several_claims": {
@@ -91,7 +91,7 @@
     "confidence": "medium"
    }
   ],
-  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence or a dissent offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
+  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict. It is a reviewer's note, not a checked source. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
   "source": "Lenz fast fact-check (3-model panel)"
  },
  "assess__list_all_error_rows": {
@@ -112,7 +112,7 @@
     "hint": "The input is a greeting. Send one factual claim, or run the text through /extract to enumerate its claims."
    }
   ],
-  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence or a dissent offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
+  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict. It is a reviewer's note, not a checked source. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
   "source": "Lenz fast fact-check (3-model panel)"
  },
  "synthetic__assess_low_confidence_row": {
@@ -126,7 +126,7 @@
     "next_step": "Lenz is not confident in this quick verdict. Tell the user that a deep check would investigate the claim against independent sources and takes about a minute or two, and ask whether to run it. Do not mention tool names or credits to the user. If they say yes, call `verify_claim` with this claim."
    }
   ],
-  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence or a dissent offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
+  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict. It is a reviewer's note, not a checked source. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
   "source": "Lenz fast fact-check (3-model panel)"
  },
  "synthetic__assess_failed_row_without_failure_block": {
@@ -139,7 +139,7 @@
     "error": "timeout"
    }
   ],
-  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence or a dissent offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
+  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict. It is a reviewer's note, not a checked source. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
   "source": "Lenz fast fact-check (3-model panel)"
  },
  "synthetic__assess_empty_more_claims": {
@@ -151,7 +151,7 @@
     "confidence": "high"
    }
   ],
-  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence or a dissent offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
+  "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee. This is a quick check: a first read that shows no sources. A deep check, which investigates a claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence offer one; on a list, only for the one or two claims that matter. Do not mention tool names or credits to the user. Never start one without the user's yes. The tool is `verify_claim`. `rationale` is the reasoning of a reviewer who agrees with the panel's verdict. It is a reviewer's note, not a checked source. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.",
   "source": "Lenz fast fact-check (3-model panel)"
  },
  "verify__status_failed_live_retryable": {
@@ -198,21 +198,21 @@
  },
  "verify__status_failed_durable": {
   "status": "failed",
-  "message": "Pipeline stopped: conclusion_failed.",
+  "message": "Pipeline stopped at: conclusion_failed",
   "failure_reason": "conclusion_failed",
   "failure_class": "internal",
   "retryable": false
  },
  "verify__status_failed_durable_framing": {
   "status": "failed",
-  "message": "Pipeline stopped: framing_failed.",
+  "message": "Pipeline stopped at: framing_failed",
   "failure_reason": "framing_failed",
   "failure_class": "upstream_unavailable",
   "retryable": true
  },
  "verify__status_not_a_claim_durable": {
   "status": "failed",
-  "message": "Pipeline stopped: not_a_claim.",
+  "message": "Not a verifiable claim.",
   "failure_reason": "not_a_claim",
   "failure_class": "invalid_input",
   "retryable": false
@@ -440,7 +440,7 @@
  },
  "verify__blank_claim_422": {
   "status": "invalid_request",
-  "message": "Text is required."
+  "message": "claim is required."
  },
  "verify__batch_empty_422": {
   "status": "invalid_request",

@@ -80,57 +80,72 @@ def _tools():
 
 _TASK_ID = 'a' * 32
 
-# POST /assess, list form (AssessOut): one row per item, same order.
+# POST /assess, list form: one row per item, same order.
 _ASSESS = {
+    'status': 'ok',
     'claims': [
         {
             'claim': 'GDPR requires consent for any processing of personal data.',
             'language': 'en',
+            'status': 'completed',
             'verdict': 'False',
             'confidence': 'low',
             'verification_url': None,
-            'error_code': None,
-            'candidate_claims': [],
-            'identified_claims': [],
-            'hint': None,
+            'rationale': None,
+            'dissent': None,
+            'suggested_rewrite': None,
+            'more_claims': [],
+            'failure': None,
         },
         {
             'claim': 'The EU AI Act entered into force in August 2024.',
             'language': 'en',
+            'status': 'completed',
             'verdict': 'True',
             'confidence': 'medium',
             'verification_url': None,
-            'error_code': None,
-            'candidate_claims': [],
-            'identified_claims': [],
-            'hint': None,
+            'rationale': None,
+            'dissent': None,
+            'suggested_rewrite': None,
+            'more_claims': [],
+            'failure': None,
         },
         {
             'claim': 'Water boils at 100 °C at sea level.',
             'language': 'en',
+            'status': 'completed',
             'verdict': 'True',
             'confidence': 'high',
             'verification_url': None,
-            'error_code': None,
-            'candidate_claims': [],
-            'identified_claims': [],
-            'hint': None,
+            'rationale': None,
+            'dissent': None,
+            'suggested_rewrite': None,
+            'more_claims': [],
+            'failure': None,
         },
         {
             'claim': 'asdf qwer',
             'language': 'en',
-            'verdict': 'Error',
-            'confidence': 'low',
+            'status': 'failed',
+            'verdict': None,
+            'confidence': None,
             'verification_url': None,
-            'error_code': 'no_claim',
-            'candidate_claims': [],
-            'identified_claims': [],
-            'hint': 'This is a string of letters, not a statement. Send a factual claim.',
+            'rationale': None,
+            'dissent': None,
+            'suggested_rewrite': None,
+            'more_claims': [],
+            'failure': {
+                'code': 'no_checkable_claim',
+                'detail': 'No claim in the input could be checked against public evidence.',
+                'hint': 'This is a string of letters, not a statement. Send a factual claim.',
+                'failure_class': 'invalid_input',
+                'retryable': False,
+                'docs_url': 'https://lenz.io/docs/errors#invalid-input',
+            },
         },
     ],
-    'error': None,
-    'error_code': None,
-    'candidate_claims': [],
+    'failure': None,
+    'more_claims': [],
 }
 
 # GET /verify/status/{task_id} `result` and GET /verifications/{id} (ClaimDetailOut).
@@ -512,9 +527,7 @@ def _one_selection(monkeypatch):
     _patch_api(
         monkeypatch,
         'select',
-        ApiResponse(
-            status=200, data={'batch_id': 'b1', 'items': [{'task_id': _TASK_ID, 'claim_text': _RESULT['claim']}]}
-        ),
+        ApiResponse(status=200, data={'batch_id': 'b1', 'items': [{'task_id': _TASK_ID, 'claim': _RESULT['claim']}]}),
     )
     _patch_api(monkeypatch, 'verify_status', ApiResponse(status=200, data=_STATUS_COMPLETED))
     return _run(server.select_claims('p' * 32, [_RESULT['claim']], _ctx()))
@@ -870,9 +883,7 @@ def test_the_assess_request_carries_the_clients_timeout(monkeypatch, user_agent,
 
     def handler(request):
         seen.append(request)
-        # The served (2026-10-11) shape has no `error_code`.
-        rows = [{k: v for k, v in row.items() if k != 'error_code'} for row in _ASSESS['claims']]
-        return api_wire.answer(200, {'claims': rows, 'failure': None, 'more_claims': []})
+        return api_wire.answer(200, _ASSESS)
 
     real_client = httpx.AsyncClient
 
@@ -1015,7 +1026,7 @@ def test_a_multi_claim_selection_names_no_wait(monkeypatch):
             status=200,
             data={
                 'batch_id': 'b1',
-                'items': [{'task_id': 'a' * 32, 'claim_text': 'one'}, {'task_id': 'b' * 32, 'claim_text': 'two'}],
+                'items': [{'task_id': 'a' * 32, 'claim': 'one'}, {'task_id': 'b' * 32, 'claim': 'two'}],
             },
         ),
     )
@@ -1247,7 +1258,7 @@ def test_a_waiting_call_ends_inside_the_cut_even_when_the_api_is_slow(monkeypatc
         clock['now'] += _SLOW_HOP
         if tool == 'verify_claim':
             return ApiResponse(status=202, data={'task_id': 't' * 32})
-        return ApiResponse(status=202, data={'items': [{'task_id': 't' * 32, 'claim_text': 'X'}]})
+        return ApiResponse(status=202, data={'items': [{'task_id': 't' * 32, 'claim': 'X'}]})
 
     async def _status(authorization, task_id):
         # Every poll is slow, so a deadline timed from after the submit shows up
@@ -1471,7 +1482,7 @@ def test_the_citation_check_notes_that_are_not_plain_strings_keep_the_split():
 
 
 def _citation_check_outputs(monkeypatch):
-    """Every result the citation tools build from the API's own shapes, both of them."""
+    """Every result the citation tools build from the API's own bodies."""
     import copy
     import json
     import pathlib
@@ -1483,21 +1494,19 @@ def _citation_check_outputs(monkeypatch):
         return None
 
     monkeypatch.setattr(server, '_sleep', _no_sleep)
-    for name, entry in shapes.items():
-        for shape in ('legacy', 'canonical'):
-            raw = entry[shape]
-            response = ApiResponse(
-                status=raw['status'],
-                data=copy.deepcopy(raw['body']),
-                headers={k.lower(): v for k, v in raw.get('headers', {}).items()},
-            )
-            if name.startswith('get_'):
-                _patch_api(monkeypatch, 'citecheck_status', response)
-                outputs.append((name, shape, _run(server.get_citation_check('ab12cd34', _ctx()))))
-            else:
-                _patch_api(monkeypatch, 'citecheck_status', ApiResponse(status=200, data={'status': 'checking'}))
-                _patch_api(monkeypatch, 'citecheck', response)
-                outputs.append((name, shape, _run(server.check_citations('A draft [a](https://e.org/a).', _ctx()))))
+    for name, raw in shapes.items():
+        response = ApiResponse(
+            status=raw['status'],
+            data=copy.deepcopy(raw['body']),
+            headers={k.lower(): v for k, v in raw.get('headers', {}).items()},
+        )
+        if name.startswith('get_'):
+            _patch_api(monkeypatch, 'citecheck_status', response)
+            outputs.append((name, _run(server.get_citation_check('ab12cd34', _ctx()))))
+        else:
+            _patch_api(monkeypatch, 'citecheck_status', ApiResponse(status=200, data={'status': 'checking'}))
+            _patch_api(monkeypatch, 'citecheck', response)
+            outputs.append((name, _run(server.check_citations('A draft [a](https://e.org/a).', _ctx()))))
     return outputs
 
 
@@ -1519,18 +1528,18 @@ def _built_notes(value, path=''):
 
 def test_every_note_a_citation_check_result_builds_keeps_the_split(monkeypatch):
     seen = 0
-    for name, shape, out in _citation_check_outputs(monkeypatch):
+    for name, out in _citation_check_outputs(monkeypatch):
         if out['status'] == 'quota_exhausted':
             continue  # running out is the one moment credits ARE the message (see _SAY_DO_EXEMPT)
         for path, text in _built_notes(out):
             seen += 1
-            assert _say_do_violations(text) == [], (name, shape, path, text)
+            assert _say_do_violations(text) == [], (name, path, text)
     # A scan that reads nothing passes forever.
     assert seen > 20
 
 
 def test_the_continuation_note_a_result_builds_keeps_the_split(monkeypatch):
-    outputs = {name: out for name, shape, out in _citation_check_outputs(monkeypatch) if shape == 'canonical'}
+    outputs = dict(_citation_check_outputs(monkeypatch))
     more = outputs['get_text_limit_reached']['more_citations']
     assert more['next_step'] == server.CITECHECK_MORE_NEXT_STEP
     assert _say_do_violations(more['next_step']) == []

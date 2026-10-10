@@ -224,7 +224,23 @@ def build() -> dict[str, Any]:
         body_of([*(all_rows * 2)[:19], error_row]),
     )
     add_quick('row-error', 'hand-built (API error row)', body_of([error_row]))
-    add_quick('nothing', 'hand-built (API body with no claims)', {'error': no_claim_row['hint'], 'claims': []})
+    add_quick(
+        'nothing',
+        'hand-built (API body with no claims)',
+        {
+            'status': 'no_checkable_claim',
+            'claims': [],
+            'failure': {
+                'code': 'no_checkable_claim',
+                'detail': 'No claim in the input could be checked against public evidence.',
+                'hint': no_claim_row['hint'],
+                'failure_class': 'invalid_input',
+                'retryable': False,
+                'docs_url': 'https://lenz.io/docs/errors#invalid-input',
+            },
+            'more_claims': [],
+        },
+    )
     add_quick('reconnect', 'hand-built (API 401)', {'detail': 'Invalid API key.'}, status=401)
     add_quick(
         'did-not-finish', 'hand-built (API 503)', {'detail': 'Service unavailable', 'code': 'capacity'}, status=503
@@ -375,11 +391,14 @@ def build() -> dict[str, Any]:
             {
                 'status': 'failed',
                 'task_id': 'f' * 32,
-                'error': 'The verification failed.',
-                'failure_reason': reason,
-                'failure_class': failure_class,
-                'retryable': retryable,
-                'docs_url': 'https://lenz.io/docs/api#failure-classes',
+                'failure': {
+                    'code': reason,
+                    'detail': 'The check stopped before it finished.',
+                    'hint': None,
+                    'failure_class': failure_class,
+                    'retryable': retryable,
+                    'docs_url': 'https://lenz.io/docs/errors#failure-classes',
+                },
             }
         )
 
@@ -397,7 +416,7 @@ def build() -> dict[str, Any]:
     }
     polls['needs-input'] = {
         'provenance': 'hand-built (needs_input status body)',
-        'result': poll({'status': 'needs_input', 'reason': 'multi_claim', 'claims': [{'text': 'a'}, {'text': 'b'}]}),
+        'result': poll({'status': 'needs_input', 'reason': 'multi_claim', 'claims': [{'claim': 'a'}, {'claim': 'b'}]}),
     }
     polls['not-found'] = {'provenance': 'hand-built (API 404)', 'result': poll({'detail': 'Not found.'}, status=404)}
     polls['poll-error'] = {
@@ -427,8 +446,8 @@ def build() -> dict[str, Any]:
                     'status': 'needs_input',
                     'reason': 'multi_claim',
                     'claims': [
-                        {'text': 'The EU AI Act entered into force in 2024.'},
-                        {'text': 'It bans facial recognition outright.'},
+                        {'claim': 'The EU AI Act entered into force in 2024.'},
+                        {'claim': 'It bans facial recognition outright.'},
                     ],
                 }
             ),
@@ -441,7 +460,7 @@ def build() -> dict[str, Any]:
                 {
                     'status': 'needs_input',
                     'reason': 'multi_claim',
-                    'claims': [{'text': text} for text in _LONG_PICKER_CLAIMS],
+                    'claims': [{'claim': text} for text in _LONG_PICKER_CLAIMS],
                 }
             ),
         },
