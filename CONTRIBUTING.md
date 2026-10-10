@@ -46,7 +46,13 @@ A published card version never changes. Hosts cache a card by its URI
 (`ui://lenz/card-vN`) and old conversations re-mount whatever it names, so
 every version in `dist/versions.json` keeps being served. To change the card,
 bump `cardVersion` in `package.json` and `CARD_URI` in `src/lenz_mcp/mcp_card.py`,
-then build. `npm run check:published` fails on an edit to a published bundle.
+then build. A version is published once a release tag (`vX.Y.Z`) has it, not
+when it merges to `main`: `npm run check:published` compares against the latest
+release tag and fails on an edit to a bundle that tag has. A version that is on
+`main` but in no tag yet may still be rebuilt in place
+(`npm run build -- --allow-rebuild`, then commit `dist/`); the first tag that
+contains it freezes it. The check needs the tags (`git fetch --tags`); without
+any it falls back to `origin/main`.
 
 ## When a host changes how it presents itself
 

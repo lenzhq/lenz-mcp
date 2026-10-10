@@ -2,15 +2,17 @@
 //
 //   npm run build                       build the version in package.json "cardVersion"
 //   npm run build -- --dev              the dev probe's card with the fixture switcher (dist-dev/)
-//   npm run build -- --allow-rebuild    overwrite that version's file (ONLY before its URI
-//                                       has ever been published; see below)
+//   npm run build -- --allow-rebuild    overwrite that version's file (ONLY while no release
+//                                       tag has that version; see below)
 //
 // Output: dist/card-v{N}.html (script and styles inline, pinned by a CSP of
 // their sha256 hashes) and its entry in dist/versions.json:
 //   { "ui://lenz/card-v{N}": { "file": "card-v{N}.html", "sha256": "…" } }
 //
 // Claude caches a card by its URI and old chats re-mount the HTML their URI names,
-// so a published version's bundle never changes. Changing the card means bumping
+// so a published version's bundle never changes. A version is published once a
+// release tag has it (not when it merges to main: the wheel and the deploy are
+// cut from tags); `npm run check:published` judges against the latest tag. Changing the card means bumping
 // "cardVersion" here AND CARD_URI in src/lenz_mcp/mcp_card.py (a literal, by hand);
 // tests/test_card.py fails if a bundle changes under an old URI or
 // the Python URI is not the newest version.
@@ -99,7 +101,7 @@ if (existing && existing.sha256 !== sha256 && !allowRebuild) {
   throw new Error(
     `${file} is already recorded for ${uri} with another hash. A published card never changes: ` +
       'bump "cardVersion" in package.json and CARD_URI in src/lenz_mcp/mcp_card.py. ' +
-      '(Use --allow-rebuild only for a version that has never been published.)',
+      '(Use --allow-rebuild only for a version no release tag has yet.)',
   );
 }
 writeFileSync(join(dist, file), html, 'utf8');

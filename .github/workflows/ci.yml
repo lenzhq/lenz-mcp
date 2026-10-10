@@ -86,8 +86,10 @@ jobs:
             echo "::error::Rebuilding the dev card changed dist-dev/. Run \`npm run build:dev\` and commit the result."
             exit 1
           fi
+      # Published means a release tag has it, so the base is the latest vX.Y.Z
+      # tag (tests/published-base.mjs); fetch-depth: 0 above brings the tags.
       - name: A published card bundle has not changed
-        run: BASE_REF=origin/main npm run check:published
+        run: npm run check:published
       - name: Unit tests
         run: |
           set -o pipefail

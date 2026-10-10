@@ -7,7 +7,7 @@
   "cardVersion": 8,
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test \"src/**/*.test.js\"",
+    "test": "node --test \"src/**/*.test.js\" tests/published-base.test.mjs",
     "test:host": "node --test tests/host.test.mjs",
     "render": "node tests/render.mjs",
     "build:dev": "node build.mjs --dev",

@@ -1,6 +1,6 @@
-// A published card bundle never changes.
+// A published card bundle never changes. Published means a release tag has it.
 //
-//   npm run check:published            against origin/main
+//   npm run check:published            against the highest release tag HEAD reaches (tests/published-base.mjs)
 //   BASE_REF=<ref> npm run check:published
 //
 // Claude caches a card by its URI and old chats re-mount the HTML that URI
@@ -8,12 +8,18 @@
 // connector's register_card_resources iterates all of them, on purpose, so a
 // conversation that cached an old URI keeps working.
 //
+// A version merged to main but not yet in any release tag has not reached a
+// host (the wheel and the deploy are cut from tags), so it is still a draft and
+// build.mjs --allow-rebuild may rewrite it; the first tag that contains it
+// freezes it. Judging against main instead would freeze a bundle weeks before
+// it ships.
+//
 // Nothing else enforces that. build.mjs refuses to rewrite a published bundle,
 // but only for the version package.json names; and the connector's card test
 // hashes each file against the sha256 committed BESIDE it, so a commit that
 // edits an old bundle AND its recorded hash together is self-consistent and
 // green everywhere. The only witness to "these bytes were already published"
-// is history — which is why this check lives in CI, where the base ref is
+// is history — which is why this check lives in CI, where the tags are
 // fetched, rather than in pytest, where it would have to skip when history is
 // unavailable, and a test that silently skips is the failure mode this whole
 // job exists to remove.
@@ -26,15 +32,17 @@
 import { execFileSync } from 'node:child_process';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { chooseBase } from './published-base.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const base = process.env.BASE_REF || 'origin/main';
 // Overridable so an arbitrary pair of refs can be compared by hand; in CI the
 // checkout IS this ref. Every read below goes through git rather than the
 // working tree, so the two sides are always described the same way — a
 // file-existence check against the working tree would answer about a
 // different tree than the manifest it is judging.
 const head = process.env.HEAD_REF || 'HEAD';
+const { ref: base, via } = chooseBase({ cwd: root, head });
+console.log(`Judging against ${base} (${via}).`);
 const manifest = 'src/lenz_mcp/card/dist/versions.json';
 
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
@@ -95,7 +103,7 @@ for (const [uri, entry] of Object.entries(before)) {
   if (now.sha256 !== entry.sha256 && !sanctioned(uri, entry.sha256, now.sha256)) {
     problems.push(
       `${uri} is published and its bundle has changed (${entry.sha256.slice(0, 12)}… → ${now.sha256.slice(0, 12)}…). ` +
-        'Every Claude conversation that cached that URI re-mounts whatever it names, so add a NEW version rather than editing this one: ' +
+        'A release tag already has this version, and every Claude conversation that cached that URI re-mounts whatever it names, so add a NEW version rather than editing this one: ' +
         'bump "cardVersion" in package.json and CARD_URI in src/lenz_mcp/mcp_card.py.',
     );
   }
