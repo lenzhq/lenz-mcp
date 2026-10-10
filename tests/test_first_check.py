@@ -257,7 +257,9 @@ INSTRUCTIONS_MAX_CHARS = 2372
 # sentence: each example phrase sits beside the intent it stands for, followed
 # by what the tool is not for, so the description states the user's intent
 # rather than a list of words to react to.
-ASSESS_DESCRIPTION_MAX_CHARS = 1575
+ASSESS_DESCRIPTION_MAX_CHARS = 1694
+# Raised from 1,575 for the sentence saying a row for a claim found false may carry a
+# `suggested_rewrite`: a suggestion built from the reviewers' reasoning, not verified.
 
 
 def _assess_description() -> str:
@@ -1369,7 +1371,13 @@ def _module_strings():
 def test_every_result_string_in_the_server_keeps_the_split():
     strings = _module_strings()
     # A scan that reads nothing passes forever: name what it must see.
-    for must in ('LOW_CONFIDENCE_NEXT_STEP', 'STILL_RUNNING_AFTER_WAIT', 'FOLLOWUP_NOT_COMPLETED', 'ASSESS_NOTES_NOTE'):
+    for must in (
+        'LOW_CONFIDENCE_NEXT_STEP',
+        'STILL_RUNNING_AFTER_WAIT',
+        'FOLLOWUP_NOT_COMPLETED',
+        'ASSESS_NOTES_NOTE',
+        'QUICK_REWRITE_NOTE',
+    ):
         assert must in strings, must
     # A placeholder stands in for the number a message is filled with.
     bad = {name: v for name, value in strings.items() if (v := _say_do_violations(re.sub(r'\{\w+\}', '130', value)))}
@@ -1377,6 +1385,16 @@ def test_every_result_string_in_the_server_keeps_the_split():
     # ... and the citation-check notes are among the strings it read.
     for must in ('CITECHECK_PRESENTATION_NOTE', 'CITECHECK_MORE_NEXT_STEP', 'CITECHECK_STILL_RUNNING'):
         assert must in strings, must
+
+
+def test_the_note_a_quick_check_row_builds_for_its_rewrite_keeps_the_split(monkeypatch):
+    row = {**_ASSESS['claims'][0], 'suggested_rewrite': 'GDPR requires a lawful basis for processing personal data.'}
+    _patch_api(monkeypatch, 'assess', ApiResponse(status=200, data={**_ASSESS, 'claims': [row]}))
+    out = _run(server.assess_claim(row['claim'], _ctx()))['claims'][0]
+    assert out['suggested_rewrite_note'] == server.QUICK_REWRITE_NOTE
+    assert _say_do_violations(out['suggested_rewrite_note']) == []
+    # The note never reaches the deep check's wording, nor names a tool outside an instruction.
+    assert out['suggested_rewrite_note'] != server.SUGGESTED_REWRITE_NOTE
 
 
 def test_the_whole_assess_confidence_note_keeps_the_split():

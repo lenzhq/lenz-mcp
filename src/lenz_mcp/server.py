@@ -168,6 +168,17 @@ CARD_CONTEXT_NOTE = (
     'to find out.'
 )
 
+# Beside a quick-check row's `suggested_rewrite`, only when there is one. It is
+# not the deep check's note: this sentence was written from the reviewers'
+# reasoning, with no sources behind it, so the note says that and points at the
+# deep check as the way to have the new sentence checked.
+QUICK_REWRITE_NOTE = (
+    "A suggested rewrite of the claim, with its wrong part corrected, built from the reviewers' reasoning and "
+    'not from sources. It has not been checked itself. Offer it to the user as a suggestion to review, never '
+    'as a corrected fact or a verified result. If they want the new sentence checked, offer a deep check of '
+    'it; if they agree, call `verify_claim` with it.'
+)
+
 # `sources[].snippet` on the API is usually a short quote, but it can be a
 # longer passage, and nothing on the API says which is which. A quote is never
 # cut: any sentence splitter meets "U.S.", "No. 5" or a script without spaces,
@@ -1007,8 +1018,9 @@ async def assess_claim(
     not a checked source. A low-confidence row carries ``recommend_verify: true`` and a
     ``next_step``: recommend `verify_claim`, the deep check, and ask before
     running it. On medium offer it; on high mention it. A vague claim is
-    assessed on its most likely reading (the row's ``claim``). Leave
-    ``language`` unset.
+    assessed on its most likely reading (the row's ``claim``). A row for a claim found
+    false may carry ``suggested_rewrite``, a suggestion built from the reviewers'
+    reasoning and not verified. Leave ``language`` unset.
     """
     authorization = _authorization(ctx)  # gate enforced by @requires_auth
 
@@ -1020,9 +1032,9 @@ async def assess_claim(
         return {'status': 'error', 'message': 'Pass a `claim` to check, or a `claims` list.'}
 
     if items:
-        resp = await client.assess(authorization, claims=items, language=language)
+        resp = await client.assess(authorization, claims=items, language=language, suggest_rewrite=True)
     else:
-        resp = await client.assess(authorization, text=text, language=language)
+        resp = await client.assess(authorization, text=text, language=language, suggest_rewrite=True)
     if not resp.ok:
         return _error_result(resp)
 
@@ -1065,6 +1077,14 @@ async def assess_claim(
         for note in ('rationale', 'dissent'):
             if isinstance(c.get(note), str) and c[note]:
                 entry[note] = c[note]
+        # The claim rewritten with its wrong part corrected, when the API wrote
+        # one (a False or Mostly False row at high confidence, or a claim already
+        # deep-checked). Forwarded only when it is a non-empty string; a null or
+        # absent key leaves the row as it was.
+        rewrite = c.get('suggested_rewrite')
+        if isinstance(rewrite, str) and rewrite.strip():
+            entry['suggested_rewrite'] = rewrite.strip()
+            entry['suggested_rewrite_note'] = QUICK_REWRITE_NOTE
         # The deep check reverses ~19% of low-confidence quick verdicts, so a
         # low row says so itself. Never on an Error row: it reads `low` too,
         # and there is no verdict to check.
