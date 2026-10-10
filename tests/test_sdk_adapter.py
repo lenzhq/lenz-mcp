@@ -87,7 +87,7 @@ ENDPOINTS: list[tuple[str, Any, str, str, Any, str | None, float]] = [
         lambda: client.verify(AUTH, text='A claim.', language='', depth='low', retry_of='f' * 32),
         'POST',
         '/api/v1/verify',
-        {'text': 'A claim.', 'source_url': '', 'language': 'auto', 'depth': 'low'},
+        {'text': 'A claim.', 'language': 'auto', 'depth': 'low'},
         client._idem_key('verify', 'A claim.', 'auto', 'low', 'retry_of', 'f' * 32),
         config.DEFAULT_TIMEOUT,
     ),
@@ -245,6 +245,13 @@ def test_a_value_that_is_not_a_bearer_is_refused_before_any_request(monkeypatch,
     assert wire.requests == []
 
 
+@pytest.mark.parametrize('header', ['Bearer lat x', 'Bearer lat_\x00x', 'Bearer lenz_caf\xe9'])
+def test_a_token_the_sdk_will_not_send_is_refused_like_a_missing_one(wire, header):
+    resp = _run(client.me_usage(header))
+    assert resp.status == 401 and resp.data == {}
+    assert wire.requests == []
+
+
 def test_a_refused_value_reads_as_the_missing_credential_answer(wire):
     out = _run(server.check_usage(_ctx('Basic dXNlcjpwYXNz')))
     assert out['status'] == 'auth_required'
@@ -324,12 +331,36 @@ def test_a_replaced_shared_client_is_used_by_the_next_call(wire, monkeypatch):
 # ── answers: success ─────────────────────────────────────────────────
 
 
-def test_a_success_keeps_its_status_and_body_with_unknown_keys(wire):
+def test_a_success_keeps_its_body_with_unknown_keys(wire):
+    """The body exactly as sent (the SDK's `raw`). The SDK gives a success no
+    status, so a 202 receipt reads as 200: no tool reads more than `ok`."""
     body = {'task_id': 'a' * 32, 'status': 'queued', 'brand_new_field': {'x': [1, None]}}
     wire.respond(api_wire.answer(202, body))
     resp = _run(client.verify(AUTH, text='x', language=''))
-    assert resp.status == 202 and resp.ok
+    assert resp.status == 200 and resp.ok
     assert resp.data == body
+
+
+def test_a_success_body_is_the_callers_own_copy(wire):
+    body = {'claims': [{'claim': 'c', 'verdict': 'True', 'confidence': 'high'}], 'more_claims': []}
+    wire.respond(api_wire.answer(200, body))
+    resp = _run(client.assess(AUTH, text='c', language=''))
+    resp.data['claims'][0]['claim'] = 'changed'
+    assert body['claims'][0]['claim'] == 'c'
+
+
+def test_a_null_on_a_typed_field_is_read_not_refused(wire):
+    """A stored replay of an older answer carries `error_code: null`; it is
+    read, as sent, not refused as an unreadable answer."""
+    body = {
+        'claims': [{'claim': 'c', 'verdict': 'True', 'confidence': 'high', 'error_code': None, 'hint': None}],
+        'error': None,
+        'error_code': None,
+        'more_claims': [],
+    }
+    wire.respond(api_wire.answer(200, body))
+    resp = _run(client.assess(AUTH, text='c', language=''))
+    assert resp.ok and resp.data == body
 
 
 def test_a_success_dump_adds_no_defaults(wire):
@@ -450,7 +481,7 @@ ERRORS: dict[str, tuple[httpx.Response, dict[str, Any], str | None]] = {
         '90',
     ),
     '400': (_error(400, {'detail': 'Not completed.', 'code': 'verification_not_ready'}), {}, None),
-    'error body that is an array': (_error(418, [1, 2]), {'data': {'_raw': [1, 2]}}, None),
+    'error body that is an array': (_error(418, [1, 2]), {'data': {}}, None),
 }
 
 
@@ -475,10 +506,17 @@ def test_a_429_tool_result_names_the_stated_wait(wire):
 
 @pytest.mark.parametrize(
     ('exc', 'name'),
-    [(httpx.ReadTimeout, 'timeout'), (httpx.ConnectError, 'connect'), (httpx.RemoteProtocolError, 'hung up')],
+    [
+        (httpx.ReadTimeout, 'timeout'),
+        (httpx.ConnectError, 'connect'),
+        (httpx.RemoteProtocolError, 'hung up'),
+        (httpx.LocalProtocolError, 'could not be sent'),
+    ],
 )
 def test_no_answer_at_all_is_status_0(wire, exc, name, caplog):
     def _fail(request):
+        if exc is httpx.LocalProtocolError:
+            raise exc(name)
         raise exc(name, request=request)
 
     wire.respond(_fail)
@@ -495,18 +533,14 @@ def test_no_answer_at_all_is_status_0(wire, exc, name, caplog):
     'response',
     [
         api_wire.answer(200, {'tier': 'free'}, OLD_VERSION),
-        api_wire.answer(401, {'detail': 'Invalid API key'}, OLD_VERSION),
-        api_wire.answer(402, {'detail': 'No credits.', 'code': 'no_credits'}, OLD_VERSION),
-        api_wire.answer(429, {'detail': 'Slow.'}, {**OLD_VERSION, 'Retry-After': '45'}),
-        api_wire.answer(503, {'detail': 'At capacity.', 'code': 'capacity'}, OLD_VERSION),
+        api_wire.answer(202, {'tier': 'free'}, OLD_VERSION),
         api_wire.answer(200, {'tier': 'free'}, {config.API_VERSION_HEADER: 'garbage'}),
     ],
-    ids=['200', '401', '402', '429', '503', 'garbage'],
+    ids=['200', '202', 'garbage'],
 )
-def test_an_answer_in_another_api_version_is_a_plain_connector_error(wire, response, caplog):
-    """The SDK reads one API version and refuses every answer in another, error
-    answers included: it takes precedence over the 401, 402, 429 or 503 it
-    carries. The tool says so plainly, never in the SDK's words."""
+def test_a_success_in_another_api_version_is_a_plain_connector_error(wire, response, caplog):
+    """The SDK reads one API version, and a success in another cannot be read
+    as this one's. The tool says so plainly, never in the SDK's words."""
     wire.respond(response)
     resp = _run(client.me_usage(AUTH))
     assert resp.status == client.INVALID_RESPONSE_STATUS and not resp.ok
@@ -516,6 +550,39 @@ def test_an_answer_in_another_api_version_is_a_plain_connector_error(wire, respo
     assert out['status'] == 'error'
     text = json.dumps(out)
     assert 'lenz-io' not in text and '2.x' not in text and 'contact support' not in text
+
+
+@pytest.mark.parametrize(
+    ('response', 'status', 'tool_status'),
+    [
+        (api_wire.answer(401, {'detail': 'Invalid API key'}, OLD_VERSION), 401, 'auth_required'),
+        (api_wire.answer(402, {'detail': 'No credits.', 'code': 'no_credits'}, OLD_VERSION), 402, 'quota_exhausted'),
+        (
+            api_wire.answer(429, {'detail': 'Slow.'}, {**OLD_VERSION, 'Retry-After': '45'}),
+            429,
+            'rate_limited',
+        ),
+        (
+            api_wire.answer(503, {'detail': 'At capacity.', 'code': 'capacity', 'retry_after': 90}, OLD_VERSION),
+            503,
+            'service_unavailable',
+        ),
+    ],
+    ids=['401', '402', '429', '503'],
+)
+def test_an_error_in_another_api_version_is_still_that_error(wire, response, status, tool_status):
+    """An error answer (400 and above) from an API in another version arrives
+    as the real error, with its status, body and headers: a real out-of-credits
+    or rate-limit answer is shown as one."""
+    wire.respond(response)
+    resp = _run(client.me_usage(AUTH))
+    assert resp.status == status
+    assert resp.data == json.loads(response.content)
+    assert resp.headers.get('retry-after') == response.headers.get('retry-after')
+    out = _run(server.check_usage(_ctx()))
+    assert out['status'] == tool_status
+    if status == 429:
+        assert out['retry_after_seconds'] == 45
 
 
 # ── ask ──────────────────────────────────────────────────────────────
@@ -573,7 +640,7 @@ def test_a_401_renews_once_and_resends_the_same_request(wire):
     wire.respond(_answer)
     credential = _Credential()
     resp = _run(client.verify(credential, text='A claim.', language='en'))
-    assert resp.status == 202
+    assert resp.ok
     assert credential.renewals == 1
     first, second = wire.requests
     assert [first.headers['authorization'], second.headers['authorization']] == ['Bearer lat_old', 'Bearer lat_new']
@@ -606,8 +673,8 @@ def test_no_renewal_for_a_plain_key(wire):
 
 def test_a_409_naming_the_check_is_attached_to_and_polled(wire):
     """A resend of the same submission while the first is still being created:
-    the API answers 409 naming the check. The SDK reads that as a start; the
-    connector keeps the answer as it came, and the tool attaches by id."""
+    the API answers 409 naming the check. The SDK reads that as a start, whose
+    body is the 409's (naming the check); the tool attaches by id."""
 
     def _answer(request):
         if request.url.path.endswith('/citecheck'):
@@ -626,7 +693,7 @@ def test_a_409_naming_the_check_is_attached_to_and_polled(wire):
 
     wire.respond(_answer)
     resp = _run(client.citecheck(AUTH, text='A draft [a](https://e.org/a).'))
-    assert resp.status == 409 and resp.data['citecheck_id'] == 'ab12cd34'
+    assert resp.ok and resp.data['citecheck_id'] == 'ab12cd34'
     assert len(wire.requests) == 1  # settled, not resent
     out = _run(server.check_citations('A draft [a](https://e.org/a).', _ctx()))
     assert out['status'] == 'completed' and out['citecheck_id'] == 'ab12cd34'

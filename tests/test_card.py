@@ -543,7 +543,7 @@ def test_the_retry_key_is_deterministic_and_differs_from_the_first_run():
 def test_client_verify_puts_retry_of_in_the_key_not_the_body(monkeypatch):
     wire = api_wire.install(monkeypatch)
     _run(client.verify('Bearer k', text='The claim.', language='', retry_of='f' * 32))
-    assert wire.body() == {'text': 'The claim.', 'source_url': '', 'language': 'auto', 'depth': 'standard'}
+    assert wire.body() == {'text': 'The claim.', 'language': 'auto', 'depth': 'standard'}
     assert wire.last.headers['idempotency-key'] == client._idem_key(
         'verify', 'The claim.', 'auto', 'retry_of', 'f' * 32
     )

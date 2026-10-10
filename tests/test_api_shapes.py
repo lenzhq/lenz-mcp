@@ -367,37 +367,13 @@ def test_the_newer_body_gives_the_same(scenario):
     assert _serialized(_output(scenario, 'canonical')) == _serialized(expected)
 
 
-# Where a body read through the SDK cannot give the oracle's answer. The SDK's
-# models type every field they know, so a body with a value of the wrong type is
-# an answer the connector cannot read, and the tool says so plainly.
-#
-# `synthetic__needs_input_text_null` is a defensive body, not one the served
-# API writes (its needs_input options carry no `text` at all): an option whose
-# `text` is null.
-SDK_KNOWN_DIFFERENCES: dict[str, dict[str, Any]] = {
-    'synthetic__needs_input_text_null': {
-        'status': 'error',
-        'message': 'The Lenz API sent an answer the connector could not read. Please retry shortly.',
-    },
-}
-
-
 @skip_while_writing
 @pytest.mark.parametrize('scenario', sorted(SCENARIOS))
 def test_the_newer_body_through_the_sdk_gives_the_same(scenario):
     expected = _since_the_oracle(_oracle()[scenario])
     if scenario in KNOWN_DIFFERENCES:
         expected = {**expected, **KNOWN_DIFFERENCES[scenario]}
-    if scenario in SDK_KNOWN_DIFFERENCES:
-        expected = SDK_KNOWN_DIFFERENCES[scenario]
     assert sorted_json(_wire_output(scenario)) == sorted_json(expected)
-
-
-@skip_while_writing
-def test_each_sdk_difference_really_differs():
-    for scenario in SDK_KNOWN_DIFFERENCES:
-        assert scenario in SCENARIOS
-        assert _oracle()[scenario] != SDK_KNOWN_DIFFERENCES[scenario]
 
 
 @skip_while_writing

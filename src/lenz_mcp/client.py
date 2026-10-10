@@ -14,15 +14,17 @@ import logging
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 import httpx
 from lenz_io import (
     AsyncLenz,
     LenzApiVersionError,
+    LenzAuthError,
     LenzConnectionError,
     LenzError,
     LenzInvalidResponseError,
+    LenzUsageError,
 )
 from pydantic import BaseModel, ValidationError
 
@@ -553,32 +555,6 @@ def _get_client() -> httpx.AsyncClient:
     return _http_client
 
 
-class _Recorder:
-    """The shared client as one call's SDK sees it: every request passes through
-    unchanged, and the last answer is kept.
-
-    The SDK hands back a model or an exception, not the response. The response
-    is what tells an answer we can use from one we cannot (a 204, a redirect
-    whose body happens to parse, an empty body), and what an error result is
-    built from, byte for byte as before: its status, its body and its headers,
-    which the tools read (a 429's Retry-After). One per call, so concurrent calls
-    never see each other's answers.
-    """
-
-    def __init__(self, http: httpx.AsyncClient) -> None:
-        self._http = http
-        self.response: httpx.Response | None = None
-
-    def __getattr__(self, name: str) -> Any:
-        # `timeout` and `headers`, which the SDK reads off a borrowed client.
-        return getattr(self._http, name)
-
-    async def request(self, *args: Any, **kwargs: Any) -> httpx.Response:
-        self.response = None
-        self.response = await self._http.request(*args, **kwargs)
-        return self.response
-
-
 def _bearer_token(header: str | None) -> str | None:
     """The token of a ``Bearer`` Authorization value, or None.
 
@@ -593,32 +569,14 @@ def _bearer_token(header: str | None) -> str | None:
     return token.strip() or None
 
 
-def _from_response(response: httpx.Response) -> ApiResponse:
-    """An error answer as the tools read it: its status, its JSON object body
-    (a non-object kept under ``_raw``, a non-JSON body as ``{}``) and its headers
-    with lowercased names."""
-    try:
-        body = response.json()
-        if not isinstance(body, dict):
-            body = {'_raw': body}
-    except ValueError:
-        body = {}
+def _from_error(exc: LenzError) -> ApiResponse:
+    """An error answer as the tools read it: the status, the body as the API
+    sent it (``{}`` when it was not a JSON object) and the response's own
+    headers, with lowercased names (a 429's Retry-After)."""
     return ApiResponse(
-        status=response.status_code,
-        data=body,
-        headers={k.lower(): v for k, v in response.headers.items()},
-    )
-
-
-def _usable_success(response: httpx.Response) -> bool:
-    """Whether a response the SDK read as a success carries a body we can use.
-
-    No endpoint the connector calls answers 204 or 205 or an empty body, and a
-    redirect is never followed: any of those is an answer from something other
-    than the API (a proxy, a load balancer), not a result.
-    """
-    return (
-        200 <= response.status_code < 300 and response.status_code not in (204, 205) and bool(response.content.strip())
+        status=exc.status_code,
+        data=exc.body if isinstance(exc.body, dict) else {},
+        headers={name.lower(): value for name, value in exc.headers.items()},
     )
 
 
@@ -639,79 +597,67 @@ async def _attempt(
         # an SDK built without a key, which would read LENZ_API_KEY from the
         # environment, or send a call with nobody's credential.
         return ApiResponse(status=401, data={})
-    recorder = _Recorder(_get_client())
     options: dict[str, Any] = {'timeout': timeout, 'extra_headers': {'User-Agent': _user_agent()}}
     try:
         sdk = AsyncLenz(
             # '' and not None: None reads LENZ_API_KEY.
             api_key=token or '',
             base_url=config.API_BASE_URL,
-            http_client=cast(httpx.AsyncClient, recorder),
+            http_client=_get_client(),
             max_retries=0,
             legacy_aliases=False,
         )
         model = await invoke(sdk, options)
     except LenzApiVersionError as exc:
-        served = _UA_UNSAFE.sub('', str(exc.api_version or ''))[:40]
+        # A successful answer (below 400) in another API version: nothing in it
+        # can be read as this version's. An error answer in another version
+        # arrives as its own error, below.
+        served = _UA_UNSAFE.sub('', str(exc.served_version or ''))[:40]
         logger.warning('mcp_api_version_mismatch op=%s served=%s', op, served)
         return ApiResponse(
             status=INVALID_RESPONSE_STATUS, data={'code': API_VERSION_UNSUPPORTED_CODE, 'detail': _API_VERSION_DETAIL}
         )
+    except LenzInvalidResponseError as exc:
+        # Not a JSON object, on any status: a proxy's page, an empty body, a
+        # 204, a redirect. An error status keeps its status, as it always did.
+        if exc.status_code >= 400:
+            return _from_error(exc)
+        return _invalid_response(op, exc.status_code)
     except LenzConnectionError as exc:
-        # A timeout or a connection that failed: no answer at all. (Before the
-        # catch-all below: these carry status 0 and no response.)
+        # No answer at all: a timeout, a failed connection, or a request httpx
+        # could not send (a header it cannot encode).
         logger.warning('mcp_api_transport_error op=%s path=%s err=%s', op, path, type(exc.__cause__ or exc).__name__)
         return ApiResponse(status=0, data={})
-    except LenzInvalidResponseError as exc:
-        # Not JSON, on any status (a proxy's page, an empty body, a redirect).
-        if recorder.response is not None and recorder.response.status_code >= 400:
-            # An error answer whose body is not JSON (a 500 page): its status is
-            # still the answer, as it always was.
-            return _from_response(recorder.response)
-        return _invalid_response(op, exc.status_code)
+    except LenzAuthError as exc:
+        if exc.status_code == 0:
+            # A token the SDK will not send (a character a header cannot
+            # carry): refused before any request, like a missing credential.
+            # `server.requires_auth` screens these first; this is the backstop.
+            return ApiResponse(status=401, data={})
+        return _from_error(exc)
     except LenzError as exc:
-        if recorder.response is not None:
-            return _from_response(recorder.response)
-        # An error raised before anything was sent (none is expected: the key is
-        # checked above). Never the SDK's own words, which name its parameters.
-        logger.warning('mcp_api_local_error op=%s error=%s', op, type(exc).__name__)
-        return ApiResponse(status=exc.status_code or 0, data={})
+        return _from_error(exc)
     except ValidationError:
-        # JSON that is not the shape this endpoint answers with (an array, a
-        # scalar, a wrong type).
-        return _invalid_response(op, recorder.response.status_code if recorder.response is not None else 'none')
-    # Deliberately wider than `httpx.HTTPError`, which is narrower than what a
-    # request can raise. `httpx.InvalidURL` is not an `HTTPError` at all, and
-    # header encoding raises `UnicodeError`. Anything not caught here escapes the
-    # tool body and reaches the model as a raw `ToolError` string with no log
-    # line. The two values with a realistic trigger are screened before they get
-    # here — the bearer by `server.requires_auth`, the ids by
-    # `server._SENDABLE_ID_RE` — so this is the backstop, not the diagnosis.
-    except (httpx.HTTPError, httpx.InvalidURL, UnicodeError) as exc:
-        logger.warning('mcp_api_transport_error op=%s path=%s err=%s', op, path, type(exc).__name__)
-        return ApiResponse(status=0, data={})
-    except ValueError as exc:
-        # The SDK refused the arguments before sending (an empty id, a page size
-        # out of range). The tools screen these first, so this is a backstop;
-        # its message names SDK parameters and is not passed on.
+        # A JSON object that is not the shape this endpoint answers with (a
+        # field of the wrong type).
+        return _invalid_response(op, 'shape')
+    except LenzUsageError as exc:
+        # The SDK refused the arguments before sending (an empty id, an empty
+        # selection). The tools screen these first, so this is a backstop; its
+        # message names SDK parameters and is not passed on.
         logger.warning('mcp_api_request_refused op=%s error=%s', op, type(exc).__name__)
         return ApiResponse(status=422, data={'detail': 'The request was invalid.'})
 
-    response = recorder.response
-    if response is not None and response.status_code >= 400:
-        # The SDK settled an error answer itself (a citation check's 409 naming
-        # the check a resend already started). The tools read that answer as it
-        # came: the status and the body that names the check.
-        return _from_response(response)
-    if response is None:
-        return _invalid_response(op, 'none')
-    if not _usable_success(response):
-        return _invalid_response(op, response.status_code)
-    return ApiResponse(
-        status=response.status_code,
-        data=model.model_dump(mode='json', exclude_unset=True),
-        headers={k.lower(): v for k, v in response.headers.items()},
-    )
+    # `raw` is the body exactly as the API sent it (a fresh copy), with nothing
+    # the model would add. Every result a call returns carries it. The SDK
+    # gives a success no status or headers: 200 stands for every 2xx, and no
+    # tool reads more than `ok` off a success. (A citation check's 409 naming
+    # the check a resend already started is a success here, whose body names
+    # that check; the tool attaches to it by id.)
+    body = getattr(model, 'raw', None)
+    if not isinstance(body, dict):
+        return _invalid_response(op, 'no body')
+    return ApiResponse(status=200, data=body)
 
 
 async def _call(

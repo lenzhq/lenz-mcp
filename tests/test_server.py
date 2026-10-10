@@ -901,7 +901,7 @@ def test_select_invalid_selection(monkeypatch):
 def test_select_client_builds_per_task_path(monkeypatch):
     wire = api_wire.install(monkeypatch)
     resp = _run(client.select('Bearer k', task_id='TID', texts=['a', 'b']))
-    assert resp.status == 202
+    assert resp.ok
     assert wire.last.method == 'POST'
     assert wire.last.url.path == '/api/v1/verify/TID/select'
     assert wire.body() == {'texts': ['a', 'b']}
@@ -1466,12 +1466,11 @@ def test_request_non_json_body_is_not_a_success(monkeypatch):
     assert not resp.ok and resp.data['code'] == client.INVALID_RESPONSE_CODE
 
 
-def test_request_error_answers_keep_their_old_shape(monkeypatch):
-    """An error body that is not an object is still kept under `_raw`, and one
-    that is not JSON reads as `{}`, with its status, as before."""
+def test_request_error_answers_keep_their_status(monkeypatch):
+    """An error body that is not a JSON object reads as `{}`, with its status."""
     _mock_transport(monkeypatch, lambda req: api_wire.answer(418, [1, 2, 3]))
     resp = _run(client.me_usage('Bearer k'))
-    assert resp.status == 418 and resp.data == {'_raw': [1, 2, 3]}
+    assert resp.status == 418 and resp.data == {}
     _mock_transport(monkeypatch, lambda req: httpx.Response(500, text='<html>oops</html>'))
     resp = _run(client.me_usage('Bearer k'))
     assert resp.status == 500 and resp.data == {}
@@ -1503,17 +1502,17 @@ def test_client_assess_targets_assess_endpoint(monkeypatch):
 def test_client_verify_targets_verify_endpoint(monkeypatch):
     wire = api_wire.install(monkeypatch)
     resp = _run(client.verify('Bearer k', text='hi', language=''))
-    assert resp.status == 202
+    assert resp.ok
     assert wire.last.method == 'POST'
     assert wire.last.url.path == '/api/v1/verify'
-    # The SDK's spelling: `text`, and an empty `source_url` (no source page).
-    assert wire.body() == {'text': 'hi', 'source_url': '', 'language': 'auto', 'depth': 'standard'}
+    # The SDK's spelling: `text` (the API reads `claim` and `text` alike).
+    assert wire.body() == {'text': 'hi', 'language': 'auto', 'depth': 'standard'}
 
 
 def test_client_verify_sends_the_requested_depth(monkeypatch):
     wire = api_wire.install(monkeypatch)
     _run(client.verify('Bearer k', text='hi', language='', depth='low'))
-    assert wire.body() == {'text': 'hi', 'source_url': '', 'language': 'auto', 'depth': 'low'}
+    assert wire.body() == {'text': 'hi', 'language': 'auto', 'depth': 'low'}
 
 
 def test_client_verify_status_targets_status_endpoint(monkeypatch):
@@ -1925,12 +1924,13 @@ def test_request_survives_a_non_ascii_authorization_header(monkeypatch):
     """A key pasted with a curly quote or a non-breaking space is the realistic
     trigger: uvicorn accepts \\x80-\\xff inbound and Starlette latin-1-decodes
     it, but httpx encodes header values as ASCII. The UnicodeEncodeError is not
-    an httpx.HTTPError (nor an SDK error) — before the fix it escaped and failed
-    every tool call.
+    an httpx.HTTPError — before the fix it escaped and failed every tool call.
+    The SDK refuses such a key before sending (LenzAuthError), which reads as
+    the missing-credential answer. `server.requires_auth` names it first.
     """
     wire = _mock_transport(monkeypatch, lambda req: api_wire.answer(200, {'tier': 'free'}))
     resp = _run(client.me_usage('Bearer lenz_caf\xe9'))
-    assert resp.status == 0 and resp.data == {}
+    assert resp.status == 401 and resp.data == {}
     assert wire.requests == []
 
 
