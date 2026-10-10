@@ -310,7 +310,7 @@ def test_assess_claim_description_carries_the_trigger_phrases():
 
 def test_instructions_carry_the_confidence_ladder_and_the_consent_rule():
     lower = server.mcp.instructions.lower()
-    for phrase in ('on low', 'recommend', 'on medium', 'dissent', 'offer', 'on high'):
+    for phrase in ('on low', 'recommend', 'on medium', 'offer', 'on high'):
         assert phrase in lower, phrase
     # A high-stakes claim earns a recommendation, never a deep check started unasked.
     assert 'high-stakes for the user' in lower
@@ -322,27 +322,29 @@ def test_instructions_carry_the_confidence_ladder_and_the_consent_rule():
 
 
 def test_instructions_show_the_reviewers_reasoning_without_calling_it_evidence():
-    """A quick-check row now carries `rationale` / `dissent`. The
-    instructions say how to present them and nothing about how they are chosen."""
+    """A quick-check row carries `rationale`. The instructions say how to
+    present it and nothing about how it is chosen. `dissent` is deprecated (the
+    API always sends null) and is not mentioned at all."""
     text = server.mcp.instructions
     sentence = (
         "When a row carries a `rationale`, show it with the verdict as the reviewers' reasoning, never as "
-        'sourced evidence; when it carries a `dissent`, say that a reviewer disagreed and why.'
+        'sourced evidence.'
     )
     assert sentence in text
     assert text.index('Present a quick verdict as a first read, not as final.') < text.index(sentence)
-    assert 'when a row carries a dissent, offer one' in text
+    assert 'dissent' not in text.lower()
     # The instructions say nothing else about the notes: every sentence that
     # names one is an approved sentence, so no clause on how a note is chosen
     # can be added without failing here.
     flat = ' '.join(text.split())
     note_sentences = [s for s in re.split(r'(?<=[.!?])\s+', flat) if 'rationale' in s or 'dissent' in s]
-    assert note_sentences == [
-        sentence,
+    assert note_sentences == [sentence]
+    ladder = (
         'Then act on its confidence: on low, or when the claim is high-stakes for the user (legal, medical, '
-        'financial, or about to be published), recommend a deep check; on medium, or when a row carries a '
-        'dissent, offer one; on high, mention that one is available without pushing it.',
-    ]
+        'financial, or about to be published), recommend a deep check; on medium, offer one; on high, '
+        'mention that one is available without pushing it.'
+    )
+    assert ladder in flat
 
 
 def test_instructions_carry_the_supersede_rule_and_the_ways_back():

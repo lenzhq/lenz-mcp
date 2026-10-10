@@ -81,19 +81,19 @@ ASSESS_ESCALATION_NOTE = (
     ' This is a quick check: a first read that shows no sources. A deep check, which investigates a '
     'claim against independent sources, reverses about 19% of low-confidence quick verdicts, about 8% '
     'of medium and about 1% of high. On low confidence recommend one to the user; on medium confidence '
-    'or a dissent offer one; on a list, only for the one or two claims that matter. Do not mention '
+    'offer one; on a list, only for the one or two claims that matter. Do not mention '
     "tool names or credits to the user. Never start one without the user's yes. The tool is "
     '`verify_claim`.'
 )
 
 # Appended after ASSESS_ESCALATION_NOTE, as its OWN sentence: what a row's
-# `rationale` and `dissent` are, in the approved public wording. Kept
+# `rationale` is, in the approved public wording. Kept
 # separate so the escalation guidance can be reworded without touching it. It
 # never says how a note is picked.
 ASSESS_NOTES_NOTE = (
-    " `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when "
-    "set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked "
-    'sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.'
+    " `rationale` is the reasoning of a reviewer who agrees with the panel's verdict. It is a "
+    "reviewer's note, not a checked source. For sourced evidence, offer the user a deep check; if "
+    'they agree, call `verify_claim`.'
 )
 
 # On every low-confidence assess_claim row, beside `recommend_verify: true`. The
@@ -376,10 +376,10 @@ mcp = MCPServer(
         'Start with `assess_claim`, the quick check, for one claim or a whole text: a verdict and a '
         'confidence for each claim in ~15 seconds. Present a quick verdict as a first read, not '
         "as final. When a row carries a `rationale`, show it with the verdict as the reviewers' reasoning, "
-        'never as sourced evidence; when it carries a `dissent`, say that a reviewer disagreed and why. '
+        'never as sourced evidence. '
         'Then act on its confidence: on low, or when the claim is high-stakes for the user '
         '(legal, medical, financial, or about to be published), recommend a deep check; on medium, '
-        'or when a row carries a dissent, offer one; on high, mention that one is available without '
+        'offer one; on high, mention that one is available without '
         'pushing it. On a long text, name at most the two claims that matter; never start '
         'deep checks across every row. '
         '`verify_claim` is the deep check: a 1-10 score, the key finding, warnings and the '
@@ -1001,9 +1001,8 @@ async def assess_claim(
     user listed separately.
     Verdicts are True / Mostly True / Mixed / Mostly False / False. No sources:
     present each verdict as a first read, not as final. A row may carry
-    ``rationale``, a reviewer's reasoning for the verdict, and ``dissent``, the
-    reasoning of the reviewer farthest from it: reviewers' notes, not checked
-    sources. A low-confidence row carries ``recommend_verify: true`` and a
+    ``rationale``, a reviewer's reasoning for the verdict: a reviewer's note,
+    not a checked source. A low-confidence row carries ``recommend_verify: true`` and a
     ``next_step``: recommend `verify_claim`, the deep check, and ask before
     running it. On medium offer it; on high mention it. A vague claim is
     assessed on its most likely reading (the row's ``claim``). Leave
@@ -1057,6 +1056,10 @@ async def assess_claim(
         # The reviewer notes, forwarded only when set: a null note adds
         # nothing, and a row from an older API or a replayed stored body has
         # no such keys at all (the MCP server and the API deploy independently).
+        # `dissent` is deprecated: the API always sends null, so it is never
+        # forwarded in practice, and nothing tells the model about it. It stays
+        # in this loop only so the result card (which renders a set dissent)
+        # and its fixtures are unchanged.
         for note in ('rationale', 'dissent'):
             if isinstance(c.get(note), str) and c[note]:
                 entry[note] = c[note]

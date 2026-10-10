@@ -174,6 +174,8 @@ def test_assess_forwards_the_reviewer_notes_when_set(monkeypatch):
         ],
     )
     assert out['claims'][0]['rationale'] == _RATIONALE
+    # `dissent` is deprecated (the API always sends null) and undescribed to
+    # the model; a set value still passes through inert for the result card.
     assert out['claims'][0]['dissent'] == _DISSENT
 
 
@@ -203,21 +205,21 @@ def test_assess_note_says_what_the_notes_are_in_its_own_sentence(monkeypatch):
     note = out['confidence_note']
     assert server.ASSESS_NOTES_NOTE in note
     assert server.ASSESS_NOTES_NOTE not in server.ASSESS_ESCALATION_NOTE
-    assert "reviewers' notes, not checked sources" in server.ASSESS_NOTES_NOTE
+    assert "reviewer's note, not a checked source" in server.ASSESS_NOTES_NOTE
     # The note is pinned to its approved wording, and the tool description says
     # nothing about the notes beyond one approved sentence: any added clause on
     # how a note is chosen fails here.
     assert server.ASSESS_NOTES_NOTE == (
-        " `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when "
-        "set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked "
-        'sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.'
+        " `rationale` is the reasoning of a reviewer who agrees with the panel's verdict. It is a "
+        "reviewer's note, not a checked source. For sourced evidence, offer the user a deep check; if "
+        'they agree, call `verify_claim`.'
     )
+    # `dissent` is deprecated (the API always sends null): nothing describes it.
+    assert 'dissent' not in note.lower()
+    assert 'dissent' not in (server.assess_claim.__doc__ or '').lower()
     doc = ' '.join((server.assess_claim.__doc__ or '').split())
     note_sentences = [s for s in re.split(r'(?<=[.!?:])\s+', doc) if 'rationale' in s or 'dissent' in s]
-    assert note_sentences == [
-        "A row may carry ``rationale``, a reviewer's reasoning for the verdict, and ``dissent``, "
-        'the reasoning of the reviewer farthest from it:'
-    ]
+    assert note_sentences == ["A row may carry ``rationale``, a reviewer's reasoning for the verdict:"]
 
 
 def test_assess_fresh_claim_has_no_link(monkeypatch):
