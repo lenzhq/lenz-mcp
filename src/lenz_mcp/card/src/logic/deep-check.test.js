@@ -75,6 +75,7 @@ function make(script, extra = {}) {
   const states = [];
   const check = createDeepCheck({
     claim: 'The claim.',
+    ...(extra.language ? { language: extra.language } : {}),
     host,
     store,
     clock,
@@ -384,4 +385,14 @@ test('adopting is refused once something else is going on', async () => {
   await check.adopt('t-other');
   assert.equal(check.state().taskId, 't1');
   assert.equal(host.calls.filter((c) => c.name === 'start_verification_widget').length, 1);
+});
+
+test('the quick check\'s language is sent with the start, and only when there is one', async () => {
+  const withLanguage = make({ start_verification_widget: [{ status: 'submitted', task_id: 't1' }], get_verification_widget: [] }, { language: 'de' });
+  await withLanguage.check.start();
+  assert.deepEqual(withLanguage.host.calls[0], { name: 'start_verification_widget', args: { claim: 'The claim.', language: 'de' } });
+
+  const without = make({ start_verification_widget: [{ status: 'submitted', task_id: 't1' }], get_verification_widget: [] });
+  await without.check.start();
+  assert.deepEqual(without.host.calls[0].args, { claim: 'The claim.' });
 });

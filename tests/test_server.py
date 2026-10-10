@@ -174,6 +174,8 @@ def test_assess_forwards_the_reviewer_notes_when_set(monkeypatch):
         ],
     )
     assert out['claims'][0]['rationale'] == _RATIONALE
+    # `dissent` is deprecated (the API always sends null) and undescribed to
+    # the model; a set value still passes through inert for the result card.
     assert out['claims'][0]['dissent'] == _DISSENT
 
 
@@ -203,21 +205,21 @@ def test_assess_note_says_what_the_notes_are_in_its_own_sentence(monkeypatch):
     note = out['confidence_note']
     assert server.ASSESS_NOTES_NOTE in note
     assert server.ASSESS_NOTES_NOTE not in server.ASSESS_ESCALATION_NOTE
-    assert "reviewers' notes, not checked sources" in server.ASSESS_NOTES_NOTE
+    assert "reviewer's note, not a checked source" in server.ASSESS_NOTES_NOTE
     # The note is pinned to its approved wording, and the tool description says
     # nothing about the notes beyond one approved sentence: any added clause on
     # how a note is chosen fails here.
     assert server.ASSESS_NOTES_NOTE == (
-        " `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when "
-        "set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked "
-        'sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.'
+        " `rationale` is the reasoning of a reviewer who agrees with the panel's verdict. It is a "
+        "reviewer's note, not a checked source. For sourced evidence, offer the user a deep check; if "
+        'they agree, call `verify_claim`.'
     )
+    # `dissent` is deprecated (the API always sends null): nothing describes it.
+    assert 'dissent' not in note.lower()
+    assert 'dissent' not in (server.assess_claim.__doc__ or '').lower()
     doc = ' '.join((server.assess_claim.__doc__ or '').split())
     note_sentences = [s for s in re.split(r'(?<=[.!?:])\s+', doc) if 'rationale' in s or 'dissent' in s]
-    assert note_sentences == [
-        "A row may carry ``rationale``, a reviewer's reasoning for the verdict, and ``dissent``, "
-        'the reasoning of the reviewer farthest from it:'
-    ]
+    assert note_sentences == ["A row may carry ``rationale``, a reviewer's reasoning for the verdict:"]
 
 
 def test_assess_fresh_claim_has_no_link(monkeypatch):
@@ -370,10 +372,10 @@ def test_assess_client_idempotency_key_covers_the_list(monkeypatch):
     _run(client.assess('Bearer k', claims=['a b'], language=''))
     _run(client.assess('Bearer k', text='a b', language=''))
     (body1, key1), (body2, key2), (body3, key3), (body4, key4) = captured
-    assert body1 == {'claims': ['a', 'b'], 'language': ''}
+    assert body1 == {'claims': ['a', 'b'], 'language': 'auto'}
     assert key1 == key2
     assert key3 != key1
-    assert body4 == {'claim': 'a b', 'language': ''}
+    assert body4 == {'claim': 'a b', 'language': 'auto'}
     assert key4 != key3
 
 
@@ -1320,6 +1322,14 @@ def test_outbound_headers_forward_auth_and_stamp_ua():
     assert 'Idempotency-Key' not in headers
 
 
+def test_outbound_headers_name_the_api_version():
+    # Every call states the response version this server reads, so the API
+    # never has to guess it from the client's name.
+    assert client._headers('Bearer lenz_abc')['X-Lenz-API-Version'] == '2026-10-11'
+    assert client._headers(None)['X-Lenz-API-Version'] == config.API_VERSION == '2026-10-11'
+    assert client._headers('Bearer lenz_abc', idempotency_key='k')['X-Lenz-API-Version'] == config.API_VERSION
+
+
 def test_outbound_headers_include_idempotency_key_when_passed():
     headers = client._headers('Bearer lenz_abc', idempotency_key='abc123')
     assert headers['Idempotency-Key'] == 'abc123'
@@ -1502,13 +1512,13 @@ def test_client_verify_targets_verify_endpoint(monkeypatch):
     _run(client.verify('Bearer k', text='hi', language=''))
     assert cap['method'] == 'POST'
     assert cap['path'] == '/verify'
-    assert cap['json'] == {'claim': 'hi', 'language': '', 'depth': 'standard'}
+    assert cap['json'] == {'claim': 'hi', 'language': 'auto', 'depth': 'standard'}
 
 
 def test_client_verify_sends_the_requested_depth(monkeypatch):
     cap = _capture_request(monkeypatch)
     _run(client.verify('Bearer k', text='hi', language='', depth='low'))
-    assert cap['json'] == {'claim': 'hi', 'language': '', 'depth': 'low'}
+    assert cap['json'] == {'claim': 'hi', 'language': 'auto', 'depth': 'low'}
 
 
 def test_client_verify_status_targets_status_endpoint(monkeypatch):
@@ -1583,23 +1593,37 @@ def test_protocol_all_tools_registered():
         'check_usage',
         'ask_followup',
         'list_verifications',
+        'check_citations',
+        'get_citation_check',
     }
 
 
-# Read-only tools per their ToolAnnotations — the rest consume quota / mutate state.
-# get_verification_widget is the widget-only twin of get_verification (both read-only).
-# assess_claim and ask_followup are read-only too: the hint means
-# "modifies nothing in the user's environment", which both satisfy; each costs
-# one credit. verify_claim (10 credits) and select_claims (it resumes a verify)
-# stay False, so the calls worth an approval click keep one where a client asks.
-# list_verifications is a free GET of completed results.
-_READ_ONLY_TOOLS = {
-    'get_verification',
-    'get_verification_widget',
-    'check_usage',
-    'assess_claim',
-    'ask_followup',
-    'list_verifications',
+# Every tool's four hints, spelled out: (readOnly, destructive, idempotent, openWorld).
+# A tool is read-only only if it changes nothing in the user's Lenz account, so the
+# lookups below are the only True entries: assess_claim and the deep checks debit
+# credits, and ask_followup appends to the check's follow-up thread and debits a
+# credit. Idempotent means a repeat has no extra effect, with no time limit:
+# assess_claim, verify_claim and the card's start tool are replayed for 24 hours
+# and then start a new charged check, and ask_followup sends no Idempotency-Key, so
+# none of them is idempotent; the select tools are (a resolved selection stays resolved).
+# Open world: the tool reaches the public web or an open-ended model, not just the
+# user's own account data.
+_EXPECTED_HINTS = {
+    'assess_claim': (False, False, False, True),
+    'verify_claim': (False, False, False, True),
+    'select_claims': (False, False, True, True),
+    'get_verification': (True, False, True, False),
+    'get_verification_widget': (True, False, True, False),
+    'start_verification_widget': (False, False, False, True),
+    'select_claims_widget': (False, False, True, True),
+    'check_usage': (True, False, True, False),
+    'list_verifications': (True, False, True, False),
+    'ask_followup': (False, False, False, True),
+    # A citation check debits a credit for every citation it checks and reads the cited
+    # sources on the public web; the same input is replayed for a day and then starts a
+    # new charged check, so it is not idempotent. Reading one back changes nothing.
+    'check_citations': (False, False, False, True),
+    'get_citation_check': (True, False, True, False),
 }
 
 
@@ -1616,23 +1640,21 @@ def test_protocol_every_tool_has_title_and_described_params():
         assert not undocumented, f'{tool.name} has undocumented params: {undocumented}'
 
 
-def test_protocol_read_only_hints_match_tool_semantics():
-    """read-only tools must advertise readOnlyHint=True so clients can surface
-    them as safe; quota-consuming (write) tools must not claim to be read-only.
-    EVERY tool must set destructiveHint explicitly — both the Anthropic AND the
-    OpenAI directories flag a tool with no destructiveHint annotation, so none
-    may ship without it. None of our tools perform destructive updates, so the
-    value is always False.
+def test_protocol_every_tool_declares_all_four_hints_explicitly():
+    """Every tool sets readOnlyHint, destructiveHint, idempotentHint and
+    openWorldHint to the exact value in _EXPECTED_HINTS, never null: the OpenAI
+    directory rejects annotations that are missing or do not match a tool's
+    behaviour. A new tool fails here until its four hints are written down.
 
-    The names below are 2.x's python-side ones; `readOnlyHint` / `destructiveHint`
-    are still what goes on the wire (they are the fields' aliases, and still the
-    constructor kwargs), so the directories see exactly what this asserts."""
-    for tool in _run(server.mcp.list_tools()):
-        read_only = tool.name in _READ_ONLY_TOOLS
-        hint = bool(getattr(tool.annotations, 'read_only_hint', False))
-        assert hint is read_only, f'{tool.name} has wrong readOnlyHint ({hint})'
-        destructive = getattr(tool.annotations, 'destructive_hint', None)
-        assert destructive is False, f'{tool.name} must set destructiveHint=False explicitly, got {destructive}'
+    The names below are 2.x's python-side ones; the camelCase fields are what
+    goes on the wire (their aliases, and still the constructor kwargs)."""
+    tools = {tool.name: tool for tool in _run(server.mcp.list_tools())}
+    assert set(tools) == set(_EXPECTED_HINTS), 'a tool was added or removed: list its four hints in _EXPECTED_HINTS'
+    for name, tool in tools.items():
+        ann = tool.annotations
+        got = (ann.read_only_hint, ann.destructive_hint, ann.idempotent_hint, ann.open_world_hint)
+        assert all(isinstance(v, bool) for v in got), f'{name} must set all four hints explicitly, got {got}'
+        assert got == _EXPECTED_HINTS[name], f'{name}: (readOnly, destructive, idempotent, openWorld) is {got}'
 
 
 def test_protocol_verify_depth_is_a_closed_enum():
@@ -1661,7 +1683,9 @@ def test_protocol_language_is_a_closed_enum_on_every_tool_that_takes_it():
 
     tools = {t.name: t for t in _run(server.mcp.list_tools())}
     takes_language = {n for n, t in tools.items() if 'language' in (t.input_schema or {}).get('properties', {})}
-    assert takes_language == {'assess_claim', 'verify_claim', 'ask_followup'}
+    # `start_verification_widget` is the card's own tool (hidden from the model):
+    # it passes the quick check's language code back, so it takes the same enum.
+    assert takes_language == {'assess_claim', 'verify_claim', 'ask_followup', 'start_verification_widget'}
 
     for name in sorted(takes_language):
         schema = tools[name].input_schema

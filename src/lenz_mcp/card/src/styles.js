@@ -201,6 +201,10 @@ a.lz-link { display: inline-block; }
 
 .lz-source-meta { margin-top: 2px; }
 .lz-quote { margin-top: 6px; font-size: 15px; line-height: 1.6; text-indent: -0.4em; }
+/* A non-English quote's language, before it: the quote no longer starts the
+   line, so its opening mark does not hang. */
+.lz-quote-foreign { text-indent: 0; }
+.lz-quote-lang { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lz-meta); margin-right: 6px; }
 .lz-rows > li { display: grid; grid-template-columns: 2ch minmax(0, 1fr); gap: 0 10px; }
 /* A row is one line: the claim, and its verdict in a right-hand column so the
    verdicts scan down one edge. The meta (not sure, reviewers split, sources) sits

@@ -195,6 +195,41 @@ KNOWN_DIFFERENCES: dict[str, dict[str, Any]] = {
 }
 
 
+# Deliberate behaviour changes made after the oracle was recorded. The oracle
+# stays frozen; each change is applied to it here, by name, so the shape tests
+# keep checking everything else byte for byte.
+#
+# `dissent` is deprecated (the API always sends null): the confidence note no
+# longer describes it.
+_OLD_ESCALATION_CLAUSE = 'on medium confidence or a dissent offer one;'
+_NEW_ESCALATION_CLAUSE = 'on medium confidence offer one;'
+_OLD_NOTES_NOTE = (
+    " `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when "
+    "set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked "
+    'sources. For sourced evidence, offer the user a deep check; if they agree, call `verify_claim`.'
+)
+
+
+def _since_the_oracle(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    out = dict(value)
+    note = out.get('confidence_note')
+    if isinstance(note, str):
+        note = note.replace(_OLD_ESCALATION_CLAUSE, _NEW_ESCALATION_CLAUSE)
+        out['confidence_note'] = note.replace(_OLD_NOTES_NOTE, server.ASSESS_NOTES_NOTE)
+    return out
+
+
+def test_the_oracle_changes_still_apply():
+    """Each deliberate change names text the oracle really holds, and the new
+    text is what the server says now."""
+    raw = ORACLE_PATH.read_text(encoding='utf-8')
+    assert _OLD_ESCALATION_CLAUSE in raw
+    assert json.dumps(_OLD_NOTES_NOTE, ensure_ascii=False)[1:-1] in raw
+    assert _NEW_ESCALATION_CLAUSE in server.ASSESS_ESCALATION_NOTE
+
+
 def _output(scenario: str, shape: str) -> Any:
     fixture, runner = SCENARIOS[scenario]
     with pytest.MonkeyPatch.context() as m:
@@ -242,13 +277,13 @@ def test_every_scenario_has_an_oracle_entry_and_both_shapes():
 @skip_while_writing
 @pytest.mark.parametrize('scenario', sorted(SCENARIOS))
 def test_the_older_body_gives_what_it_gave_before(scenario):
-    assert _serialized(_output(scenario, 'legacy')) == _serialized(_oracle()[scenario])
+    assert _serialized(_output(scenario, 'legacy')) == _serialized(_since_the_oracle(_oracle()[scenario]))
 
 
 @skip_while_writing
 @pytest.mark.parametrize('scenario', sorted(SCENARIOS))
 def test_the_newer_body_gives_the_same(scenario):
-    expected = _oracle()[scenario]
+    expected = _since_the_oracle(_oracle()[scenario])
     if scenario in KNOWN_DIFFERENCES:
         expected = {**expected, **KNOWN_DIFFERENCES[scenario]}
     assert _serialized(_output(scenario, 'canonical')) == _serialized(expected)

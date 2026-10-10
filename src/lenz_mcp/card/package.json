@@ -4,7 +4,7 @@
   "private": true,
   "description": "The Lenz verdict card (MCP Apps). Preact, built to a committed dist/ served by src/lenz_mcp/mcp_card.py.",
   "type": "module",
-  "cardVersion": 7,
+  "cardVersion": 8,
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test \"src/**/*.test.js\"",
@@ -18,7 +18,7 @@
     "preact": "10.29.8"
   },
   "devDependencies": {
-    "axe-core": "4.13.0",
+    "axe-core": "4.14.0",
     "esbuild": "0.28.2",
     "playwright-core": "1.63.0"
   }

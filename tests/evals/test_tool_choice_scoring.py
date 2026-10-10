@@ -604,6 +604,7 @@ def _ideal(manifest, history, prompt, *, model, with_instructions, distractor=Fa
             'question': 'Where did the horned helmet image come from?',
         },
         'escalate-on-yes': {'claim': '90% of startups fail in their first year.'},
+        'citations-named-sources-draft': {'text': cases._CITED_DRAFT},
     }
     if case.id == 'submission-5-housekeeping':
         return _turn(('list_verifications', {}), ('check_usage', {}))

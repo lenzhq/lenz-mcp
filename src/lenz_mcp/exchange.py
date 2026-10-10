@@ -90,6 +90,11 @@ TOOL_SCOPES: dict[str, frozenset[str]] = {
     'check_usage': frozenset({'usage:read'}),
     'list_verifications': frozenset({'history:read'}),
     'ask_followup': frozenset({'ask'}),
+    # A citation check is submitted under `verify` and read back under it too;
+    # the API answers the status of a check this grant did not itself submit
+    # only under `history:read`, so both tools ask for both.
+    'check_citations': frozenset({'verify', 'history:read'}),
+    'get_citation_check': frozenset({'verify', 'history:read'}),
     # The card-only tools ask for what their model-visible twins ask for, plus
     # what the card's own paths need: a retry reads the status of the check it
     # retries, which a later sign-in makes somebody else's run to read.
@@ -233,7 +238,11 @@ async def _post(data: dict[str, str]) -> httpx.Response:
                 config.TOKEN_ENDPOINT,
                 data=data,
                 auth=httpx.BasicAuth(client_id, secret),
-                headers={'User-Agent': config.USER_AGENT, 'Accept': 'application/json'},
+                headers={
+                    'User-Agent': config.USER_AGENT,
+                    'Accept': 'application/json',
+                    config.API_VERSION_HEADER: config.API_VERSION,
+                },
             )
         except (httpx.HTTPError, httpx.InvalidURL, UnicodeError) as exc:
             last = exc

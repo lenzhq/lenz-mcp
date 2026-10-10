@@ -25,10 +25,11 @@ const POLL_TOOL = 'get_verification_widget';
 // A failed submission that is worth pressing "Try again" for.
 const RETRYABLE_START_STATUSES = new Set(['service_unavailable', 'rate_limited', 'error', 'in_progress']);
 
-// `claim` is what a card-started check submits; a model-started one adopts a
+// `claim` is what a card-started check submits (with the `language` code of the
+// quick check it follows, when there is one); a model-started one adopts a
 // task_id instead and never submits. The depth is the server's one constant
 // (src/lenz_mcp/config.py CARD_VERIFY_DEPTH), so changing it needs no card release.
-export function createDeepCheck({ claim, host, store, clock, onChange = () => {} }) {
+export function createDeepCheck({ claim, language = '', host, store, clock, onChange = () => {} }) {
   let state = { kind: 'idle' };
   let disposed = false;
   let timer = null;
@@ -145,6 +146,9 @@ export function createDeepCheck({ claim, host, store, clock, onChange = () => {}
     if (disposed || starting || !(state.kind === 'idle' || retryable)) return;
     starting = true;
     const args = { claim };
+    // The language the quick check was answered in, so this check answers in it
+    // too. Absent when the quick check named none.
+    if (language) args.language = language;
     // The failed run this press retries. Kept through a start whose answer is
     // lost, so the next press sends the same retry_of, reaches the same
     // idempotency key, and joins a retry that may already be running.

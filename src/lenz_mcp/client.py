@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextvars
 import hashlib
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -491,6 +492,7 @@ def _headers(authorization: str | None, idempotency_key: str | None = None) -> d
     headers = {
         'User-Agent': _user_agent(),
         'Accept': 'application/json',
+        config.API_VERSION_HEADER: config.API_VERSION,
     }
     # Only the write tools (assess/verify/select) pass a content-derived key;
     # GETs (status/usage) are idempotent by nature and need none.
@@ -591,26 +593,51 @@ async def _request(
     )
 
 
+def effective_language(language: str) -> str:
+    """The language a request carries: the caller's code, else ``auto``.
+
+    Applied where a request is built, so the body and the idempotency key
+    describe the same thing: ``auto``, an explicit code and nothing are three
+    different requests with three keys.
+    """
+    return language or 'auto'
+
+
 async def assess(
-    authorization: Authorization, *, text: str = '', claims: list[str] | None = None, language: str
+    authorization: Authorization,
+    *,
+    text: str = '',
+    claims: list[str] | None = None,
+    language: str,
+    suggest_rewrite: bool = False,
 ) -> ApiResponse:
     # One text (`claim`, expanded server-side) or a list (`claims`, one row per
     # item). The idempotency key covers whichever was sent — the API rejects a
     # key reused with a different body — joined on a separator no claim
     # contains, so ["a b"] and ["a", "b"] never collide.
+    #
+    # `suggest_rewrite` asks for the claim rewritten with its wrong part
+    # corrected, on the rows that have one. It is part of the body, so it is
+    # part of the key: a call that does not send it keeps the key it always had
+    # (a repeat inside the replay window still replays), and one that does gets
+    # its own, since the API refuses a key reused with a different body.
+    language = effective_language(language)
     if claims:
         body: dict = {'claims': list(claims), 'language': language}
-        key = _idem_key('assess', 'claims', '\x1f'.join(claims), language)
+        parts: tuple[str, ...] = ('assess', 'claims', '\x1f'.join(claims), language)
     else:
         body = {'claim': text, 'language': language}
-        key = _idem_key('assess', text, language)
+        parts = ('assess', text, language)
+    if suggest_rewrite:
+        body['suggest_rewrite'] = True
+        parts = (*parts, 'suggest_rewrite')
     return await _request(
         'POST',
         '/assess',
         authorization,
         json=body,
         timeout=config.assess_timeout(client_identity()),
-        idempotency_key=key,
+        idempotency_key=_idem_key(*parts),
     )
 
 
@@ -623,6 +650,7 @@ async def verify(
     # `invalid_request` instead of running. The default depth keeps the
     # pre-depth key shape, so a repeat of a claim submitted before this
     # parameter existed still replays (24h) instead of being charged again.
+    language = effective_language(language)
     key_parts = ('verify', text, language) if depth == 'standard' else ('verify', text, language, depth)
     # A retry of a FAILED run needs its own key: the API replays a key's first
     # response for 24 h, failed runs included, so the same key would hand back the
@@ -683,6 +711,7 @@ async def ask(authorization: Authorization, *, verification_id: str, message: st
     # a thing only a caller that owns the retry can tell apart from a re-ask.
     # Longer timeout — /ask is synchronous and can block on source summaries
     # plus the LLM reply.
+    language = effective_language(language)
     return await _request(
         'POST',
         f'/ask/{verification_id}',
@@ -690,6 +719,52 @@ async def ask(authorization: Authorization, *, verification_id: str, message: st
         json={'message': message, 'language': language},
         timeout=config.ASK_TIMEOUT,
     )
+
+
+def _canonical_json(value: Any) -> str:
+    """The same JSON for the same content, whatever the key order.
+
+    Sorted keys, no spaces, characters kept as written, and any unsendable
+    surrogate dropped first, so the text hashed is the text sent.
+    """
+    return json.dumps(_utf8_safe(value), sort_keys=True, ensure_ascii=False, separators=(',', ':'))
+
+
+async def citecheck(
+    authorization: Authorization,
+    *,
+    text: str | None = None,
+    pairs: list[dict[str, Any]] | None = None,
+    max_citations: int | None = None,
+) -> ApiResponse:
+    """Start a citation check (POST /citecheck): a draft's text, or statement-source pairs.
+
+    Exactly the fields given are sent, and the idempotency key is derived from
+    that complete body plus the operation name. So an input mode, a pair
+    boundary, a quote, a url against a doi, and an omitted field against an
+    explicit one are all different requests with different keys, while the same
+    request sent twice joins the first (the API replays a key's first answer for
+    a day, a failed check included).
+    """
+    body: dict[str, Any] = {}
+    if text is not None:
+        body['text'] = text
+    if pairs is not None:
+        body['pairs'] = pairs
+    if max_citations is not None:
+        body['max_citations'] = max_citations
+    return await _request(
+        'POST',
+        '/citecheck',
+        authorization,
+        json=body,
+        idempotency_key=_idem_key('citecheck', _canonical_json(body)),
+    )
+
+
+async def citecheck_status(authorization: Authorization, *, citecheck_id: str) -> ApiResponse:
+    """A citation check as it stands (GET /citechecks/{id}). Never cached by the API."""
+    return await _request('GET', f'/citechecks/{citecheck_id}', authorization)
 
 
 async def me_usage(authorization: Authorization) -> ApiResponse:

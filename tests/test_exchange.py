@@ -48,14 +48,17 @@ class FakeLenz:
     token_error_after: int = 0  # how many exchanges succeed before token_error applies
     token_raises: bool = False
     run_done_at: float = 1000.0 + 125  # when the deep check completes
+    citecheck_done_at: float = 0.0  # when the citation check completes (0: at once)
     reject_tokens: set[str] = field(default_factory=set)  # issued tokens the API now refuses
     reject_all_tokens: bool = False
     revoke_at: float | None = None  # from this time, every token issued so far is refused
     exchanges: list[dict] = field(default_factory=list)
     api_calls: list[tuple[str, str, str]] = field(default_factory=list)  # (method, path, authorization)
+    versions: list[str] = field(default_factory=list)  # X-Lenz-API-Version of every request, exchange or API
     issued: dict[str, tuple[float, frozenset[str]]] = field(default_factory=dict)
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        self.versions.append(request.headers.get('x-lenz-api-version', ''))
         if str(request.url) == TOKEN_ENDPOINT:
             return self._token(request)
         return self._api(request)
@@ -124,6 +127,26 @@ class FakeLenz:
         if request.method == 'POST' and path == '/verify/task-0/select':
             return httpx.Response(
                 200, json={'batch_id': 'batch-1', 'items': [{'task_id': 'task-1', 'claim_text': 'the claim'}]}
+            )
+        if request.method == 'POST' and path == '/citecheck':
+            return httpx.Response(202, json={'citecheck_id': 'ab12cd34', 'status': 'queued'})
+        if path == '/citechecks/ab12cd34':
+            if self.now < self.citecheck_done_at:
+                return httpx.Response(
+                    200,
+                    json={'citecheck_id': 'ab12cd34', 'status': 'checking', 'poll_after_seconds': 10},
+                )
+            return httpx.Response(
+                200,
+                json={
+                    'citecheck_id': 'ab12cd34',
+                    'status': 'completed',
+                    'outcome': 'clean',
+                    'summary': {},
+                    'credits': {'charged': 0},
+                    'citations': [],
+                    'citation_issues': [],
+                },
             )
         if path == '/me/usage':
             return httpx.Response(200, json={'plan': 'free', 'credits': {'remaining': 100}})
@@ -333,6 +356,14 @@ def test_the_exchange_request_is_the_rfc_8693_shape(lenz):
     assert sent['authorization'] == f'Basic {expected}'
 
 
+def test_the_exchange_and_the_api_call_it_unlocks_name_the_api_version(lenz):
+    _run(server.check_usage(_ctx()))
+
+    assert lenz.exchange_count() == 1 and lenz.api_calls
+    assert lenz.versions == [config.API_VERSION] * len(lenz.versions)
+    assert len(lenz.versions) == lenz.exchange_count() + len(lenz.api_calls)
+
+
 # ── per-tool scopes ──────────────────────────────────────────────────
 
 
@@ -361,6 +392,8 @@ def test_the_scope_table():
         'check_usage': {'usage:read'},
         'list_verifications': {'history:read'},
         'ask_followup': {'ask'},
+        'check_citations': {'verify', 'history:read'},
+        'get_citation_check': {'verify', 'history:read'},
         'start_verification_widget': {'verify', 'history:read'},
         'select_claims_widget': {'verify'},
         'get_verification_widget': {'verify', 'history:read'},
@@ -376,11 +409,32 @@ def test_the_scope_table():
         (lambda: server.check_usage(_ctx()), 'usage:read'),
         (lambda: server.list_verifications(_ctx()), 'history:read'),
         (lambda: server.ask_followup('pub12345', 'why?', _ctx()), 'ask'),
+        (lambda: server.check_citations('A draft [a](https://example.gov/a).', _ctx()), 'history:read verify'),
+        (lambda: server.get_citation_check('ab12cd34', _ctx()), 'history:read verify'),
     ],
 )
 def test_each_tool_exchanges_for_its_own_scopes(lenz, call, scope):
     _run(call())
     assert lenz.exchanges[0]['form']['scope'] == scope
+
+
+def test_a_citation_check_exchanges_once_across_its_polls(lenz):
+    lenz.citecheck_done_at = lenz.now + 35
+    out = _run(server.check_citations('A draft [a](https://example.gov/a).', _ctx()))
+    assert out['status'] == 'completed'
+    assert lenz.exchange_count() == 1
+    assert [path for _m, path, _a in lenz.api_calls].count('/citechecks/ab12cd34') == 5
+
+
+def test_a_credential_lost_while_a_citation_check_runs_keeps_its_id(lenz):
+    lenz.citecheck_done_at = lenz.now + 35
+    lenz.revoke_at = lenz.now + 5  # the first poll runs; the next finds the token refused
+    lenz.token_error = (400, {'error': 'invalid_grant'}, {})
+    lenz.token_error_after = 1
+    out = _run(server.check_citations('A draft [a](https://example.gov/a).', _ctx()))
+    assert out['citecheck_id'] == 'ab12cd34'
+    assert out['status'] == 'auth_required'
+    assert server.CITECHECK_CREDENTIAL_LOST in out['message']
 
 
 def test_a_call_outside_any_tool_asks_for_no_scope_and_fails_closed(lenz):

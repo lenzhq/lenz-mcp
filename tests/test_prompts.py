@@ -125,6 +125,8 @@ def test_prompts_leave_the_tools_and_instructions_unchanged():
         'check_usage',
         'ask_followup',
         'list_verifications',
+        'check_citations',
+        'get_citation_check',
     }
     assert 'prompt' not in server.mcp.instructions.lower()
 

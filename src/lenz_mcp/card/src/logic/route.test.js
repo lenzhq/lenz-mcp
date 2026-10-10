@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { buttonStrength, changedFrom, deepResult, modelRanIt, routePayload, routeQuick, tally } from './route.js';
 import * as copy from '../copy.js';
-import { confidenceBucket, domainOf, formatElapsed, isWebUrl, stageLabel, text, verdictKey } from './format.js';
+import { confidenceBucket, domainOf, formatElapsed, isWebUrl, languageCode, languageName, stageLabel, text, verdictKey } from './format.js';
 
 test('a single quick-check row', () => {
   const out = routeQuick({
@@ -30,6 +30,7 @@ test('a single quick-check row', () => {
     recommend: true,
     error: '',
     hint: '',
+    language: '',
   });
 });
 
@@ -246,4 +247,46 @@ test('a deep result carries the suggested rewrite as text, or nothing', () => {
   for (const value of [null, undefined, '', 7, { claim: 'x' }, ['x']]) {
     assert.equal(deepResult({ suggested_rewrite: value }).suggestedRewrite, '');
   }
+});
+
+test('a quick row carries the language code the server resolved, and only a short code', () => {
+  const rowOf = (language) =>
+    routeQuick({ status: 'ok', claims: [{ claim: 'Eine Aussage.', verdict: 'True', confidence: 'high', ...(language === undefined ? {} : { language }) }] }).row;
+  assert.equal(rowOf('de').language, 'de');
+  assert.equal(rowOf(undefined).language, '');
+  for (const bad of ['', 'DE', 'deu', 'd', 'de"; x', 42, null, {}, ['de']]) assert.equal(rowOf(bad).language, '', String(bad));
+});
+
+test('a source quote keeps its language only when it is a code and there is a quote', () => {
+  const sources = [
+    { url: 'https://a.example', quote: 'Обробка є законною.', quote_language: 'uk' },
+    { url: 'https://b.example', quote: 'In English.', quote_language: null },
+    { url: 'https://c.example', quote: 'In English.' },
+    { url: 'https://d.example', quote: 'Q', quote_language: '"><img src=x onerror=alert(1)>' },
+    { url: 'https://e.example', quote: 'Q', quote_language: ' PT-BR ' },
+    { url: 'https://f.example', quote_language: 'uk' },
+    { url: 'https://g.example', quote: 'Q', quote_language: { toString: null } },
+  ];
+  const out = deepResult({ sources }).sources.map((s) => s.quoteLanguage);
+  assert.deepEqual(out, ['uk', '', '', '', 'pt-br', '', '']);
+});
+
+test('a language code is code-shaped or nothing', () => {
+  for (const ok of ['uk', 'de', 'fil', 'pt-br', 'zh-hant', 'sr-latn-rs']) assert.equal(languageCode(ok), ok);
+  for (const bad of [null, undefined, 3, '', 'u', 'ukrainian', 'uk_UA', 'uk-', 'uk-a', 'en-abcdefghi', 'uk"', ['uk']]) {
+    assert.equal(languageCode(bad), '', String(bad));
+  }
+});
+
+test('a language is named in English, or shown as its code in capitals', () => {
+  assert.equal(languageName('uk'), 'Ukrainian');
+  assert.equal(languageName('de'), 'German');
+  assert.equal(languageName('pt-br'), 'Brazilian Portuguese');
+  // A code the runtime has no name for.
+  assert.equal(languageName('qaa'), 'QAA');
+  // No Intl.DisplayNames at all, one that throws, one that echoes the code.
+  assert.equal(languageName('uk', null), 'UK');
+  assert.equal(languageName('uk', class { constructor() { throw new RangeError('no'); } }), 'UK');
+  assert.equal(languageName('uk', class { of(code) { return code; } }), 'UK');
+  assert.equal(languageName('uk', class { of() { return undefined; } }), 'UK');
 });
