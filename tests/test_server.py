@@ -219,7 +219,7 @@ def test_assess_note_says_what_the_notes_are_in_its_own_sentence(monkeypatch):
     assert 'dissent' not in (server.assess_claim.__doc__ or '').lower()
     doc = ' '.join((server.assess_claim.__doc__ or '').split())
     note_sentences = [s for s in re.split(r'(?<=[.!?:])\s+', doc) if 'rationale' in s or 'dissent' in s]
-    assert note_sentences == ["A row may carry ``rationale``, a reviewer's reasoning for the verdict:"]
+    assert note_sentences == ["A row may carry `rationale`, a reviewer's reasoning for the verdict:"]
 
 
 def test_assess_fresh_claim_has_no_link(monkeypatch):
