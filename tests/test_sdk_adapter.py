@@ -778,8 +778,7 @@ def test_the_surrogate_key_is_the_one_an_earlier_release_sent():
 def test_an_empty_selection_is_refused_without_a_request(wire, caplog):
     resp = _run(client.select(AUTH, task_id='t' * 32, texts=[]))
     assert resp.status == 422 and not resp.ok
-    # The SDK's sentence for this names its own parameters: not passed on.
-    assert resp.data == {'code': 'empty_list', 'detail': 'The request was invalid.'}
+    assert resp.data == {'code': 'empty_list', 'detail': 'claims is required.'}
     assert wire.requests == []
     assert 'mcp_api_request_refused op=select code=empty_list param=texts' in caplog.text
 
@@ -819,21 +818,21 @@ def test_an_empty_id_is_refused_without_a_request(wire):
 # ── blank input the SDK refuses before sending ──────────────────────
 
 
-def test_a_blank_selection_item_is_left_out_as_the_api_does(wire):
-    """The API has always dropped a blank item from a selection and run the
-    rest; the SDK refuses the whole list. The connector drops it first, so a
-    selection with one stray blank still starts the chosen checks. The key is
-    the one this call always had."""
+def test_a_blank_selection_item_is_sent_as_given(wire):
+    """A selection with a stray blank beside real claims goes out as given, as
+    the old client sent it; the API leaves the blank out and runs the rest. The
+    key is the one this call always had."""
     resp = _run(client.select(AUTH, task_id='t' * 32, texts=['First.', '  ']))
     assert resp.ok
-    assert wire.body() == {'texts': ['First.']}
+    assert wire.body() == {'texts': ['First.', '  ']}
     assert wire.last.headers['idempotency-key'] == client._idem_key('select', 't' * 32, 'First.', '  ')
 
 
 def test_a_selection_of_only_blanks_is_refused_without_a_request(wire):
     resp = _run(client.select(AUTH, task_id='t' * 32, texts=[' ', '']))
     assert resp.status == 422
-    assert resp.data == {'code': 'empty_list', 'detail': 'The request was invalid.'}
+    # The API's own sentence for it.
+    assert resp.data == {'code': 'empty_list', 'detail': 'claims is required.'}
     assert wire.requests == []
 
 
@@ -841,7 +840,7 @@ def test_the_select_tool_still_starts_the_chosen_check_beside_a_blank(wire):
     wire.respond(api_wire.answer(202, {'items': [{'task_id': 'b' * 32, 'claim': 'First.'}]}))
     out = _run(server.select_claims('t' * 32, ['First.', ' '], _ctx()))
     assert out['status'] != 'invalid_request'
-    assert [wire.body(r) for r in wire.requests if r.url.path.endswith('/select')] == [{'texts': ['First.']}]
+    assert [wire.body(r) for r in wire.requests if r.url.path.endswith('/select')] == [{'texts': ['First.', ' ']}]
 
 
 def test_a_blank_follow_up_question_says_what_the_api_said(wire):

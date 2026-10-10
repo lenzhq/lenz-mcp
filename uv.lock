@@ -419,12 +419,16 @@ wheels = [
 
 [[package]]
 name = "lenz-io"
-version = "3.1.1.dev6+g712ad0e90"
-source = { git = "https://github.com/lenzhq/lenz-io-python?rev=712ad0e90c65de719964fb32b97b08a5822c3182#712ad0e90c65de719964fb32b97b08a5822c3182" }
+version = "3.2.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
     { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b7/1f/f7abdf324946e46bc9599a73758d41645c670ba1af92e1f8072e905ceebb/lenz_io-3.2.0.tar.gz", hash = "sha256:e794d309f4df1cedbe59ac835df047d3f074661e970b727b8892c0ddd4874b10", size = 296408, upload-time = "2026-10-10T16:05:45.945Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c3/60/78225bd7f8a9dcfabb61db2c36abe46b619e077d2d0daea4579ff3319820/lenz_io-3.2.0-py3-none-any.whl", hash = "sha256:33fa427f89342e705be22b7a842eabf703369a738e69c7a06076e0ac20b8f692", size = 229853, upload-time = "2026-10-10T16:05:44.262Z" },
 ]
 
 [[package]]
@@ -458,7 +462,7 @@ eval = [
 [package.metadata]
 requires-dist = [
     { name = "httpx" },
-    { name = "lenz-io", git = "https://github.com/lenzhq/lenz-io-python?rev=712ad0e90c65de719964fb32b97b08a5822c3182" },
+    { name = "lenz-io", specifier = ">=3.2.0,<4" },
     { name = "mcp", specifier = ">=2.2.0,<2.4" },
     { name = "mcp-types" },
     { name = "pydantic" },

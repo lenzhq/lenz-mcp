@@ -661,13 +661,11 @@ def _lowered(headers: Mapping[str, str]) -> dict[str, str]:
 
 
 #: The refusals the SDK words as the API words its own 422 for the same input
-#: ("claim is required.", "claims[1] is blank.", "Message cannot be empty.",
-#: "payload: Value error, send exactly one of text and pairs"), so they read as
-#: the API's answer always did. Not `empty_list`: the only one the connector can
-#: meet is an empty selection, which the SDK words "texts is required." where
-#: the API says "claims is required.". Every other refusal's sentence names SDK
-#: parameters and is not passed on.
-_API_SENTENCE_CODES = frozenset({'blank_input', 'blank_item'})
+#: ("claim is required.", "claims[1] is blank.", "claims is required.",
+#: "Message cannot be empty.", "payload: Value error, send exactly one of text
+#: and pairs"), so they read as the API's answer always did. Every other
+#: refusal's sentence names SDK parameters and is not passed on.
+_API_SENTENCE_CODES = frozenset({'blank_input', 'blank_item', 'empty_list'})
 
 
 def _refusal_detail(exc: LenzUsageError) -> str:
@@ -783,13 +781,10 @@ async def verify_status(authorization: Authorization, *, task_id: str) -> ApiRes
     async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
         return await sdk.get_status(task_id, **options)
 
-    resp = await _call('verify_status', '/verify/status/{task_id}', authorization, invoke)
-    if resp.ok and resp.data.get('status') == 'completed' and not isinstance(resp.data.get('result'), dict):
-        # Completed with no result to show: an answer that cannot be read, not
-        # a verdict with every field empty. (The SDK's own waits treat it as a
-        # failed run; its `get_status` hands it back as it came.)
-        return _invalid_response('verify_status', resp.status)
-    return resp
+    # A completed status with no result object is an answer that cannot be
+    # read (the SDK raises LenzInvalidResponseError), not a verdict with every
+    # field empty.
+    return await _call('verify_status', '/verify/status/{task_id}', authorization, invoke)
 
 
 async def verification_detail(authorization: Authorization, *, verification_id: str) -> ApiResponse:
@@ -822,11 +817,9 @@ async def list_verifications(authorization: Authorization, *, page_size: int) ->
 
 
 async def select(authorization: Authorization, *, task_id: str, texts: list[str]) -> ApiResponse:
+    # A blank item beside real claims is sent as given; the API leaves it out.
     key = _idem_key('select', task_id, *texts)
-    # A blank item is left out, as the API has always done with one: the SDK
-    # refuses a list holding one, which would refuse the claims chosen with it.
-    # The key is the one this call always had.
-    chosen = [t for t in (_utf8_safe(t) for t in texts) if t.strip()]
+    chosen = [_utf8_safe(t) for t in texts]
 
     async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
         return await sdk.select(task_id, texts=chosen, idempotency_key=key, **options)
