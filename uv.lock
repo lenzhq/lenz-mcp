@@ -419,8 +419,8 @@ wheels = [
 
 [[package]]
 name = "lenz-io"
-version = "3.1.1.dev5+ga34801d16"
-source = { git = "https://github.com/lenzhq/lenz-io-python?rev=a34801d1639689279e23f9bcab055c946ef71f4e#a34801d1639689279e23f9bcab055c946ef71f4e" }
+version = "3.1.1.dev6+g712ad0e90"
+source = { git = "https://github.com/lenzhq/lenz-io-python?rev=712ad0e90c65de719964fb32b97b08a5822c3182#712ad0e90c65de719964fb32b97b08a5822c3182" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
@@ -458,7 +458,7 @@ eval = [
 [package.metadata]
 requires-dist = [
     { name = "httpx" },
-    { name = "lenz-io", git = "https://github.com/lenzhq/lenz-io-python?rev=a34801d1639689279e23f9bcab055c946ef71f4e" },
+    { name = "lenz-io", git = "https://github.com/lenzhq/lenz-io-python?rev=712ad0e90c65de719964fb32b97b08a5822c3182" },
     { name = "mcp", specifier = ">=2.2.0,<2.4" },
     { name = "mcp-types" },
     { name = "pydantic" },

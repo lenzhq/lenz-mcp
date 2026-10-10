@@ -12,7 +12,7 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -24,9 +24,10 @@ from lenz_io import (
     LenzError,
     LenzInvalidKeyError,
     LenzInvalidResponseError,
+    LenzMissingKeyError,
     LenzUsageError,
+    Result,
 )
-from pydantic import BaseModel
 
 from lenz_mcp import config
 
@@ -580,7 +581,7 @@ def _from_error(exc: LenzError) -> ApiResponse:
     )
 
 
-Invoke = Callable[[AsyncLenz, dict[str, Any]], Awaitable[BaseModel]]
+Invoke = Callable[[AsyncLenz, dict[str, Any]], Awaitable[Result]]
 
 
 async def _attempt(
@@ -628,10 +629,12 @@ async def _attempt(
         # could not send (a header it cannot encode).
         logger.warning('mcp_api_transport_error op=%s path=%s err=%s', op, path, type(exc.__cause__ or exc).__name__)
         return ApiResponse(status=0, data={})
-    except LenzInvalidKeyError:
-        # A token the SDK will not send (a character a header cannot carry):
-        # refused before any request, like a missing credential.
-        # `server.requires_auth` screens these first; this is the backstop.
+    except (LenzInvalidKeyError, LenzMissingKeyError):
+        # A token the SDK will not send (a character a header cannot carry), or
+        # none at all: refused before any request, like a missing credential.
+        # Neither is expected: `server.requires_auth` screens the first, and an
+        # SDK is only built without a key for the anonymous read, which never
+        # asks for one. Two sibling classes, both before `LenzError`.
         return ApiResponse(status=401, data={})
     except LenzError as exc:
         return _from_error(exc)
@@ -639,37 +642,36 @@ async def _attempt(
         # The SDK refused the arguments before sending. The tools screen these
         # first, so this is a backstop.
         logger.warning('mcp_api_request_refused op=%s code=%s param=%s', op, exc.code, exc.param)
-        return ApiResponse(status=422, data={'code': exc.code, 'detail': _refusal_detail(op, exc)})
+        return ApiResponse(status=422, data={'code': exc.code, 'detail': _refusal_detail(exc)})
 
     # `raw` is the body exactly as the API sent it (a fresh copy), with nothing
     # the model would add; `http_status` and `headers` are the response's.
-    body = getattr(model, 'raw', None)
-    status = getattr(model, 'http_status', None)
-    if not isinstance(body, dict) or not isinstance(status, int):
-        return _invalid_response(op, 'no body')
     # A citation check's start answered 409 naming the check a resend already
     # started (`settled_by_conflict`): it stays the 409 it was, so the tool
     # attaches to that check by id, exactly as it always has.
-    return ApiResponse(status=status, data=body, headers=_lowered(getattr(model, 'headers', None)))
+    body = model.raw
+    if body is None:
+        return _invalid_response(op, 'no body')
+    return ApiResponse(status=model.http_status, data=body, headers=_lowered(model.headers))
 
 
-def _lowered(headers: Any) -> dict[str, str]:
+def _lowered(headers: Mapping[str, str]) -> dict[str, str]:
     """Response headers with lowercased names, as the tools read them."""
-    return {name.lower(): value for name, value in headers.items()} if headers else {}
+    return {name.lower(): value for name, value in headers.items()}
 
 
-#: The refusals whose SDK sentence is the API's own for the same input
-#: ("claim is required.", "claims[1] is blank.", "claims is required."), so it
-#: reads as the API's 422 always did. Only for the endpoints where the two
-#: were checked to agree; anywhere else the sentence names SDK parameters.
-_API_SENTENCE_CODES = frozenset({'blank_input', 'blank_item', 'empty_list'})
-_API_SENTENCE_OPS = frozenset({'assess', 'verify'})
+#: The refusals the SDK words as the API words its own 422 for the same input
+#: ("claim is required.", "claims[1] is blank.", "Message cannot be empty.",
+#: "payload: Value error, send exactly one of text and pairs"), so they read as
+#: the API's answer always did. Not `empty_list`: the only one the connector can
+#: meet is an empty selection, which the SDK words "texts is required." where
+#: the API says "claims is required.". Every other refusal's sentence names SDK
+#: parameters and is not passed on.
+_API_SENTENCE_CODES = frozenset({'blank_input', 'blank_item'})
 
 
-def _refusal_detail(op: str, exc: LenzUsageError) -> str:
-    if exc.code in _API_SENTENCE_CODES and op in _API_SENTENCE_OPS:
-        return str(exc)
-    return 'The request was invalid.'
+def _refusal_detail(exc: LenzUsageError) -> str:
+    return str(exc) if exc.code in _API_SENTENCE_CODES else 'The request was invalid.'
 
 
 async def _call(
@@ -739,7 +741,7 @@ async def assess(
     items = [_utf8_safe(c) for c in claims] if claims else None
     single = _utf8_safe(text)
 
-    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> BaseModel:
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
         if items is not None:
             return await sdk.assess(
                 claims=items, language=language, suggest_rewrite=suggest_rewrite, idempotency_key=key, **options
@@ -771,17 +773,23 @@ async def verify(
     key = _idem_key(*key_parts)
     claim = _utf8_safe(text)
 
-    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> BaseModel:
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
         return await sdk.verify(claim=claim, language=language, depth=depth, idempotency_key=key, **options)
 
     return await _call('verify', '/verify', authorization, invoke)
 
 
 async def verify_status(authorization: Authorization, *, task_id: str) -> ApiResponse:
-    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> BaseModel:
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
         return await sdk.get_status(task_id, **options)
 
-    return await _call('verify_status', '/verify/status/{task_id}', authorization, invoke)
+    resp = await _call('verify_status', '/verify/status/{task_id}', authorization, invoke)
+    if resp.ok and resp.data.get('status') == 'completed' and not isinstance(resp.data.get('result'), dict):
+        # Completed with no result to show: an answer that cannot be read, not
+        # a verdict with every field empty. (The SDK's own waits treat it as a
+        # failed run; its `get_status` hands it back as it came.)
+        return _invalid_response('verify_status', resp.status)
+    return resp
 
 
 async def verification_detail(authorization: Authorization, *, verification_id: str) -> ApiResponse:
@@ -793,7 +801,7 @@ async def verification_detail(authorization: Authorization, *, verification_id: 
     not a bearer is refused like on every other endpoint.
     """
 
-    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> BaseModel:
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
         return await sdk.verifications.get(verification_id, **options)
 
     return await _call('verification_detail', '/verifications/{id}', authorization, invoke, anonymous=True)
@@ -807,7 +815,7 @@ async def list_verifications(authorization: Authorization, *, page_size: int) ->
     """
     size = int(page_size)
 
-    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> BaseModel:
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
         return await sdk.verifications.list(page=1, page_size=size, **options)
 
     return await _call('list_verifications', '/verifications', authorization, invoke)
@@ -815,9 +823,12 @@ async def list_verifications(authorization: Authorization, *, page_size: int) ->
 
 async def select(authorization: Authorization, *, task_id: str, texts: list[str]) -> ApiResponse:
     key = _idem_key('select', task_id, *texts)
-    chosen = [_utf8_safe(t) for t in texts]
+    # A blank item is left out, as the API has always done with one: the SDK
+    # refuses a list holding one, which would refuse the claims chosen with it.
+    # The key is the one this call always had.
+    chosen = [t for t in (_utf8_safe(t) for t in texts) if t.strip()]
 
-    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> BaseModel:
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
         return await sdk.select(task_id, texts=chosen, idempotency_key=key, **options)
 
     return await _call('select', '/verify/{task_id}/select', authorization, invoke)
@@ -838,7 +849,7 @@ async def ask(authorization: Authorization, *, verification_id: str, message: st
     language = effective_language(language)
     question = _utf8_safe(message)
 
-    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> BaseModel:
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
         return await sdk.ask.send(verification_id, message=question, language=language, idempotency=False, **options)
 
     return await _call('ask', '/ask/{verification_id}', authorization, invoke, timeout=config.ASK_TIMEOUT)
@@ -879,7 +890,7 @@ async def citecheck(
     key = _idem_key('citecheck', _canonical_json(body))
     sent = _utf8_safe(body)
 
-    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> BaseModel:
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
         return await sdk.citecheck(
             sent.get('text'),
             pairs=sent.get('pairs'),
@@ -894,14 +905,14 @@ async def citecheck(
 async def citecheck_status(authorization: Authorization, *, citecheck_id: str) -> ApiResponse:
     """A citation check as it stands (GET /citechecks/{id}). Never cached by the API."""
 
-    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> BaseModel:
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
         return await sdk.get_citecheck(citecheck_id, **options)
 
     return await _call('citecheck_status', '/citechecks/{id}', authorization, invoke)
 
 
 async def me_usage(authorization: Authorization) -> ApiResponse:
-    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> BaseModel:
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
         return await sdk.usage(**options)
 
     return await _call('me_usage', '/me/usage', authorization, invoke)

@@ -781,7 +781,7 @@ def test_an_empty_selection_is_refused_without_a_request(wire, caplog):
     # The SDK's sentence for this names its own parameters: not passed on.
     assert resp.data == {'code': 'empty_list', 'detail': 'The request was invalid.'}
     assert wire.requests == []
-    assert 'mcp_api_request_refused op=select code=empty_list param=claims' in caplog.text
+    assert 'mcp_api_request_refused op=select code=empty_list param=texts' in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -790,15 +790,20 @@ def test_an_empty_selection_is_refused_without_a_request(wire, caplog):
         (lambda: client.assess(AUTH, text='   ', language=''), 'blank_input', 'claim is required.'),
         (lambda: client.assess(AUTH, claims=['a', '  '], language=''), 'blank_item', 'claims[1] is blank.'),
         (lambda: client.verify(AUTH, text='', language=''), 'blank_input', 'claim is required.'),
-        (lambda: client.citecheck(AUTH, text='   '), 'blank_input', 'The request was invalid.'),
+        (
+            lambda: client.citecheck(AUTH, text='   '),
+            'blank_input',
+            'payload: Value error, send exactly one of text and pairs',
+        ),
+        (lambda: client.ask(AUTH, verification_id='deadbeef', message='  '), 'blank_input', 'Message cannot be empty.'),
         (lambda: client.list_verifications(AUTH, page_size=0), 'invalid_page_size', 'The request was invalid.'),
     ],
-    ids=['assess blank', 'assess blank item', 'verify blank', 'citecheck blank', 'page size'],
+    ids=['assess blank', 'assess blank item', 'verify blank', 'citecheck blank', 'ask blank', 'page size'],
 )
 def test_a_refused_argument_reads_as_the_apis_422(wire, call, code, detail):
-    """Blank input on assess and verify reads with the API's own sentence (the
-    SDK's is the same: the old client sent it and showed the API's 422); every
-    other refusal is the generic one."""
+    """Blank input reads with the API's own sentence (the SDK's is the same: the
+    old client sent it and showed the API's 422); every other refusal is the
+    generic one."""
     resp = _run(call())
     assert resp.status == 422
     assert resp.data == {'code': code, 'detail': detail}
@@ -808,4 +813,77 @@ def test_a_refused_argument_reads_as_the_apis_422(wire, call, code, detail):
 def test_an_empty_id_is_refused_without_a_request(wire):
     resp = _run(client.verify_status(AUTH, task_id=''))
     assert resp.status == 422
+    assert wire.requests == []
+
+
+# ── blank input the SDK refuses before sending ──────────────────────
+
+
+def test_a_blank_selection_item_is_left_out_as_the_api_does(wire):
+    """The API has always dropped a blank item from a selection and run the
+    rest; the SDK refuses the whole list. The connector drops it first, so a
+    selection with one stray blank still starts the chosen checks. The key is
+    the one this call always had."""
+    resp = _run(client.select(AUTH, task_id='t' * 32, texts=['First.', '  ']))
+    assert resp.ok
+    assert wire.body() == {'texts': ['First.']}
+    assert wire.last.headers['idempotency-key'] == client._idem_key('select', 't' * 32, 'First.', '  ')
+
+
+def test_a_selection_of_only_blanks_is_refused_without_a_request(wire):
+    resp = _run(client.select(AUTH, task_id='t' * 32, texts=[' ', '']))
+    assert resp.status == 422
+    assert resp.data == {'code': 'empty_list', 'detail': 'The request was invalid.'}
+    assert wire.requests == []
+
+
+def test_the_select_tool_still_starts_the_chosen_check_beside_a_blank(wire):
+    wire.respond(api_wire.answer(202, {'items': [{'task_id': 'b' * 32, 'claim': 'First.'}]}))
+    out = _run(server.select_claims('t' * 32, ['First.', ' '], _ctx()))
+    assert out['status'] != 'invalid_request'
+    assert [wire.body(r) for r in wire.requests if r.url.path.endswith('/select')] == [{'texts': ['First.']}]
+
+
+def test_a_blank_follow_up_question_says_what_the_api_said(wire):
+    """The old client sent it and showed the API's 422 sentence; the SDK
+    refuses it before sending with the same sentence."""
+    out = _run(server.ask_followup('deadbeef', '   ', _ctx()))
+    assert out == {'status': 'invalid_request', 'message': 'Message cannot be empty.'}
+    assert wire.requests == []
+
+
+# ── a completed poll with nothing to show ───────────────────────────
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        {'status': 'completed', 'task_id': 'a' * 32},
+        {'status': 'completed', 'task_id': 'a' * 32, 'result': None},
+        {'status': 'completed', 'task_id': 'a' * 32, 'result': 'nope'},
+    ],
+    ids=['absent', 'null', 'not an object'],
+)
+def test_a_completed_poll_without_a_result_is_a_plain_error(wire, body, caplog):
+    """Not a verdict with every field empty (what the old client made of it)."""
+    wire.respond(api_wire.answer(200, body))
+    resp = _run(client.verify_status(AUTH, task_id='a' * 32))
+    assert not resp.ok and resp.data['code'] == client.INVALID_RESPONSE_CODE
+    assert 'mcp_api_invalid_response op=verify_status' in caplog.text
+    out = _run(server.get_verification('a' * 32, _ctx()))
+    assert out == {'status': 'error', 'message': client._INVALID_RESPONSE_DETAIL}
+
+
+# ── keys refused before sending: invalid vs missing ─────────────────
+
+
+def test_a_missing_key_is_refused_like_a_missing_credential(wire, monkeypatch):
+    """The SDK raises LenzMissingKeyError (a sibling of LenzInvalidKeyError,
+    both LenzAuthError) when a call that needs a key has none. The connector
+    never builds one that way; if it ever did, the answer is the refusal,
+    never a status-0 transport error or the SDK's own words."""
+    monkeypatch.setenv('LENZ_API_KEY', 'lenz_from_the_environment')
+    monkeypatch.setattr(client, '_bearer_token', lambda _header: '')
+    resp = _run(client.me_usage('Bearer whatever'))
+    assert resp.status == 401 and resp.data == {}
     assert wire.requests == []
