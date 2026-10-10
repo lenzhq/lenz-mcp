@@ -15,7 +15,7 @@ requires-python = ">=3.11,<3.13"
 # Filled in by the export from the connector's own requirements list.
 dependencies = [
     "httpx",
-    "mcp>=2.2.0,<2.3",
+    "mcp>=2.2.0,<2.4",
     "mcp-types",
     "pydantic",
     "pyjwt[crypto]>=2.13.0",
