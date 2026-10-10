@@ -15,7 +15,7 @@
     "check:published": "node tests/check-published-bundles.mjs"
   },
   "dependencies": {
-    "preact": "10.29.8"
+    "preact": "11.0.0"
   },
   "devDependencies": {
     "axe-core": "4.14.0",
