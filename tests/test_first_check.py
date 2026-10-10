@@ -21,6 +21,7 @@ import pytest
 
 from lenz_mcp import client, config, server
 from lenz_mcp.client import ApiResponse
+from tests import api_wire
 
 
 @pytest.fixture(autouse=True)
@@ -869,7 +870,9 @@ def test_the_assess_request_carries_the_clients_timeout(monkeypatch, user_agent,
 
     def handler(request):
         seen.append(request)
-        return httpx.Response(200, json=_ASSESS)
+        # The served (2026-10-11) shape has no `error_code`.
+        rows = [{k: v for k, v in row.items() if k != 'error_code'} for row in _ASSESS['claims']]
+        return api_wire.answer(200, {'claims': rows, 'failure': None, 'more_claims': []})
 
     real_client = httpx.AsyncClient
 
@@ -1172,23 +1175,17 @@ def test_a_connector_retry_of_the_same_check_replays_it(monkeypatch):
     (The same shape shows up when a client calls the tool from a fresh
     conversation: two POSTs seconds apart, replayed.)
     """
-    import lenz_mcp.client as real_client
-
-    keys = []
-
-    async def _request(method, path, authorization, **kwargs):
-        keys.append(kwargs.get('idempotency_key'))
-        # What the API does with a replayed key: the SAME task, once.
-        return ApiResponse(status=202, data={'task_id': 'r' * 32, 'status': 'queued'})
-
-    monkeypatch.setattr(real_client, '_request', _request)
-    first = _run(real_client.verify(None, text='The claim.', language='', depth='standard'))
-    second = _run(real_client.verify(None, text='The claim.', language='', depth='standard'))
+    wire = api_wire.install(monkeypatch)
+    # What the API does with a replayed key: the SAME task, once.
+    wire.respond(api_wire.answer(202, {'task_id': 'r' * 32, 'status': 'queued'}))
+    first = _run(client.verify('Bearer k', text='The claim.', language='', depth='standard'))
+    second = _run(client.verify('Bearer k', text='The claim.', language='', depth='standard'))
     assert first.data['task_id'] == second.data['task_id']
+    keys = [r.headers.get('idempotency-key') for r in wire.requests]
     assert len(keys) == 2 and keys[0] == keys[1] and keys[0]
     # A different claim is a different key, or a retry would replay the wrong run.
-    _run(real_client.verify(None, text='Another claim.', language='', depth='standard'))
-    assert keys[2] != keys[0]
+    _run(client.verify('Bearer k', text='Another claim.', language='', depth='standard'))
+    assert wire.last.headers['idempotency-key'] != keys[0]
 
 
 def test_the_claims_cap_the_model_is_told_is_the_one_the_api_enforces():

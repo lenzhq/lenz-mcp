@@ -39,6 +39,7 @@ from lenz_mcp.testing import (
     MODERN,
     assembled_app,
 )
+from tests import api_wire
 
 CARD_TOOLS = {'start_verification_widget', 'get_verification_widget', 'select_claims_widget'}
 
@@ -540,18 +541,14 @@ def test_the_retry_key_is_deterministic_and_differs_from_the_first_run():
 
 
 def test_client_verify_puts_retry_of_in_the_key_not_the_body(monkeypatch):
-    sent = {}
-
-    async def _request(method, path, authorization, *, json=None, idempotency_key=None, **kwargs):
-        sent.update(json=json, key=idempotency_key)
-        return ApiResponse(status=202, data={'task_id': 'x'})
-
-    monkeypatch.setattr(client, '_request', _request)
+    wire = api_wire.install(monkeypatch)
     _run(client.verify('Bearer k', text='The claim.', language='', retry_of='f' * 32))
-    assert sent['json'] == {'claim': 'The claim.', 'language': 'auto', 'depth': 'standard'}
-    assert sent['key'] == client._idem_key('verify', 'The claim.', 'auto', 'retry_of', 'f' * 32)
+    assert wire.body() == {'text': 'The claim.', 'language': 'auto', 'depth': 'standard'}
+    assert wire.last.headers['idempotency-key'] == client._idem_key(
+        'verify', 'The claim.', 'auto', 'retry_of', 'f' * 32
+    )
     _run(client.verify('Bearer k', text='The claim.', language=''))
-    assert sent['key'] == client._idem_key('verify', 'The claim.', 'auto')
+    assert wire.last.headers['idempotency-key'] == client._idem_key('verify', 'The claim.', 'auto')
 
 
 def test_the_card_poll_tool_names_a_gone_task(monkeypatch, authed):
@@ -677,23 +674,17 @@ def test_a_replayed_selection_starts_nothing_new(monkeypatch, authed):
     # The card may call twice (a lost answer, a re-mount, a double tap). The
     # same parent and the same texts derive the same idempotency key, so the
     # API replays its first response and no second check is paid for.
-    import lenz_mcp.client as real_client
-
-    keys = []
-
-    async def _request(method, path, authorization, **kwargs):
-        keys.append(kwargs.get('idempotency_key'))
-        return ApiResponse(status=202, data={'items': [{'task_id': 'a' * 32, 'claim_text': 'One.'}]})
-
-    monkeypatch.setattr(real_client, '_request', _request)
+    wire = api_wire.install(monkeypatch)
+    wire.respond(api_wire.answer(202, {'items': [{'task_id': 'a' * 32, 'claim_text': 'One.'}]}))
     first = _run(server.select_claims_widget('t' * 32, ['One.'], _Ctx()))
     second = _run(server.select_claims_widget('t' * 32, ['One.'], _Ctx()))
     assert first == second
+    keys = [r.headers.get('idempotency-key') for r in wire.requests if r.url.path.endswith('/select')]
     assert len(keys) == 2 and keys[0] == keys[1] and keys[0]
     # A different selection of the same parent is a different key: it must not
     # replay the first pick's answer.
     _run(server.select_claims_widget('t' * 32, ['Two.'], _Ctx()))
-    assert keys[2] != keys[0]
+    assert wire.requests[-1].headers['idempotency-key'] != keys[0]
 
 
 def test_a_parent_already_resolved_is_not_a_retry_loop(monkeypatch, authed):

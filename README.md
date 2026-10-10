@@ -270,8 +270,18 @@ docker build --build-arg LENZ_MCP_VERSION=dev -t lenz-mcp .
 ```
 
 A copy you run yourself authenticates with your own Lenz API key, sent as
-`Authorization: Bearer lenz_…`. OAuth sign-in works only on the hosted endpoint,
-`https://lenz.io/mcp`.
+`Authorization: Bearer lenz_…` (the `Bearer` scheme is required; any other
+value is refused like a missing key). OAuth sign-in works only on the hosted
+endpoint, `https://lenz.io/mcp`.
+
+**Minimum API version.** The server calls the Lenz API through the official
+Python SDK, [`lenz-io`](https://github.com/lenzhq/lenz-io-python), which reads
+exactly one API version: `2026-10-11`. A copy you run yourself therefore needs
+an API (`MCP_API_BASE_URL`) that serves `2026-10-11`; `https://lenz.io/api/v1`
+does. The lock is strict for results: a successful answer in another version
+is refused, and the tool says the API "answered in a version this connector
+does not read". Error answers (an out-of-credits, a rate limit, an outage) are
+shown as they are, whatever version sent them.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the tests, the result card and the
 pull-request rules.

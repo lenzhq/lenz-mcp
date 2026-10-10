@@ -257,8 +257,8 @@ name = "httpcore2"
 version = "2.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11" },
-    { name = "truststore" },
+    { name = "h11", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
+    { name = "truststore", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/15/8c/e925b1c92018abb3a1863ce1549d76d2381e334d21d65d4ac8f65dabd78a/httpcore2-2.13.0.tar.gz", hash = "sha256:2adc8be4fb285fbcd6d894298db3b52c177e74b6674eda3a76bd36be3292a3db", size = 67740, upload-time = "2026-09-14T14:18:04.717Z" }
 wheels = [
@@ -418,10 +418,25 @@ wheels = [
 ]
 
 [[package]]
+name = "lenz-io"
+version = "3.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b7/1f/f7abdf324946e46bc9599a73758d41645c670ba1af92e1f8072e905ceebb/lenz_io-3.2.0.tar.gz", hash = "sha256:e794d309f4df1cedbe59ac835df047d3f074661e970b727b8892c0ddd4874b10", size = 296408, upload-time = "2026-10-10T16:05:45.945Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c3/60/78225bd7f8a9dcfabb61db2c36abe46b619e077d2d0daea4579ff3319820/lenz_io-3.2.0-py3-none-any.whl", hash = "sha256:33fa427f89342e705be22b7a842eabf703369a738e69c7a06076e0ac20b8f692", size = 229853, upload-time = "2026-10-10T16:05:44.262Z" },
+]
+
+[[package]]
 name = "lenz-mcp"
 source = { virtual = "." }
 dependencies = [
     { name = "httpx" },
+    { name = "lenz-io" },
     { name = "mcp" },
     { name = "mcp-types" },
     { name = "pydantic" },
@@ -447,6 +462,7 @@ eval = [
 [package.metadata]
 requires-dist = [
     { name = "httpx" },
+    { name = "lenz-io", specifier = ">=3.2.0,<4" },
     { name = "mcp", specifier = ">=2.2.0,<2.4" },
     { name = "mcp-types" },
     { name = "pydantic" },

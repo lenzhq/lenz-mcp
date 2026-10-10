@@ -7,6 +7,7 @@ tool functions directly (they remain plain coroutine functions after the
 """
 
 import asyncio
+import json
 import re
 import types
 
@@ -15,6 +16,7 @@ import pytest
 
 from lenz_mcp import client, config, links, server
 from lenz_mcp.client import ApiResponse
+from tests import api_wire
 
 # ── helpers ──────────────────────────────────────────────────────────
 
@@ -360,22 +362,18 @@ def test_assess_claims_list_strips_blank_items_and_rejects_both_forms():
 def test_assess_client_idempotency_key_covers_the_list(monkeypatch):
     """A retry of the same list carries the same key; a different list — or
     the same words split differently — does not."""
-    captured = []
-
-    async def _fake_request(method, path, authorization, *, json=None, timeout=None, idempotency_key=None):
-        captured.append((json, idempotency_key))
-        return ApiResponse(status=200, data={'claims': []})
-
-    monkeypatch.setattr(client, '_request', _fake_request)
+    wire = api_wire.install(monkeypatch)
     _run(client.assess('Bearer k', claims=['a', 'b'], language=''))
     _run(client.assess('Bearer k', claims=['a', 'b'], language=''))
     _run(client.assess('Bearer k', claims=['a b'], language=''))
     _run(client.assess('Bearer k', text='a b', language=''))
+    captured = [(wire.body(r), r.headers['idempotency-key']) for r in wire.requests]
     (body1, key1), (body2, key2), (body3, key3), (body4, key4) = captured
     assert body1 == {'claims': ['a', 'b'], 'language': 'auto'}
     assert key1 == key2
     assert key3 != key1
-    assert body4 == {'claim': 'a b', 'language': 'auto'}
+    # The single form goes out as `text` (the SDK's spelling; the API reads both).
+    assert body4 == {'text': 'a b', 'language': 'auto'}
     assert key4 != key3
 
 
@@ -901,21 +899,14 @@ def test_select_invalid_selection(monkeypatch):
 
 
 def test_select_client_builds_per_task_path(monkeypatch):
-    captured = {}
-
-    async def _fake_request(
-        method, path, authorization, *, json=None, timeout=client.config.DEFAULT_TIMEOUT, idempotency_key=None
-    ):
-        captured.update(method=method, path=path, json=json, idempotency_key=idempotency_key)
-        return ApiResponse(status=202, data={'batch_id': 'b', 'items': []})
-
-    monkeypatch.setattr(client, '_request', _fake_request)
-    _run(client.select('Bearer k', task_id='TID', texts=['a', 'b']))
-    assert captured['method'] == 'POST'
-    assert captured['path'] == '/verify/TID/select'
-    assert captured['json'] == {'texts': ['a', 'b']}
+    wire = api_wire.install(monkeypatch)
+    resp = _run(client.select('Bearer k', task_id='TID', texts=['a', 'b']))
+    assert resp.ok
+    assert wire.last.method == 'POST'
+    assert wire.last.url.path == '/api/v1/verify/TID/select'
+    assert wire.body() == {'texts': ['a', 'b']}
     # select is a write op → carries a content-derived idempotency key
-    assert captured['idempotency_key'] == client._idem_key('select', 'TID', 'a', 'b')
+    assert wire.last.headers['idempotency-key'] == client._idem_key('select', 'TID', 'a', 'b')
 
 
 def test_get_verification_failed(monkeypatch):
@@ -1286,13 +1277,16 @@ def test_ask_transport_error_warns_against_blind_retry(monkeypatch):
 
 
 def test_client_ask_targets_ask_endpoint(monkeypatch):
-    cap = _capture_request(monkeypatch)
-    _run(client.ask('Bearer k', verification_id='V1', message='hi', language='es'))
-    assert cap['method'] == 'POST'
-    assert cap['path'] == '/ask/V1'
-    assert cap['json'] == {'message': 'hi', 'language': 'es'}
-    assert cap['timeout'] == client.config.ASK_TIMEOUT
-    assert cap['idempotency_key'] is None  # conversational append — no dedupe key
+    wire = api_wire.install(monkeypatch)
+    resp = _run(client.ask('Bearer k', verification_id='V1', message='hi', language='es'))
+    assert resp.ok and resp.data['content'] == 'An answer.'
+    assert wire.last.method == 'POST'
+    assert wire.last.url.path == '/api/v1/ask/V1'
+    assert wire.body() == {'message': 'hi', 'language': 'es'}
+    timeout = client.config.ASK_TIMEOUT
+    assert wire.last.extensions['timeout'] == {'connect': timeout, 'read': timeout, 'write': timeout, 'pool': timeout}
+    # Conversational append — no dedupe key, not even the SDK's random one.
+    assert 'idempotency-key' not in wire.last.headers
 
 
 def test_sync_tool_read_timeouts_clear_the_observed_backend_ceiling():
@@ -1313,30 +1307,40 @@ def test_sync_tool_read_timeouts_clear_the_observed_backend_ceiling():
 # ── outbound HTTP headers ────────────────────────────────────────────
 
 
-def test_outbound_headers_forward_auth_and_stamp_ua():
-    headers = client._headers('Bearer lenz_abc')
-    assert headers['Authorization'] == 'Bearer lenz_abc'
-    assert headers['User-Agent'] == config.USER_AGENT
-    assert 'lenz-mcp' in headers['User-Agent']
-    # No idempotency key unless one is passed (GETs don't get one).
-    assert 'Idempotency-Key' not in headers
+def test_outbound_headers_forward_auth_and_stamp_ua(monkeypatch):
+    wire = api_wire.install(monkeypatch)
+    _run(client.me_usage('Bearer lenz_abc'))
+    headers = wire.last.headers
+    assert headers['authorization'] == 'Bearer lenz_abc'
+    assert headers['user-agent'] == config.USER_AGENT
+    assert 'lenz-mcp' in headers['user-agent']
+    assert headers['accept'] == 'application/json'
+    # No idempotency key on a GET.
+    assert 'idempotency-key' not in headers
 
 
-def test_outbound_headers_name_the_api_version():
+def test_outbound_headers_name_the_api_version(monkeypatch):
     # Every call states the response version this server reads, so the API
     # never has to guess it from the client's name.
-    assert client._headers('Bearer lenz_abc')['X-Lenz-API-Version'] == '2026-10-11'
-    assert client._headers(None)['X-Lenz-API-Version'] == config.API_VERSION == '2026-10-11'
-    assert client._headers('Bearer lenz_abc', idempotency_key='k')['X-Lenz-API-Version'] == config.API_VERSION
+    wire = api_wire.install(monkeypatch)
+    _run(client.me_usage('Bearer lenz_abc'))
+    _run(client.verify('Bearer lenz_abc', text='x', language=''))
+    _run(client.verification_detail(None, verification_id='pub12345'))
+    assert config.API_VERSION == '2026-10-11'
+    assert [r.headers['x-lenz-api-version'] for r in wire.requests] == [config.API_VERSION] * 3
 
 
-def test_outbound_headers_include_idempotency_key_when_passed():
-    headers = client._headers('Bearer lenz_abc', idempotency_key='abc123')
-    assert headers['Idempotency-Key'] == 'abc123'
+def test_outbound_headers_include_idempotency_key_on_a_write(monkeypatch):
+    wire = api_wire.install(monkeypatch)
+    _run(client.verify('Bearer lenz_abc', text='x', language='en'))
+    assert wire.last.headers['idempotency-key'] == client._idem_key('verify', 'x', 'en')
 
 
-def test_outbound_headers_omit_auth_when_absent():
-    assert 'Authorization' not in client._headers(None)
+def test_outbound_headers_omit_auth_when_absent(monkeypatch):
+    """Only the read that also answers anonymously is sent with no credential."""
+    wire = api_wire.install(monkeypatch)
+    _run(client.verification_detail(None, verification_id='pub12345'))
+    assert 'authorization' not in wire.last.headers
 
 
 # ── idempotency key (content-derived, retry-safe) ─────────────────────
@@ -1354,11 +1358,11 @@ def test_idem_key_is_deterministic_and_content_scoped():
 
 
 def test_write_tools_send_stable_content_derived_key(monkeypatch):
-    cap = _capture_request(monkeypatch)
+    wire = api_wire.install(monkeypatch)
     _run(client.assess('Bearer k', text='hi', language='en'))
-    first = cap['idempotency_key']
+    first = wire.last.headers['idempotency-key']
     _run(client.assess('Bearer k', text='hi', language='en'))
-    second = cap['idempotency_key']
+    second = wire.last.headers['idempotency-key']
     assert first and first == second  # identical assess → identical key → dedupe
     assert first == client._idem_key('assess', 'hi', 'en')
 
@@ -1369,23 +1373,26 @@ def test_verify_idempotency_key_separates_depths(monkeypatch):
     otherwise a legitimate depth switch is rejected as an invalid request.
     The default depth keeps the key shape from before the parameter existed,
     so a repeat of an older submission still replays instead of re-charging."""
-    cap = _capture_request(monkeypatch)
+    wire = api_wire.install(monkeypatch)
     _run(client.verify('Bearer k', text='hi', language='en', depth='standard'))
-    standard = cap['idempotency_key']
+    standard = wire.last.headers['idempotency-key']
     assert standard == client._idem_key('verify', 'hi', 'en')  # legacy shape for the default
     _run(client.verify('Bearer k', text='hi', language='en', depth='low'))
-    low = cap['idempotency_key']
+    low = wire.last.headers['idempotency-key']
     assert standard and low and standard != low
     _run(client.verify('Bearer k', text='hi', language='en', depth='low'))
-    assert cap['idempotency_key'] == low  # a retry of the same low call still dedupes
+    assert wire.last.headers['idempotency-key'] == low  # a retry of the same low call still dedupes
 
 
 def test_get_requests_send_no_idempotency_key(monkeypatch):
-    cap = _capture_request(monkeypatch)
+    wire = api_wire.install(monkeypatch)
     _run(client.verify_status('Bearer k', task_id='T1'))
-    assert cap['idempotency_key'] is None
     _run(client.me_usage('Bearer k'))
-    assert cap['idempotency_key'] is None
+    _run(client.verification_detail('Bearer k', verification_id='pub12345'))
+    _run(client.list_verifications('Bearer k', page_size=10))
+    _run(client.citecheck_status('Bearer k', citecheck_id='ab12cd34'))
+    assert len(wire.requests) == 5
+    assert all('idempotency-key' not in r.headers for r in wire.requests)
 
 
 # ── DNS-rebinding transport security ──────────────────────────────────
@@ -1429,45 +1436,44 @@ def test_branded_link_builds_utm_url_from_verification_id():
 
 def _mock_transport(monkeypatch, handler):
     """Make client's httpx.AsyncClient route through a MockTransport (no network)."""
-    real_client = httpx.AsyncClient  # capture before patching to avoid recursion
-
-    def _factory(*_args, **kwargs):
-        kwargs.pop('transport', None)
-        return real_client(transport=httpx.MockTransport(handler), **kwargs)
-
-    monkeypatch.setattr(client.httpx, 'AsyncClient', _factory)
-    client._http_client = None  # force the shared client to rebuild via the patched factory
+    wire = api_wire.install(monkeypatch)
+    wire.respond(handler)
+    return wire
 
 
 def test_request_success_forwards_auth_and_ua(monkeypatch):
-    seen = {}
-
-    def handler(request):
-        seen['method'] = request.method
-        seen['url'] = str(request.url)
-        seen['auth'] = request.headers.get('authorization')
-        seen['ua'] = request.headers.get('user-agent')
-        return httpx.Response(200, json={'ok': True})
-
-    _mock_transport(monkeypatch, handler)
-    resp = _run(client._request('GET', '/x', 'Bearer k'))
-    assert resp.ok and resp.status == 200 and resp.data == {'ok': True}
-    assert seen['method'] == 'GET'
-    assert seen['url'].endswith('/api/v1/x')  # config.API_BASE_URL + path
-    assert seen['auth'] == 'Bearer k'
-    assert 'lenz-mcp' in seen['ua']
+    wire = _mock_transport(monkeypatch, lambda req: api_wire.answer(200, {'tier': 'free'}))
+    resp = _run(client.me_usage('Bearer k'))
+    assert resp.ok and resp.status == 200 and resp.data == {'tier': 'free'}
+    assert wire.last.method == 'GET'
+    assert str(wire.last.url) == f'{config.API_BASE_URL}/me/usage'
+    assert wire.last.headers['authorization'] == 'Bearer k'
+    assert 'lenz-mcp' in wire.last.headers['user-agent']
 
 
-def test_request_non_dict_json_is_wrapped(monkeypatch):
-    _mock_transport(monkeypatch, lambda req: httpx.Response(200, json=[1, 2, 3]))
-    resp = _run(client._request('GET', '/x', 'Bearer k'))
-    assert resp.data == {'_raw': [1, 2, 3]}
+def test_request_non_dict_json_is_not_a_success(monkeypatch):
+    """A JSON array where an object belongs is not an answer the tools can use:
+    an error, never an `ok` response (`ApiResponse.ok` reads the status only)."""
+    _mock_transport(monkeypatch, lambda req: api_wire.answer(200, [1, 2, 3]))
+    resp = _run(client.me_usage('Bearer k'))
+    assert not resp.ok and resp.status == client.INVALID_RESPONSE_STATUS
+    assert resp.data['code'] == client.INVALID_RESPONSE_CODE
 
 
-def test_request_non_json_body_is_empty_dict(monkeypatch):
+def test_request_non_json_body_is_not_a_success(monkeypatch):
     _mock_transport(monkeypatch, lambda req: httpx.Response(200, text='not json'))
-    resp = _run(client._request('GET', '/x', 'Bearer k'))
-    assert resp.status == 200 and resp.data == {}
+    resp = _run(client.me_usage('Bearer k'))
+    assert not resp.ok and resp.data['code'] == client.INVALID_RESPONSE_CODE
+
+
+def test_request_error_answers_keep_their_status(monkeypatch):
+    """An error body that is not a JSON object reads as `{}`, with its status."""
+    _mock_transport(monkeypatch, lambda req: api_wire.answer(418, [1, 2, 3]))
+    resp = _run(client.me_usage('Bearer k'))
+    assert resp.status == 418 and resp.data == {}
+    _mock_transport(monkeypatch, lambda req: httpx.Response(500, text='<html>oops</html>'))
+    resp = _run(client.me_usage('Bearer k'))
+    assert resp.status == 500 and resp.data == {}
 
 
 def test_request_transport_error_yields_status_0(monkeypatch):
@@ -1475,74 +1481,62 @@ def test_request_transport_error_yields_status_0(monkeypatch):
         raise httpx.ConnectError('boom')
 
     _mock_transport(monkeypatch, handler)
-    resp = _run(client._request('GET', '/x', 'Bearer k'))
+    resp = _run(client.me_usage('Bearer k'))
     assert not resp.ok and resp.status == 0 and resp.data == {}
 
 
-def _capture_request(monkeypatch):
-    """Capture the args (method, path, json, timeout, auth, idempotency_key) of the next _request call."""
-    cap = {}
-
-    async def _fake(
-        method, path, authorization, *, json=None, timeout=client.config.DEFAULT_TIMEOUT, idempotency_key=None
-    ):
-        cap.update(
-            method=method, path=path, json=json, timeout=timeout, auth=authorization, idempotency_key=idempotency_key
-        )
-        return ApiResponse(status=200, data={})
-
-    monkeypatch.setattr(client, '_request', _fake)
-    return cap
-
-
 def test_client_assess_targets_assess_endpoint(monkeypatch):
-    cap = _capture_request(monkeypatch)
+    wire = api_wire.install(monkeypatch)
     _run(client.assess('Bearer k', text='hi', language='es'))
-    assert cap['method'] == 'POST'
-    assert cap['path'] == '/assess'
-    assert cap['json'] == {'claim': 'hi', 'language': 'es'}
+    assert wire.last.method == 'POST'
+    assert wire.last.url.path == '/api/v1/assess'
+    assert wire.body() == {'text': 'hi', 'language': 'es'}
     # No client in scope reads as unknown: the short-host timeout, still well
     # above the default (per-client values: tests/test_first_check.py).
-    assert cap['timeout'] == client.config.ASSESS_TIMEOUT_SHORT_HOST > client.config.DEFAULT_TIMEOUT
-    assert cap['auth'] == 'Bearer k'
+    timeout = client.config.ASSESS_TIMEOUT_SHORT_HOST
+    assert timeout > client.config.DEFAULT_TIMEOUT
+    assert wire.last.extensions['timeout'] == {'connect': timeout, 'read': timeout, 'write': timeout, 'pool': timeout}
+    assert wire.last.headers['authorization'] == 'Bearer k'
 
 
 def test_client_verify_targets_verify_endpoint(monkeypatch):
-    cap = _capture_request(monkeypatch)
-    _run(client.verify('Bearer k', text='hi', language=''))
-    assert cap['method'] == 'POST'
-    assert cap['path'] == '/verify'
-    assert cap['json'] == {'claim': 'hi', 'language': 'auto', 'depth': 'standard'}
+    wire = api_wire.install(monkeypatch)
+    resp = _run(client.verify('Bearer k', text='hi', language=''))
+    assert resp.ok
+    assert wire.last.method == 'POST'
+    assert wire.last.url.path == '/api/v1/verify'
+    # The SDK's spelling: `text` (the API reads `claim` and `text` alike).
+    assert wire.body() == {'text': 'hi', 'language': 'auto', 'depth': 'standard'}
 
 
 def test_client_verify_sends_the_requested_depth(monkeypatch):
-    cap = _capture_request(monkeypatch)
+    wire = api_wire.install(monkeypatch)
     _run(client.verify('Bearer k', text='hi', language='', depth='low'))
-    assert cap['json'] == {'claim': 'hi', 'language': 'auto', 'depth': 'low'}
+    assert wire.body() == {'text': 'hi', 'language': 'auto', 'depth': 'low'}
 
 
 def test_client_verify_status_targets_status_endpoint(monkeypatch):
-    cap = _capture_request(monkeypatch)
+    wire = api_wire.install(monkeypatch)
     _run(client.verify_status('Bearer k', task_id='T1'))
-    assert cap['method'] == 'GET'
-    assert cap['path'] == '/verify/status/T1'
-    assert cap['json'] is None
+    assert wire.last.method == 'GET'
+    assert wire.last.url.path == '/api/v1/verify/status/T1'
+    assert wire.last.content == b''
 
 
 def test_client_verification_detail_targets_verifications_endpoint(monkeypatch):
-    cap = _capture_request(monkeypatch)
+    wire = api_wire.install(monkeypatch)
     _run(client.verification_detail('Bearer k', verification_id='pub12345'))
-    assert cap['method'] == 'GET'
-    assert cap['path'] == '/verifications/pub12345'
-    assert cap['json'] is None
+    assert wire.last.method == 'GET'
+    assert wire.last.url.path == '/api/v1/verifications/pub12345'
+    assert wire.last.content == b''
 
 
 def test_client_me_usage_targets_usage_endpoint(monkeypatch):
-    cap = _capture_request(monkeypatch)
+    wire = api_wire.install(monkeypatch)
     _run(client.me_usage('Bearer k'))
-    assert cap['method'] == 'GET'
-    assert cap['path'] == '/me/usage'
-    assert cap['json'] is None
+    assert wire.last.method == 'GET'
+    assert wire.last.url.path == '/api/v1/me/usage'
+    assert wire.last.content == b''
 
 
 # ── ASGI app + MCP protocol wiring ────────────────────────────────────
@@ -1856,7 +1850,7 @@ def test_outbound_ua_carries_the_origin_client(transport_ua):
     `lenz-zapier/1.0.0 (lenz-io-node 2.6.0)`.
     """
     transport_ua('claude-code/2.1.4 (external, cli)')
-    ua = client._headers(None)['User-Agent']
+    ua = client._user_agent()
 
     assert ua.startswith(config.USER_AGENT)
     assert 'claude-code/2.1.4' in ua
@@ -1865,9 +1859,9 @@ def test_outbound_ua_carries_the_origin_client(transport_ua):
 def test_outbound_ua_is_unchanged_without_a_request(transport_ua):
     """No transport request in scope (or no UA) → the bare UA, not `lenz-mcp/1.0 ()`."""
     transport_ua(None)
-    assert client._headers(None)['User-Agent'] == config.USER_AGENT
+    assert client._user_agent() == config.USER_AGENT
     transport_ua('   ')
-    assert client._headers(None)['User-Agent'] == config.USER_AGENT
+    assert client._user_agent() == config.USER_AGENT
 
 
 def test_outbound_ua_strips_control_characters_and_parens(transport_ua):
@@ -1883,7 +1877,7 @@ def test_outbound_ua_strips_control_characters_and_parens(transport_ua):
     a guess about what a UA looks like, it is what the transport can carry.
     """
     transport_ua('evil/1.0\r\nX-Injected: yes\x00 (spoof) \\')
-    ua = client._headers(None)['User-Agent']
+    ua = client._user_agent()
 
     assert '\r' not in ua and '\n' not in ua and '\x00' not in ua
     assert ua.count('(') == 1 and ua.count(')') == 1
@@ -1900,7 +1894,7 @@ def test_outbound_ua_survives_a_non_ascii_client(transport_ua):
     every tool call from that client, permanently.
     """
     transport_ua('Cursor/1.0 (caf\xe9) \u2014 \xff')
-    ua = client._headers(None)['User-Agent']
+    ua = client._user_agent()
 
     assert ua.encode('ascii')  # would raise before the fix
     assert all(0x20 <= ord(c) <= 0x7E for c in ua)
@@ -1911,7 +1905,7 @@ def test_outbound_ua_survives_a_non_ascii_client(transport_ua):
 def test_outbound_ua_is_truncated(transport_ua):
     """Bounded to a short header: the API records the client, and a long value has no use there."""
     transport_ua('x' * 5000)
-    assert len(client._headers(None)['User-Agent']) < 200
+    assert len(client._user_agent()) < 200
 
 
 # ── the transport bound: values that cannot ride an HTTP request ─────────
@@ -1931,18 +1925,24 @@ def test_request_survives_a_non_ascii_authorization_header(monkeypatch):
     trigger: uvicorn accepts \\x80-\\xff inbound and Starlette latin-1-decodes
     it, but httpx encodes header values as ASCII. The UnicodeEncodeError is not
     an httpx.HTTPError — before the fix it escaped and failed every tool call.
+    The SDK refuses such a key before sending (LenzAuthError), which reads as
+    the missing-credential answer. `server.requires_auth` names it first.
     """
-    _mock_transport(monkeypatch, lambda req: httpx.Response(200, json={'ok': True}))
-    resp = _run(client._request('GET', '/x', 'Bearer lenz_caf\xe9'))
-    assert resp.status == 0 and resp.data == {}
+    wire = _mock_transport(monkeypatch, lambda req: api_wire.answer(200, {'tier': 'free'}))
+    resp = _run(client.me_usage('Bearer lenz_caf\xe9'))
+    assert resp.status == 401 and resp.data == {}
+    assert wire.requests == []
 
 
-def test_request_survives_an_unencodable_url(monkeypatch):
-    """`httpx.InvalidURL.__mro__` is (InvalidURL, Exception, ...) — NOT an
-    HTTPError — so a task_id carrying a CR escaped the handler."""
-    _mock_transport(monkeypatch, lambda req: httpx.Response(200, json={'ok': True}))
-    resp = _run(client._request('GET', '/verify/status/ab\rcd', 'Bearer k'))
-    assert resp.status == 0 and resp.data == {}
+def test_request_sends_an_odd_id_as_one_path_segment(monkeypatch):
+    """A task_id carrying a CR once made an unencodable URL (`httpx.InvalidURL`,
+    not an HTTPError) that escaped the handler. The SDK percent-encodes an id
+    into exactly one path segment, so it is sent and cannot leave its path; the
+    tools screen ids before this anyway (`server._SENDABLE_ID_RE`)."""
+    wire = _mock_transport(monkeypatch, lambda req: api_wire.answer(404, {'detail': 'Not found.', 'code': 'not_found'}))
+    resp = _run(client.verify_status('Bearer k', task_id='ab\rcd/../x'))
+    assert resp.status == 404
+    assert wire.last.url.raw_path == b'/api/v1/verify/status/ab%0Dcd%2F..%2Fx'
 
 
 def test_idem_key_survives_a_lone_surrogate():
@@ -1958,12 +1958,13 @@ def test_request_strips_lone_surrogates_from_the_json_body(monkeypatch):
 
     def handler(request):
         seen['body'] = request.content
-        return httpx.Response(200, json={'ok': True})
+        return api_wire.answer(200, {'results': []})
 
     _mock_transport(monkeypatch, handler)
-    resp = _run(client._request('POST', '/assess', 'Bearer k', json={'claim': 'a\ud800b'}))
+    resp = _run(client.assess('Bearer k', text='a\ud800b', language='en'))
     assert resp.status == 200
-    assert b'ab' in seen['body'] and b'\\ud800' not in seen['body']
+    # Dropped (not replaced), so the body is the text the key was derived from.
+    assert json.loads(seen['body'])['text'] == 'ab'
 
 
 def test_a_key_that_cannot_be_sent_is_named_at_the_gate(monkeypatch):

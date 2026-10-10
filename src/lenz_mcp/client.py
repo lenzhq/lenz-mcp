@@ -1,8 +1,8 @@
-"""Async HTTP client for MCP→public-API calls.
+"""Async client for MCP→public-API calls, through the official ``lenz-io`` SDK.
 
-Every call forwards the caller's ``Authorization`` header verbatim and stamps
-the ``lenz-mcp`` User-Agent. The public API enforces auth/quota and logs the
-call — the MCP never validates keys itself (v1).
+Every call sends the caller's bearer token (read from their ``Authorization``
+header) and stamps the ``lenz-mcp`` User-Agent. The public API enforces
+auth/quota and logs the call — the MCP never validates keys itself (v1).
 """
 
 from __future__ import annotations
@@ -12,10 +12,22 @@ import hashlib
 import json
 import logging
 import re
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 import httpx
+from lenz_io import (
+    AsyncLenz,
+    LenzApiVersionError,
+    LenzConnectionError,
+    LenzError,
+    LenzInvalidKeyError,
+    LenzInvalidResponseError,
+    LenzMissingKeyError,
+    LenzUsageError,
+    Result,
+)
 
 from lenz_mcp import config
 
@@ -52,7 +64,7 @@ def _idem_key(*parts: str) -> str:
     never matched, so the API could never dedupe. Distinct inputs → distinct
     key → run normally.
 
-    Hashed over the SCRUBBED parts, matching the body `_request` will actually
+    Hashed over the SCRUBBED parts, matching the body the client will actually
     send — so the key describes the request, and a text that differs only by an
     unsendable surrogate still replays. `_utf8_safe` is a no-op on every valid
     string, so no existing key changes.
@@ -76,7 +88,7 @@ class Credential(Protocol):
     async def renew(self) -> str | None: ...
 
 
-# What a tool forwards: the caller's header verbatim, a per-call exchanged
+# What a tool forwards: the caller's header (its bearer token is sent), a per-call exchanged
 # credential, or nothing.
 Authorization = str | Credential | None
 
@@ -112,7 +124,7 @@ class ApiResponse:
 # headers as latin-1. So a client sending `User-Agent: Cursor/1.0 (café)`
 # hands us a str that CANNOT go back out as a header, and the resulting
 # UnicodeEncodeError is not an `httpx.HTTPError` — it would escape
-# `_request`'s handler and fail every tool call from that client, forever.
+# the request's handler and fail every tool call from that client, forever.
 # Blocklisting the control range alone would let that through. We are not guessing what a UA looks like; we are enforcing what
 # the transport can carry.
 _UA_UNSAFE = re.compile(r'[^\x20-\x7e]|[()\\]')
@@ -488,24 +500,46 @@ def _user_agent() -> str:
     return f'{config.USER_AGENT} ({origin})' if origin else config.USER_AGENT
 
 
-def _headers(authorization: str | None, idempotency_key: str | None = None) -> dict[str, str]:
-    headers = {
-        'User-Agent': _user_agent(),
-        'Accept': 'application/json',
-        config.API_VERSION_HEADER: config.API_VERSION,
-    }
-    # Only the write tools (assess/verify/select) pass a content-derived key;
-    # GETs (status/usage) are idempotent by nature and need none.
-    if idempotency_key:
-        headers['Idempotency-Key'] = idempotency_key
-    if authorization:
-        headers['Authorization'] = authorization
-    return headers
+# ── the API calls, through the lenz-io SDK ───────────────────────────
+# Every call builds its own `AsyncLenz` over the ONE shared `httpx.AsyncClient`
+# below: the caller's token, our User-Agent and the call's timeout belong to that
+# call, and nothing is cached between calls. Building one costs microseconds; a
+# cached one would keep a replaced `_http_client` (tests, the API's contract
+# harness) or another caller's token. The SDK sends the API version header,
+# encodes the body, maps the answer to its typed models and errors; this module
+# turns both back into the `ApiResponse` the tools have always read.
+#
+# What stays here and not in the SDK: the content-derived idempotency keys
+# (`_idem_key`), the surrogate scrub (the key and the body describe the same
+# text), the 401 renewal of an exchanged token, and every wait and poll loop
+# (server.py). The SDK never retries (`max_retries=0`): a tool call has its own
+# budget, and a retry it did not ask for would spend it.
+
+#: What a failed call says when the API's answer could not be read. Never an
+#: `ok` status: `ApiResponse.ok` is status-only, so a 2xx here would read as success.
+INVALID_RESPONSE_CODE = 'invalid_response'
+INVALID_RESPONSE_STATUS = 502
+_INVALID_RESPONSE_DETAIL = 'The Lenz API sent an answer the connector could not read. Please retry shortly.'
+
+#: What a call says when the API answered in another API version. The SDK reads
+#: exactly one version (config.API_VERSION) and refuses every answer in another,
+#: error answers included, so a 402 or a 429 from an API that does not serve this
+#: version arrives as this, without its own status.
+API_VERSION_UNSUPPORTED_CODE = 'api_version_unsupported'
+_API_VERSION_DETAIL = 'The Lenz API answered in a version this connector does not read. Please retry later.'
+
+
+def _invalid_response(op: str, status: int | str) -> ApiResponse:
+    logger.warning('mcp_api_invalid_response op=%s status=%s', op, status)
+    return ApiResponse(
+        status=INVALID_RESPONSE_STATUS, data={'code': INVALID_RESPONSE_CODE, 'detail': _INVALID_RESPONSE_DETAIL}
+    )
 
 
 # One shared client so TLS/keep-alive connections are reused across tool calls
 # instead of paying a fresh handshake per request. Lazily created; lives for the
-# process (a long-running ASGI server), so no explicit close.
+# process (a long-running ASGI server), so no explicit close. Every SDK instance
+# borrows it, and a borrowed client is never closed by the SDK.
 _http_client: httpx.AsyncClient | None = None
 
 
@@ -515,53 +549,138 @@ def _get_client() -> httpx.AsyncClient:
         _http_client = httpx.AsyncClient(
             timeout=config.DEFAULT_TIMEOUT,
             limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
+            # The SDK sets the version, content type and credential per request,
+            # but leaves Accept to the client it borrows.
+            headers={'Accept': 'application/json'},
         )
     return _http_client
 
 
-async def _send(
-    method: str,
-    url: str,
-    path: str,
-    authorization: str | None,
-    *,
-    json: dict[str, Any] | None,
-    timeout: float,
-    idempotency_key: str | None,
-) -> httpx.Response | None:
-    """One HTTP request; None on a transport failure (logged)."""
-    try:
-        return await _get_client().request(
-            method,
-            url,
-            json=_utf8_safe(json),
-            headers=_headers(authorization, idempotency_key),
-            timeout=timeout,
-        )
-    # Deliberately wider than `httpx.HTTPError`, which is narrower than what
-    # this body can raise. `httpx.InvalidURL` is not an `HTTPError` at
-    # all — its `__mro__` is `(InvalidURL, Exception, ...)` — and header/URL
-    # encoding raises `UnicodeError`. Anything not caught here escapes the tool
-    # body and reaches the model as a raw `ToolError` string with no log line,
-    # so the failure is opaque to the user and invisible to us. The two values
-    # with a realistic trigger are screened before they get here — the bearer
-    # by `server.requires_auth`, the ids by `server._SENDABLE_ID_RE` — so this
-    # is the backstop, not the diagnosis.
-    except (httpx.HTTPError, httpx.InvalidURL, UnicodeError) as exc:
-        logger.warning('mcp_api_transport_error method=%s path=%s err=%s', method, path, exc)
+def _bearer_token(header: str | None) -> str | None:
+    """The token of a ``Bearer`` Authorization value, or None.
+
+    The scheme is matched case-insensitively and surrounding whitespace is
+    dropped. Anything else (another scheme, a bare token, an empty one) is no
+    credential: the SDK sends ``Bearer <token>`` itself, so a value that is not a
+    bearer cannot be forwarded as it came.
+    """
+    scheme, _, token = (header or '').strip().partition(' ')
+    if scheme.lower() != 'bearer':
         return None
+    return token.strip() or None
 
 
-async def _request(
-    method: str,
+def _from_error(exc: LenzError) -> ApiResponse:
+    """An error answer as the tools read it: the status, the body as the API
+    sent it (``{}`` when it was not a JSON object) and the response's own
+    headers, with lowercased names (a 429's Retry-After)."""
+    return ApiResponse(
+        status=exc.status_code,
+        data=exc.body if isinstance(exc.body, dict) else {},
+        headers=_lowered(exc.headers),
+    )
+
+
+Invoke = Callable[[AsyncLenz, dict[str, Any]], Awaitable[Result]]
+
+
+async def _attempt(
+    op: str, path: str, header: str | None, invoke: Invoke, *, timeout: float, anonymous: bool
+) -> ApiResponse:
+    """One request through the SDK, as an `ApiResponse`.
+
+    ``anonymous``: the endpoint also answers without a credential, and the call
+    has none (``header`` is None), so none is sent.
+    """
+    token = _bearer_token(header)
+    if token is None and not (anonymous and header is None):
+        # Refused here, never sent: the same answer as the API's own 401. Never
+        # an SDK built without a key, which would read LENZ_API_KEY from the
+        # environment, or send a call with nobody's credential.
+        return ApiResponse(status=401, data={})
+    options: dict[str, Any] = {'timeout': timeout, 'extra_headers': {'User-Agent': _user_agent()}}
+    try:
+        sdk = AsyncLenz(
+            # '' and not None: None reads LENZ_API_KEY.
+            api_key=token or '',
+            base_url=config.API_BASE_URL,
+            http_client=_get_client(),
+            max_retries=0,
+            legacy_aliases=False,
+        )
+        model = await invoke(sdk, options)
+    except LenzApiVersionError as exc:
+        # A successful answer (below 400) in another API version: nothing in it
+        # can be read as this version's. An error answer in another version
+        # arrives as its own error, below.
+        served = _UA_UNSAFE.sub('', str(exc.served_version or ''))[:40]
+        logger.warning('mcp_api_version_mismatch op=%s served=%s', op, served)
+        return ApiResponse(
+            status=INVALID_RESPONSE_STATUS, data={'code': API_VERSION_UNSUPPORTED_CODE, 'detail': _API_VERSION_DETAIL}
+        )
+    except LenzInvalidResponseError as exc:
+        # Not a JSON object, on any status: a proxy's page, an empty body, a
+        # 204, a redirect. An error status keeps its status, as it always did.
+        if exc.status_code >= 400:
+            return _from_error(exc)
+        return _invalid_response(op, exc.status_code)
+    except LenzConnectionError as exc:
+        # No answer at all: a timeout, a failed connection, or a request httpx
+        # could not send (a header it cannot encode).
+        logger.warning('mcp_api_transport_error op=%s path=%s err=%s', op, path, type(exc.__cause__ or exc).__name__)
+        return ApiResponse(status=0, data={})
+    except (LenzInvalidKeyError, LenzMissingKeyError):
+        # A token the SDK will not send (a character a header cannot carry), or
+        # none at all: refused before any request, like a missing credential.
+        # Neither is expected: `server.requires_auth` screens the first, and an
+        # SDK is only built without a key for the anonymous read, which never
+        # asks for one. Two sibling classes, both before `LenzError`.
+        return ApiResponse(status=401, data={})
+    except LenzError as exc:
+        return _from_error(exc)
+    except LenzUsageError as exc:
+        # The SDK refused the arguments before sending. The tools screen these
+        # first, so this is a backstop.
+        logger.warning('mcp_api_request_refused op=%s code=%s param=%s', op, exc.code, exc.param)
+        return ApiResponse(status=422, data={'code': exc.code, 'detail': _refusal_detail(exc)})
+
+    # `raw` is the body exactly as the API sent it (a fresh copy), with nothing
+    # the model would add; `http_status` and `headers` are the response's.
+    # A citation check's start answered 409 naming the check a resend already
+    # started (`settled_by_conflict`): it stays the 409 it was, so the tool
+    # attaches to that check by id, exactly as it always has.
+    body = model.raw
+    if body is None:
+        return _invalid_response(op, 'no body')
+    return ApiResponse(status=model.http_status, data=body, headers=_lowered(model.headers))
+
+
+def _lowered(headers: Mapping[str, str]) -> dict[str, str]:
+    """Response headers with lowercased names, as the tools read them."""
+    return {name.lower(): value for name, value in headers.items()}
+
+
+#: The refusals the SDK words as the API words its own 422 for the same input
+#: ("claim is required.", "claims[1] is blank.", "claims is required.",
+#: "Message cannot be empty.", "payload: Value error, send exactly one of text
+#: and pairs"), so they read as the API's answer always did. Every other
+#: refusal's sentence names SDK parameters and is not passed on.
+_API_SENTENCE_CODES = frozenset({'blank_input', 'blank_item', 'empty_list'})
+
+
+def _refusal_detail(exc: LenzUsageError) -> str:
+    return str(exc) if exc.code in _API_SENTENCE_CODES else 'The request was invalid.'
+
+
+async def _call(
+    op: str,
     path: str,
     authorization: Authorization,
+    invoke: Invoke,
     *,
-    json: dict[str, Any] | None = None,
     timeout: float = config.DEFAULT_TIMEOUT,
-    idempotency_key: str | None = None,
+    anonymous: bool = False,
 ) -> ApiResponse:
-    url = f'{config.API_BASE_URL}{path}'
     credential: Credential | None = None
     header: str | None
     if authorization is None or isinstance(authorization, str):
@@ -569,28 +688,16 @@ async def _request(
     else:
         credential = authorization
         header = await credential.header()
-    resp = await _send(method, url, path, header, json=json, timeout=timeout, idempotency_key=idempotency_key)
-    if resp is not None and resp.status_code == 401 and credential is not None:
+    resp = await _attempt(op, path, header, invoke, timeout=timeout, anonymous=anonymous)
+    if resp.status == 401 and credential is not None:
         # An exchanged token the API no longer accepts (revoked, or expired
-        # early): exchange again, once, and resend. The API refused the first
-        # request outright, so resending a write repeats nothing.
+        # early): exchange again, once, and resend the same request (same body,
+        # same key). The API refused the first request outright, so resending
+        # a write repeats nothing.
         renewed = await credential.renew()
         if renewed is not None:
-            resp = await _send(method, url, path, renewed, json=json, timeout=timeout, idempotency_key=idempotency_key)
-    if resp is None:
-        return ApiResponse(status=0, data={})
-
-    try:
-        body = resp.json()
-        if not isinstance(body, dict):
-            body = {'_raw': body}
-    except ValueError:
-        body = {}
-    return ApiResponse(
-        status=resp.status_code,
-        data=body,
-        headers={k.lower(): v for k, v in resp.headers.items()},
-    )
+            resp = await _attempt(op, path, renewed, invoke, timeout=timeout, anonymous=anonymous)
+    return resp
 
 
 def effective_language(language: str) -> str:
@@ -611,10 +718,10 @@ async def assess(
     language: str,
     suggest_rewrite: bool = False,
 ) -> ApiResponse:
-    # One text (`claim`, expanded server-side) or a list (`claims`, one row per
-    # item). The idempotency key covers whichever was sent — the API rejects a
-    # key reused with a different body — joined on a separator no claim
-    # contains, so ["a b"] and ["a", "b"] never collide.
+    # One text (sent as `text`, expanded server-side) or a list (`claims`, one
+    # row per item). The idempotency key covers whichever was sent — the API
+    # rejects a key reused with a different body — joined on a separator no
+    # claim contains, so ["a b"] and ["a", "b"] never collide.
     #
     # `suggest_rewrite` asks for the claim rewritten with its wrong part
     # corrected, on the rows that have one. It is part of the body, so it is
@@ -623,22 +730,25 @@ async def assess(
     # its own, since the API refuses a key reused with a different body.
     language = effective_language(language)
     if claims:
-        body: dict = {'claims': list(claims), 'language': language}
         parts: tuple[str, ...] = ('assess', 'claims', '\x1f'.join(claims), language)
     else:
-        body = {'claim': text, 'language': language}
         parts = ('assess', text, language)
     if suggest_rewrite:
-        body['suggest_rewrite'] = True
         parts = (*parts, 'suggest_rewrite')
-    return await _request(
-        'POST',
-        '/assess',
-        authorization,
-        json=body,
-        timeout=config.assess_timeout(client_identity()),
-        idempotency_key=_idem_key(*parts),
-    )
+    key = _idem_key(*parts)
+    items = [_utf8_safe(c) for c in claims] if claims else None
+    single = _utf8_safe(text)
+
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
+        if items is not None:
+            return await sdk.assess(
+                claims=items, language=language, suggest_rewrite=suggest_rewrite, idempotency_key=key, **options
+            )
+        return await sdk.assess(
+            text=single, language=language, suggest_rewrite=suggest_rewrite, idempotency_key=key, **options
+        )
+
+    return await _call('assess', '/assess', authorization, invoke, timeout=config.assess_timeout(client_identity()))
 
 
 async def verify(
@@ -658,26 +768,38 @@ async def verify(
     # click on "Try again" still joins one run (src/lenz_mcp/mcp_card.py).
     if retry_of:
         key_parts = (*key_parts, 'retry_of', retry_of)
-    return await _request(
-        'POST',
-        '/verify',
-        authorization,
-        json={'claim': text, 'language': language, 'depth': depth},
-        idempotency_key=_idem_key(*key_parts),
-    )
+    key = _idem_key(*key_parts)
+    claim = _utf8_safe(text)
+
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
+        return await sdk.verify(claim=claim, language=language, depth=depth, idempotency_key=key, **options)
+
+    return await _call('verify', '/verify', authorization, invoke)
 
 
 async def verify_status(authorization: Authorization, *, task_id: str) -> ApiResponse:
-    return await _request('GET', f'/verify/status/{task_id}', authorization)
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
+        return await sdk.get_status(task_id, **options)
+
+    # A completed status with no result object is an answer that cannot be
+    # read (the SDK raises LenzInvalidResponseError), not a verdict with every
+    # field empty.
+    return await _call('verify_status', '/verify/status/{task_id}', authorization, invoke)
 
 
 async def verification_detail(authorization: Authorization, *, verification_id: str) -> ApiResponse:
     """A stored result by its 8-hex verification_id (GET /verifications/{id}).
 
     The endpoint takes an OPTIONAL bearer: with the caller's key it also serves
-    their own private claims; without one only public / unlisted ones.
+    their own private claims; without one only public / unlisted ones. So a call
+    with no credential at all is sent without one, while a credential that is
+    not a bearer is refused like on every other endpoint.
     """
-    return await _request('GET', f'/verifications/{verification_id}', authorization)
+
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
+        return await sdk.verifications.get(verification_id, **options)
+
+    return await _call('verification_detail', '/verifications/{id}', authorization, invoke, anonymous=True)
 
 
 async def list_verifications(authorization: Authorization, *, page_size: int) -> ApiResponse:
@@ -686,39 +808,44 @@ async def list_verifications(authorization: Authorization, *, page_size: int) ->
     The API scopes the list to the credential, and a row exists only once a run
     has completed. A GET: no idempotency key, no credit.
     """
-    return await _request('GET', f'/verifications?page=1&page_size={int(page_size)}', authorization)
+    size = int(page_size)
+
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
+        return await sdk.verifications.list(page=1, page_size=size, **options)
+
+    return await _call('list_verifications', '/verifications', authorization, invoke)
 
 
 async def select(authorization: Authorization, *, task_id: str, texts: list[str]) -> ApiResponse:
-    return await _request(
-        'POST',
-        f'/verify/{task_id}/select',
-        authorization,
-        json={'texts': texts},
-        idempotency_key=_idem_key('select', task_id, *texts),
-    )
+    # A blank item beside real claims is sent as given; the API leaves it out.
+    key = _idem_key('select', task_id, *texts)
+    chosen = [_utf8_safe(t) for t in texts]
+
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
+        return await sdk.select(task_id, texts=chosen, idempotency_key=key, **options)
+
+    return await _call('select', '/verify/{task_id}/select', authorization, invoke)
 
 
 async def ask(authorization: Authorization, *, verification_id: str, message: str, language: str = '') -> ApiResponse:
     # No idempotency key, deliberately, even though the REST endpoint honours
-    # one. `ask` is a conversational append —
-    # asking the same question twice is a legit second turn, and it gets a
-    # different answer because the first exchange is now history. Every key
-    # `_idem_key` derives is content-derived, so sending one here would
-    # manufacture client-side exactly the implicit key the endpoint refuses to
-    # derive server-side: the second ask would replay the first reply for the
-    # full response TTL. A key belongs on a RETRY of one logical ask, which is
-    # a thing only a caller that owns the retry can tell apart from a re-ask.
-    # Longer timeout — /ask is synchronous and can block on source summaries
-    # plus the LLM reply.
+    # one (and the SDK sends a random one unless told not to). `ask` is a
+    # conversational append — asking the same question twice is a legit second
+    # turn, and it gets a different answer because the first exchange is now
+    # history. Every key `_idem_key` derives is content-derived, so sending one
+    # here would manufacture client-side exactly the implicit key the endpoint
+    # refuses to derive server-side: the second ask would replay the first reply
+    # for the full response TTL. A key belongs on a RETRY of one logical ask,
+    # which is a thing only a caller that owns the retry can tell apart from a
+    # re-ask, and the connector never retries one. Longer timeout — /ask is
+    # synchronous and can block on source summaries plus the LLM reply.
     language = effective_language(language)
-    return await _request(
-        'POST',
-        f'/ask/{verification_id}',
-        authorization,
-        json={'message': message, 'language': language},
-        timeout=config.ASK_TIMEOUT,
-    )
+    question = _utf8_safe(message)
+
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
+        return await sdk.ask.send(verification_id, message=question, language=language, idempotency=False, **options)
+
+    return await _call('ask', '/ask/{verification_id}', authorization, invoke, timeout=config.ASK_TIMEOUT)
 
 
 def _canonical_json(value: Any) -> str:
@@ -753,19 +880,32 @@ async def citecheck(
         body['pairs'] = pairs
     if max_citations is not None:
         body['max_citations'] = max_citations
-    return await _request(
-        'POST',
-        '/citecheck',
-        authorization,
-        json=body,
-        idempotency_key=_idem_key('citecheck', _canonical_json(body)),
-    )
+    key = _idem_key('citecheck', _canonical_json(body))
+    sent = _utf8_safe(body)
+
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
+        return await sdk.citecheck(
+            sent.get('text'),
+            pairs=sent.get('pairs'),
+            max_citations=sent.get('max_citations'),
+            idempotency_key=key,
+            **options,
+        )
+
+    return await _call('citecheck', '/citecheck', authorization, invoke)
 
 
 async def citecheck_status(authorization: Authorization, *, citecheck_id: str) -> ApiResponse:
     """A citation check as it stands (GET /citechecks/{id}). Never cached by the API."""
-    return await _request('GET', f'/citechecks/{citecheck_id}', authorization)
+
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
+        return await sdk.get_citecheck(citecheck_id, **options)
+
+    return await _call('citecheck_status', '/citechecks/{id}', authorization, invoke)
 
 
 async def me_usage(authorization: Authorization) -> ApiResponse:
-    return await _request('GET', '/me/usage', authorization)
+    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
+        return await sdk.usage(**options)
+
+    return await _call('me_usage', '/me/usage', authorization, invoke)

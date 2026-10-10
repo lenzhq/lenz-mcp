@@ -121,13 +121,14 @@ def test_it_is_not_an_argument_the_model_can_see():
 
 
 def test_the_body_carries_the_flag_only_when_asked(monkeypatch):
+    # The single form goes out as `text` (the SDK's spelling; the API reads both).
     body, _key = _sent(monkeypatch, text='a b', language='', suggest_rewrite=True)
-    assert body == {'claim': 'a b', 'language': 'auto', 'suggest_rewrite': True}
+    assert body == {'text': 'a b', 'language': 'auto', 'suggest_rewrite': True}
     body, _key = _sent(monkeypatch, claims=['a', 'b'], language='', suggest_rewrite=True)
     assert body == {'claims': ['a', 'b'], 'language': 'auto', 'suggest_rewrite': True}
     # A call that does not ask sends what it always sent.
     body, _key = _sent(monkeypatch, text='a b', language='')
-    assert body == {'claim': 'a b', 'language': 'auto'}
+    assert body == {'text': 'a b', 'language': 'auto'}
 
 
 def test_a_key_from_before_the_flag_is_unchanged_and_the_flag_makes_a_new_one(monkeypatch):

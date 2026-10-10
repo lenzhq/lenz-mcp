@@ -49,6 +49,10 @@ def api(monkeypatch):
             return httpx.Response(200, json={'status': 'processing'})
         if '/ask/' in path:
             return httpx.Response(200, json={'role': 'expert', 'content': 'An answer.'})
+        if path.endswith('/select'):
+            return httpx.Response(202, json={'status': 'queued', 'items': []})
+        if path.endswith('/citecheck'):
+            return httpx.Response(202, json={'citecheck_id': 'ab12cd34', 'status': 'queued'})
         return httpx.Response(404, json={})
 
     monkeypatch.setattr(client, '_http_client', httpx.AsyncClient(transport=httpx.MockTransport(_handler)))
@@ -102,17 +106,12 @@ def test_auto_is_part_of_the_key_and_differs_from_a_code(api):
     assert auto == client._idem_key('assess', 'hi', 'auto')
 
 
-def test_a_select_or_a_citation_check_is_never_sent_a_language(monkeypatch, api):
-    sent = []
-
-    async def _spy(method, path, authorization, *, json=None, **kwargs):
-        sent.append((path, json))
-        return client.ApiResponse(status=200, data={})
-
-    monkeypatch.setattr(client, '_request', _spy)
+def test_a_select_or_a_citation_check_is_never_sent_a_language(api):
     _run(client.select('Bearer k', task_id='t1', texts=['a']))
     _run(client.citecheck('Bearer k', text='A draft [a](https://e.org/a).'))
-    assert all('language' not in (body or {}) for _path, body in sent)
+    bodies = _bodies(api, '/select') + _bodies(api, '/citecheck')
+    assert len(bodies) == 2
+    assert all('language' not in body for body in bodies)
 
 
 # ── the tools ────────────────────────────────────────────────────────
@@ -140,7 +139,8 @@ def test_an_explicit_code_is_never_replaced(api):
 def test_the_claim_text_goes_to_the_api_as_it_was_given(api):
     text = 'Der Rhein ist der längste Fluss Deutschlands.'
     _run(server.assess_claim(text, _ctx()))
-    assert _bodies(api, '/assess')[0]['claim'] == text
+    # Sent as `text`, the SDK's name for the single form (the API reads both).
+    assert _bodies(api, '/assess')[0]['text'] == text
 
 
 @pytest.mark.parametrize('tool', ['assess_claim', 'verify_claim', 'ask_followup'])

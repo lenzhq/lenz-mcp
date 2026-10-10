@@ -7,6 +7,11 @@ read the newer one, recorded once from that earlier code and frozen. Every
 scenario here runs the tool on both bodies and requires exactly the oracle's
 output from each, serialized byte for byte.
 
+The newer body is also served over HTTP, through the real client (the lenz-io
+SDK) on an `httpx.MockTransport`: the answer the SDK hands back must give the
+tools exactly what the raw body gave them. Keys are compared sorted there,
+because the SDK's models order the keys they dump.
+
 The oracle comes from the release before this server read the newer shape,
 commit b8da55d069e31e81dc7c6d61574a3dd722aeb5db, and the writer refuses to run
 on any other source. To rebuild it:
@@ -31,6 +36,7 @@ import pytest
 
 from lenz_mcp import client, config, server
 from lenz_mcp.client import ApiResponse
+from tests import api_wire
 
 HERE = pathlib.Path(__file__).parent
 SHAPES: dict[str, dict[str, Any]] = json.loads((HERE / 'api_shapes.json').read_text(encoding='utf-8'))
@@ -64,11 +70,73 @@ def _response(fixture: str, shape: str) -> ApiResponse:
     return ApiResponse(status=entry['status'], data=entry['body'], headers=headers)
 
 
+# When set, `_stub` routes an endpoint's answer to the HTTP transport instead of
+# replacing the client function, so the request goes through the SDK.
+_WIRE_ROUTES: dict[str, ApiResponse] | None = None
+
+
 def _stub(m: pytest.MonkeyPatch, api: str, response: ApiResponse) -> None:
+    if _WIRE_ROUTES is not None:
+        _WIRE_ROUTES[api] = response
+        return
+
     async def _fake(*_args, **_kwargs):
         return response
 
     m.setattr(client, api, _fake)
+
+
+def _api_of(request: Any) -> str:
+    """Which client function sent this request."""
+    path = request.url.path.removeprefix('/api/v1')
+    if path == '/assess':
+        return 'assess'
+    if path == '/verify':
+        return 'verify'
+    if path.startswith('/verify/status/'):
+        return 'verify_status'
+    if path.endswith('/select'):
+        return 'select'
+    if path.startswith('/ask/'):
+        return 'ask'
+    if path == '/citecheck':
+        return 'citecheck'
+    if path.startswith('/citechecks/'):
+        return 'citecheck_status'
+    if path == '/me/usage':
+        return 'me_usage'
+    if path == '/verifications':
+        return 'list_verifications'
+    if path.startswith('/verifications/'):
+        return 'verification_detail'
+    raise AssertionError(f'unexpected request {request.method} {path}')
+
+
+def _served(routes: dict[str, ApiResponse]) -> Callable[[Any], Any]:
+    """An HTTP handler answering each request with its endpoint's response, in
+    the API version the connector reads."""
+
+    def handler(request):
+        response = routes[_api_of(request)]
+        return api_wire.answer(response.status, response.data, response.headers)
+
+    return handler
+
+
+def run_through_the_wire(runner: Callable[[pytest.MonkeyPatch], Any]) -> Any:
+    """Run a tool scenario whose `_stub` answers come over HTTP, through the SDK."""
+    global _WIRE_ROUTES
+    routes: dict[str, ApiResponse] = {}
+    _WIRE_ROUTES = routes
+    try:
+        with pytest.MonkeyPatch.context() as m:
+            wire = api_wire.install(m)
+            wire.respond(_served(routes))
+            # No client identity bound, as in the stubbed runs: the same card
+            # and wait decisions on both paths.
+            return asyncio.run(runner(m))
+    finally:
+        _WIRE_ROUTES = None
 
 
 # ── what each scenario runs ──────────────────────────────────────────
@@ -236,6 +304,16 @@ def _output(scenario: str, shape: str) -> Any:
         return asyncio.run(runner(m, _response(fixture, shape)))
 
 
+def _wire_output(scenario: str) -> Any:
+    """The scenario with the newer body served over HTTP, through the SDK."""
+    fixture, runner = SCENARIOS[scenario]
+    return run_through_the_wire(lambda m: runner(m, _response(fixture, 'canonical')))
+
+
+def sorted_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, indent=1, sort_keys=True)
+
+
 def _serialized(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=1)
 
@@ -290,9 +368,127 @@ def test_the_newer_body_gives_the_same(scenario):
 
 
 @skip_while_writing
+@pytest.mark.parametrize('scenario', sorted(SCENARIOS))
+def test_the_newer_body_through_the_sdk_gives_the_same(scenario):
+    expected = _since_the_oracle(_oracle()[scenario])
+    if scenario in KNOWN_DIFFERENCES:
+        expected = {**expected, **KNOWN_DIFFERENCES[scenario]}
+    assert sorted_json(_wire_output(scenario)) == sorted_json(expected)
+
+
+@skip_while_writing
 def test_each_known_difference_is_one_message_that_really_differs():
     oracle = _oracle()
     for scenario, override in KNOWN_DIFFERENCES.items():
         assert scenario in SCENARIOS
         assert set(override) == {'message'}
         assert oracle[scenario]['message'] != override['message'], scenario
+
+
+# ── ask and citation checks: the raw body and the SDK give the same ──
+#
+# These endpoints have no oracle from before the newer shape. Each scenario runs
+# twice on the newer body: once with the client function stubbed to return it
+# as it came, once with it served over HTTP and read by the SDK. The tool
+# results must be the same (keys sorted).
+
+CITECHECK_SHAPES: dict[str, dict[str, Any]] = json.loads((HERE / 'citecheck_shapes.json').read_text(encoding='utf-8'))
+ASK_BODIES: dict[str, ApiResponse] = {
+    'answered': ApiResponse(
+        status=200, data={'role': 'expert', 'content': 'Because **evidence**.', 'created_at': '2026-10-10T10:00:00Z'}
+    ),
+    'not_completed_400': ApiResponse(
+        status=400,
+        data={'detail': 'Ask is only available for completed verifications.', 'code': 'verification_not_ready'},
+    ),
+    'not_ready_409': ApiResponse(status=409, data={'code': 'verification_not_ready', 'task_id': 'a' * 32}),
+    'failed_409': ApiResponse(status=409, data={'code': 'verification_failed', 'task_id': 'a' * 32}),
+    'no_credits_402': ApiResponse(
+        status=402,
+        data={
+            'detail': 'No remaining ask credits.',
+            'code': 'no_credits',
+            'upgrade_url': 'https://lenz.io/plans',
+            'credits_remaining': 0,
+            'cost': 1,
+        },
+    ),
+    'not_found_404': ApiResponse(status=404, data={'detail': 'Verification not found.', 'code': 'not_found'}),
+    'key_reused_422': ApiResponse(
+        status=422,
+        data={'detail': 'Idempotency-Key reused with a different request body.', 'code': 'idempotency_body_mismatch'},
+    ),
+    'ask_failed_502': ApiResponse(
+        status=502, data={'detail': 'The chat model could not answer this question.', 'code': 'ask_failed'}
+    ),
+    'unavailable_503': ApiResponse(
+        status=503,
+        data={'detail': 'The chat model is unavailable right now.', 'code': 'upstream_unavailable', 'retry_after': 90},
+        headers={'retry-after': '90'},
+    ),
+}
+
+
+def _citecheck_response(name: str) -> ApiResponse:
+    entry = CITECHECK_SHAPES[name]['canonical']
+    headers = {key.lower(): value for key, value in entry.get('headers', {}).items()}
+    return ApiResponse(status=entry['status'], data=entry['body'], headers=headers)
+
+
+def _both_ways(runner: Callable[[pytest.MonkeyPatch], Any]) -> tuple[str, str]:
+    with pytest.MonkeyPatch.context() as m:
+        stubbed = asyncio.run(runner(m))
+    return sorted_json(stubbed), sorted_json(run_through_the_wire(runner))
+
+
+@pytest.mark.parametrize('name', sorted(ASK_BODIES))
+def test_ask_reads_the_same_through_the_sdk(name):
+    def runner(m):
+        _stub(m, 'ask', ASK_BODIES[name])
+        return server.ask_followup('deadbeef', 'Why?', _ctx())
+
+    stubbed, through = _both_ways(runner)
+    assert through == stubbed
+
+
+_CITECHECK_GETS = sorted(name for name in CITECHECK_SHAPES if name.startswith('get_'))
+_CITECHECK_STARTS = [
+    'receipt_202',
+    'idempotent_replay_202',
+    'idempotency_conflict_409',
+    '402_no_credits',
+    '422_url_input',
+    '422_invalid_doi',
+    '422_unknown_field',
+    'idempotency_body_mismatch_422',
+    '429_citecheck_in_flight',
+    '503_capacity',
+    '503_citations_unavailable',
+]
+
+
+@pytest.mark.parametrize('name', _CITECHECK_GETS)
+def test_a_citation_check_reads_the_same_through_the_sdk(name):
+    def runner(m):
+        _stub(m, 'citecheck_status', _citecheck_response(name))
+        return server.get_citation_check('ab12cd34', _ctx())
+
+    stubbed, through = _both_ways(runner)
+    assert through == stubbed
+
+
+@pytest.mark.parametrize('name', _CITECHECK_STARTS)
+def test_a_citation_check_start_reads_the_same_through_the_sdk(name):
+    def runner(m):
+        _stub(m, 'citecheck', _citecheck_response(name))
+        _stub(m, 'citecheck_status', _citecheck_response('get_completed_issues_found'))
+        return server.check_citations('A draft [a](https://e.org/a).', _ctx())
+
+    stubbed, through = _both_ways(runner)
+    assert through == stubbed
+
+
+def test_the_citation_scenarios_cover_every_start_and_read():
+    names = set(CITECHECK_SHAPES)
+    covered = set(_CITECHECK_GETS) | set(_CITECHECK_STARTS)
+    assert names == covered

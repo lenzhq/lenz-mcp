@@ -15,6 +15,7 @@ requires-python = ">=3.11,<3.13"
 # Filled in by the export from the connector's own requirements list.
 dependencies = [
     "httpx",
+    "lenz-io>=3.2.0,<4",
     "mcp>=2.2.0,<2.4",
     "mcp-types",
     "pydantic",
