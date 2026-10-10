@@ -331,14 +331,32 @@ def test_a_replaced_shared_client_is_used_by_the_next_call(wire, monkeypatch):
 # ── answers: success ─────────────────────────────────────────────────
 
 
-def test_a_success_keeps_its_body_with_unknown_keys(wire):
-    """The body exactly as sent (the SDK's `raw`). The SDK gives a success no
-    status, so a 202 receipt reads as 200: no tool reads more than `ok`."""
+def test_a_success_keeps_its_status_headers_and_body_with_unknown_keys(wire):
+    """The body exactly as sent (the SDK's `raw`), the response's status (a
+    receipt reads 202, as with the old client) and its headers."""
     body = {'task_id': 'a' * 32, 'status': 'queued', 'brand_new_field': {'x': [1, None]}}
-    wire.respond(api_wire.answer(202, body))
+    wire.respond(api_wire.answer(202, body, {'Location': '/api/v1/verify/status/' + 'a' * 32, 'Retry-After': '20'}))
     resp = _run(client.verify(AUTH, text='x', language=''))
-    assert resp.status == 200 and resp.ok
+    assert resp.status == 202 and resp.ok
     assert resp.data == body
+    assert resp.headers['location'] == '/api/v1/verify/status/' + 'a' * 32
+    assert resp.headers['retry-after'] == '20'
+    assert resp.headers['x-lenz-api-version'] == config.API_VERSION
+
+
+@pytest.mark.parametrize(
+    ('call', 'status'),
+    [
+        (lambda: client.verify(AUTH, text='x', language=''), 202),
+        (lambda: client.select(AUTH, task_id='t' * 32, texts=['a']), 202),
+        (lambda: client.citecheck(AUTH, text='A draft [a](https://e.org/a).'), 202),
+        (lambda: client.me_usage(AUTH), 200),
+    ],
+    ids=['verify', 'select', 'citecheck', 'usage'],
+)
+def test_receipts_read_202_and_reads_200(wire, call, status):
+    resp = _run(call())
+    assert resp.status == status and resp.ok
 
 
 def test_a_success_body_is_the_callers_own_copy(wire):
@@ -673,8 +691,9 @@ def test_no_renewal_for_a_plain_key(wire):
 
 def test_a_409_naming_the_check_is_attached_to_and_polled(wire):
     """A resend of the same submission while the first is still being created:
-    the API answers 409 naming the check. The SDK reads that as a start, whose
-    body is the 409's (naming the check); the tool attaches by id."""
+    the API answers 409 naming the check. The SDK settles the call with it
+    (`settled_by_conflict`); the connector keeps it a 409, and the tool
+    attaches by id."""
 
     def _answer(request):
         if request.url.path.endswith('/citecheck'):
@@ -693,7 +712,10 @@ def test_a_409_naming_the_check_is_attached_to_and_polled(wire):
 
     wire.respond(_answer)
     resp = _run(client.citecheck(AUTH, text='A draft [a](https://e.org/a).'))
-    assert resp.ok and resp.data['citecheck_id'] == 'ab12cd34'
+    # The 409 it was (the SDK's `settled_by_conflict`), as the old client gave
+    # it: the tool's `status == 409` branch attaches by the id in the body.
+    assert resp.status == 409 and not resp.ok
+    assert resp.data['citecheck_id'] == 'ab12cd34'
     assert len(wire.requests) == 1  # settled, not resent
     out = _run(server.check_citations('A draft [a](https://e.org/a).', _ctx()))
     assert out['status'] == 'completed' and out['citecheck_id'] == 'ab12cd34'
@@ -756,8 +778,31 @@ def test_the_surrogate_key_is_the_one_an_earlier_release_sent():
 def test_an_empty_selection_is_refused_without_a_request(wire, caplog):
     resp = _run(client.select(AUTH, task_id='t' * 32, texts=[]))
     assert resp.status == 422 and not resp.ok
+    # The SDK's sentence for this names its own parameters: not passed on.
+    assert resp.data == {'code': 'empty_list', 'detail': 'The request was invalid.'}
     assert wire.requests == []
-    assert 'mcp_api_request_refused' in caplog.text
+    assert 'mcp_api_request_refused op=select code=empty_list param=claims' in caplog.text
+
+
+@pytest.mark.parametrize(
+    ('call', 'code', 'detail'),
+    [
+        (lambda: client.assess(AUTH, text='   ', language=''), 'blank_input', 'claim is required.'),
+        (lambda: client.assess(AUTH, claims=['a', '  '], language=''), 'blank_item', 'claims[1] is blank.'),
+        (lambda: client.verify(AUTH, text='', language=''), 'blank_input', 'claim is required.'),
+        (lambda: client.citecheck(AUTH, text='   '), 'blank_input', 'The request was invalid.'),
+        (lambda: client.list_verifications(AUTH, page_size=0), 'invalid_page_size', 'The request was invalid.'),
+    ],
+    ids=['assess blank', 'assess blank item', 'verify blank', 'citecheck blank', 'page size'],
+)
+def test_a_refused_argument_reads_as_the_apis_422(wire, call, code, detail):
+    """Blank input on assess and verify reads with the API's own sentence (the
+    SDK's is the same: the old client sent it and showed the API's 422); every
+    other refusal is the generic one."""
+    resp = _run(call())
+    assert resp.status == 422
+    assert resp.data == {'code': code, 'detail': detail}
+    assert wire.requests == []
 
 
 def test_an_empty_id_is_refused_without_a_request(wire):

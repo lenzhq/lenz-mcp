@@ -18,7 +18,7 @@ dependencies = [
     # TEMPORARY development pin: lenz-io 3.2.0 is not on PyPI yet. Before this
     # merges it becomes "lenz-io>=3.2.0,<4" (re-lock, wheel and container check):
     # the container installs with --require-hashes and has no git.
-    "lenz-io @ git+https://github.com/lenzhq/lenz-io-python@4f9d7b778860739fd18ffbdba091065d3a88ed68",
+    "lenz-io @ git+https://github.com/lenzhq/lenz-io-python@a34801d1639689279e23f9bcab055c946ef71f4e",
     "mcp>=2.2.0,<2.4",
     "mcp-types",
     "pydantic",

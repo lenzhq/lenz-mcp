@@ -20,13 +20,13 @@ import httpx
 from lenz_io import (
     AsyncLenz,
     LenzApiVersionError,
-    LenzAuthError,
     LenzConnectionError,
     LenzError,
+    LenzInvalidKeyError,
     LenzInvalidResponseError,
     LenzUsageError,
 )
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from lenz_mcp import config
 
@@ -576,7 +576,7 @@ def _from_error(exc: LenzError) -> ApiResponse:
     return ApiResponse(
         status=exc.status_code,
         data=exc.body if isinstance(exc.body, dict) else {},
-        headers={name.lower(): value for name, value in exc.headers.items()},
+        headers=_lowered(exc.headers),
     )
 
 
@@ -628,36 +628,48 @@ async def _attempt(
         # could not send (a header it cannot encode).
         logger.warning('mcp_api_transport_error op=%s path=%s err=%s', op, path, type(exc.__cause__ or exc).__name__)
         return ApiResponse(status=0, data={})
-    except LenzAuthError as exc:
-        if exc.status_code == 0:
-            # A token the SDK will not send (a character a header cannot
-            # carry): refused before any request, like a missing credential.
-            # `server.requires_auth` screens these first; this is the backstop.
-            return ApiResponse(status=401, data={})
-        return _from_error(exc)
+    except LenzInvalidKeyError:
+        # A token the SDK will not send (a character a header cannot carry):
+        # refused before any request, like a missing credential.
+        # `server.requires_auth` screens these first; this is the backstop.
+        return ApiResponse(status=401, data={})
     except LenzError as exc:
         return _from_error(exc)
-    except ValidationError:
-        # A JSON object that is not the shape this endpoint answers with (a
-        # field of the wrong type).
-        return _invalid_response(op, 'shape')
     except LenzUsageError as exc:
-        # The SDK refused the arguments before sending (an empty id, an empty
-        # selection). The tools screen these first, so this is a backstop; its
-        # message names SDK parameters and is not passed on.
-        logger.warning('mcp_api_request_refused op=%s error=%s', op, type(exc).__name__)
-        return ApiResponse(status=422, data={'detail': 'The request was invalid.'})
+        # The SDK refused the arguments before sending. The tools screen these
+        # first, so this is a backstop.
+        logger.warning('mcp_api_request_refused op=%s code=%s param=%s', op, exc.code, exc.param)
+        return ApiResponse(status=422, data={'code': exc.code, 'detail': _refusal_detail(op, exc)})
 
     # `raw` is the body exactly as the API sent it (a fresh copy), with nothing
-    # the model would add. Every result a call returns carries it. The SDK
-    # gives a success no status or headers: 200 stands for every 2xx, and no
-    # tool reads more than `ok` off a success. (A citation check's 409 naming
-    # the check a resend already started is a success here, whose body names
-    # that check; the tool attaches to it by id.)
+    # the model would add; `http_status` and `headers` are the response's.
     body = getattr(model, 'raw', None)
-    if not isinstance(body, dict):
+    status = getattr(model, 'http_status', None)
+    if not isinstance(body, dict) or not isinstance(status, int):
         return _invalid_response(op, 'no body')
-    return ApiResponse(status=200, data=body)
+    # A citation check's start answered 409 naming the check a resend already
+    # started (`settled_by_conflict`): it stays the 409 it was, so the tool
+    # attaches to that check by id, exactly as it always has.
+    return ApiResponse(status=status, data=body, headers=_lowered(getattr(model, 'headers', None)))
+
+
+def _lowered(headers: Any) -> dict[str, str]:
+    """Response headers with lowercased names, as the tools read them."""
+    return {name.lower(): value for name, value in headers.items()} if headers else {}
+
+
+#: The refusals whose SDK sentence is the API's own for the same input
+#: ("claim is required.", "claims[1] is blank.", "claims is required."), so it
+#: reads as the API's 422 always did. Only for the endpoints where the two
+#: were checked to agree; anywhere else the sentence names SDK parameters.
+_API_SENTENCE_CODES = frozenset({'blank_input', 'blank_item', 'empty_list'})
+_API_SENTENCE_OPS = frozenset({'assess', 'verify'})
+
+
+def _refusal_detail(op: str, exc: LenzUsageError) -> str:
+    if exc.code in _API_SENTENCE_CODES and op in _API_SENTENCE_OPS:
+        return str(exc)
+    return 'The request was invalid.'
 
 
 async def _call(
