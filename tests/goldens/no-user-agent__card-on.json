@@ -39,8 +39,9 @@
     {
       "annotations": {
         "destructiveHint": false,
+        "idempotentHint": false,
         "openWorldHint": true,
-        "readOnlyHint": true,
+        "readOnlyHint": false,
         "title": "Ask a follow-up"
       },
       "description": "Ask a grounded follow-up question about a completed `verify_claim` result.\n\n    The `verify_claim`/`get_verification` result is trimmed; this reads the FULL\n    evidence (research, debate, per-panelist adjudication, all sources) the\n    trimmed payload omits and answers ``question`` from it. Pass the\n    ``verification_id`` returned by `get_verification` (NOT a task_id). Only\n    works on a completed `verify_claim` — not on `assess_claim` results. Costs\n    credits at the cheap rate, same as `assess_claim`. The conversation is kept\n    server-side per verification, so ask\n    follow-ups sequentially rather than in parallel. Replies in English unless\n    the user explicitly asked for another language — leave ``language`` unset.\n    ",
@@ -99,8 +100,9 @@
     {
       "annotations": {
         "destructiveHint": false,
+        "idempotentHint": false,
         "openWorldHint": true,
-        "readOnlyHint": true,
+        "readOnlyHint": false,
         "title": "Fast fact-check"
       },
       "description": "The quick check: a verdict and a bucketed confidence for each factual claim in\n    a text or a list (3-model panel, ~15 seconds, one credit per claim).\n    Use it when the user asks to fact-check or double-check a factual statement\n    or a text (“fact-check this”, “double-check that”), asks whether one is true\n    or accurate (“is that true?”, “is this accurate?”), or doubts a factual\n    statement you made (“are you sure?”). Not for opinions, predictions,\n    arithmetic or how code behaves. When the user doubts something you said,\n    pass the specific statement being doubted, not the whole conversation.\n\n    For one claim or a whole text (a draft, a pasted text or your previous\n    answer), pass ONE text in ``claim`` (every claim found gets a row, up to\n    20) or up to 20 claims in ``claims`` (one row per item, same order). A\n    pasted text goes in ``claim`` whole and unedited — never split it, reword\n    it, resolve its pronouns or add figures. ``claims`` is only for claims the\n    user listed separately.\n    Verdicts are True / Mostly True / Mixed / Mostly False / False. No sources:\n    present each verdict as a first read, not as final. A row may carry\n    ``rationale``, a reviewer's reasoning for the verdict: a reviewer's note,\n    not a checked source. A low-confidence row carries ``recommend_verify: true`` and a\n    ``next_step``: recommend `verify_claim`, the deep check, and ask before\n    running it. On medium offer it; on high mention it. A vague claim is\n    assessed on its most likely reading (the row's ``claim``). Leave\n    ``language`` unset.\n    ",
@@ -166,6 +168,7 @@
     {
       "annotations": {
         "destructiveHint": false,
+        "idempotentHint": true,
         "openWorldHint": false,
         "readOnlyHint": true,
         "title": "Check usage & credits"
@@ -189,6 +192,7 @@
     {
       "annotations": {
         "destructiveHint": false,
+        "idempotentHint": true,
         "openWorldHint": false,
         "readOnlyHint": true,
         "title": "Get deep fact-check result"
@@ -221,6 +225,7 @@
     {
       "annotations": {
         "destructiveHint": false,
+        "idempotentHint": true,
         "openWorldHint": false,
         "readOnlyHint": true,
         "title": "Your recent checks"
@@ -244,6 +249,7 @@
     {
       "annotations": {
         "destructiveHint": false,
+        "idempotentHint": true,
         "openWorldHint": true,
         "readOnlyHint": false,
         "title": "Resolve a multi-claim interrupt"
@@ -285,6 +291,7 @@
     {
       "annotations": {
         "destructiveHint": false,
+        "idempotentHint": false,
         "openWorldHint": true,
         "readOnlyHint": false,
         "title": "Deep fact-check"

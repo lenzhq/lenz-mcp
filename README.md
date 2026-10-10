@@ -207,7 +207,9 @@ npx @modelcontextprotocol/inspector
 
 ## Credits
 
-Every tool call draws on **one pool of credits** on your Lenz account. There is no
+Every tool call that runs a check or answers a question draws on **one pool of credits** on your Lenz account;
+looking up an earlier result, listing checks and `check_usage` cost nothing, and a repeated check inside the
+replay window is answered from the first call and charged once. There is no
 separate budget per tool: spending on `assess_claim` reduces what is left for
 `verify_claim`, and vice versa. `check_usage` returns the balance
 (`credits_remaining`) alongside `costs`, the live price list — read the weight from

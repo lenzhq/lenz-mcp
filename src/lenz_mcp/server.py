@@ -943,13 +943,14 @@ def _error_result(resp: client.ApiResponse) -> dict[str, Any]:
 
 @mcp.tool(
     title='Fast fact-check',
-    # readOnlyHint=True: the hint means "modifies nothing
-    # in the user's environment", which is true — a fast check reads sources
-    # and returns a verdict. It spends a credit, but a client that reads the
-    # hint as "safe to call freely" auto-fires only a 1-credit call here; the
-    # 10-credit verify_claim keeps readOnlyHint=False on purpose, so the one
-    # tool worth an approval click still gets one where a client asks.
-    annotations=ToolAnnotations(title='Fast fact-check', readOnlyHint=True, destructiveHint=False, openWorldHint=True),
+    # readOnlyHint=False: a fast check debits one credit per verdict from the account,
+    # so it changes the user's Lenz balance. openWorldHint=True: it checks claims
+    # against sources on the public web. idempotentHint=False: a repeat of the same
+    # claim inside the 24-hour replay window is answered from the first call and not
+    # charged again, but after the window it is a new check and a new charge.
+    annotations=ToolAnnotations(
+        title='Fast fact-check', readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True
+    ),
 )
 @requires_auth
 async def assess_claim(
@@ -1278,7 +1279,11 @@ def _verify_outcome(
 
 @mcp.tool(
     title='Deep fact-check',
-    annotations=ToolAnnotations(title='Deep fact-check', readOnlyHint=False, destructiveHint=False, openWorldHint=True),
+    # idempotentHint=False: the same claim sent again inside the 24-hour replay window
+    # joins the first check at no new charge; after it, a repeat starts a new check.
+    annotations=ToolAnnotations(
+        title='Deep fact-check', readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True
+    ),
 )
 @requires_auth
 async def verify_claim(
@@ -1355,8 +1360,16 @@ async def verify_claim(
 
 @mcp.tool(
     title='Resolve a multi-claim interrupt',
+    # idempotentHint=True: selecting again for the same check replays the first
+    # response, and a check whose selection is already resolved answers
+    # `already_resolved`, so a repeat never starts more work. Each selected claim
+    # is a paid deep check, hence readOnlyHint=False.
     annotations=ToolAnnotations(
-        title='Resolve a multi-claim interrupt', readOnlyHint=False, destructiveHint=False, openWorldHint=True
+        title='Resolve a multi-claim interrupt',
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
     ),
 )
 @requires_auth
@@ -1509,7 +1522,11 @@ async def _verification_result(
 @mcp.tool(
     title='Get deep fact-check result',
     annotations=ToolAnnotations(
-        title='Get deep fact-check result', readOnlyHint=True, destructiveHint=False, openWorldHint=False
+        title='Get deep fact-check result',
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
     ),
     # Model-visible + untemplated: the model (and headless clients) poll this to get
     # the deep result — the MCP contract. Untemplated so repeated polling never
@@ -1583,7 +1600,11 @@ async def get_verification(
 @mcp.tool(
     title='Get deep fact-check result (widget)',
     annotations=ToolAnnotations(
-        title='Get deep fact-check result (widget)', readOnlyHint=True, destructiveHint=False, openWorldHint=False
+        title='Get deep fact-check result (widget)',
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
     ),
     # Widget-only twin of get_verification: hidden from the model (ui.visibility
     # ['app']) + widgetAccessible. The Lenz verdict card polls THIS over callTool, so
@@ -1624,8 +1645,14 @@ async def _get_verification_for_card(task_id: str, ctx: Context) -> dict[str, An
 
 @mcp.tool(
     title='Start a deep fact-check (Lenz card)',
+    # idempotentHint=False: a repeat inside the 24-hour replay window joins the
+    # running check, but after it (or with `retry_of`) a new paid check starts.
     annotations=ToolAnnotations(
-        title='Start a deep fact-check (Lenz card)', readOnlyHint=False, destructiveHint=False, openWorldHint=True
+        title='Start a deep fact-check (Lenz card)',
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
     ),
     # Card-only (src/lenz_mcp/mcp_card.py): listed to a card client only with the
     # card on, marked app-only, stripped from every other manifest.
@@ -1695,7 +1722,11 @@ async def _start_verification_for_card(claim: str, ctx: Context, retry_of: str) 
 @mcp.tool(
     title='Start the checks chosen in the Lenz card',
     annotations=ToolAnnotations(
-        title='Start the checks chosen in the Lenz card', readOnlyHint=False, destructiveHint=False, openWorldHint=True
+        title='Start the checks chosen in the Lenz card',
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
     ),
     # Card-only (src/lenz_mcp/mcp_card.py): listed to a card client only with the
     # card on, marked app-only, stripped from every other manifest.
@@ -1843,7 +1874,11 @@ def _completed_result(result: dict[str, Any]) -> dict[str, Any]:
 @mcp.tool(
     title='Check usage & credits',
     annotations=ToolAnnotations(
-        title='Check usage & credits', readOnlyHint=True, destructiveHint=False, openWorldHint=False
+        title='Check usage & credits',
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
     ),
 )
 @requires_auth
@@ -1924,7 +1959,7 @@ async def check_usage(ctx: Context) -> dict[str, Any]:
     title='Your recent checks',
     # A free GET of results that already exist: it cannot start or charge a check.
     annotations=ToolAnnotations(
-        title='Your recent checks', readOnlyHint=True, destructiveHint=False, openWorldHint=False
+        title='Your recent checks', readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
     ),
 )
 @requires_auth
@@ -1971,9 +2006,15 @@ async def list_verifications(ctx: Context) -> dict[str, Any]:
 
 @mcp.tool(
     title='Ask a follow-up',
-    # readOnlyHint=True, same reasoning as assess_claim: a grounded question
-    # about a finished verification changes nothing and costs one credit.
-    annotations=ToolAnnotations(title='Ask a follow-up', readOnlyHint=True, destructiveHint=False, openWorldHint=True),
+    # readOnlyHint=False: every call appends the question and the answer to the
+    # check's follow-up thread and debits one credit. idempotentHint=False: no
+    # Idempotency-Key is sent (see client.ask), so asking again adds another turn.
+    # openWorldHint=True: the question and the evidence already gathered for the
+    # check go to a hosted language model, whose answer is open-ended text; nothing
+    # is searched or fetched from the web at call time.
+    annotations=ToolAnnotations(
+        title='Ask a follow-up', readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True
+    ),
 )
 @requires_auth
 async def ask_followup(
