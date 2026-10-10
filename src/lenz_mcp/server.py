@@ -702,10 +702,172 @@ def _quota_exhausted(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+# ── reading the API's response shapes ────────────────────────────────
+#
+# The API serves two response shapes, an older one and a newer one, and this
+# server reads both. A tool result is the same whichever shape arrived: each
+# newer-shape value is turned back into the older value it stands for, and the
+# older reading runs on that. The card and the model see one vocabulary.
+
+# The newer API's single word for "the input states nothing checkable". The
+# tools keep the older per-endpoint words: `no_claim` on an assess row,
+# `not_a_claim` on a deep check's `failure_reason`.
+_NO_CHECKABLE_CLAIM = 'no_checkable_claim'
+
+# The sentence the older API put on a compound assess row (a row whose item
+# held further claims). The newer API carries no hint on such a row.
+_COMPOUND_ROW_HINT = 'Assessed the main claim only. Send identified_claims as their own items to check the rest.'
+
+# The older API's `error` on an assess answer with no rows, by code.
+_ASSESS_ERROR_TEXT = {_NO_CHECKABLE_CLAIM: 'No verifiable claim detected'}
+
+# The older API's `error` on a failed deep check, by failure code; any other
+# code read "Pipeline stopped at: <code>".
+_VERIFY_ERROR_TEXT = {
+    _NO_CHECKABLE_CLAIM: 'Not a verifiable claim.',
+    'not_a_claim': 'Not a verifiable claim.',
+    'cancelled': 'Cancelled.',
+    'task_error': 'Pipeline failed.',
+    'task_stuck': 'The task was never completed and has been marked failed.',
+}
+
+# 429 codes whose older wait field was `retry_after_seconds`, which this server
+# never read (it read `reset_in_seconds`, then the Retry-After header).
+_UNREAD_WAIT_CODES = frozenset({'review_in_flight', 'citecheck_in_flight'})
+
+
+def _failure_block(data: Any) -> dict[str, Any]:
+    """The newer shape's ``failure`` object on a failed item, or ``{}``."""
+    if not isinstance(data, dict):
+        return {}
+    failure = data.get('failure')
+    return failure if isinstance(failure, dict) else {}
+
+
+def _item_claim(item: dict[str, Any]) -> Any:
+    """A receipt item's claim text: ``claim`` in the newer shape, ``claim_text`` in the older."""
+    key = 'claim' if 'claim' in item and 'claim_text' not in item else 'claim_text'
+    return item.get(key, '')
+
+
+def _option_text(option: dict[str, Any]) -> Any:
+    """A picker option's text: ``text`` in the older shape, ``claim`` in the newer."""
+    return option['claim'] if option.get('text') is None and 'claim' in option else option.get('text', '')
+
+
+def _option(option: Any) -> Any:
+    """A claim-picker option as the tools give it: ``{text, domain, ...}``.
+
+    The newer API names the option's text ``claim``; the tools keep ``text``.
+    """
+    if not isinstance(option, dict) or option.get('text') is not None or 'claim' not in option:
+        return option
+    out = {'text': option['claim']}
+    out.update((key, value) for key, value in option.items() if key not in ('text', 'claim'))
+    return out
+
+
+def _retryable(data: dict[str, Any]) -> Any:
+    """A failed deep check's retry signal, in either shape."""
+    failure = _failure_block(data)
+    return failure['retryable'] if 'retryable' in failure else data.get('retryable')
+
+
+def _legacy_wait(data: dict[str, Any]) -> Any:
+    """The 429 wait as the older body's ``reset_in_seconds`` would have carried it."""
+    if 'reset_in_seconds' in data:
+        return data['reset_in_seconds']
+    if 'retry_after' in data and data.get('code') not in _UNREAD_WAIT_CODES:
+        return data['retry_after']
+    return None
+
+
+def _legacy_body_error(data: dict[str, Any]) -> Any:
+    """An assess answer's ``error`` as the older body carried it."""
+    if 'error' in data:
+        return data['error']
+    failure = _failure_block(data)
+    return _ASSESS_ERROR_TEXT.get(str(failure.get('code')), failure.get('detail')) if failure else None
+
+
+def _legacy_row(row: Any) -> Any:
+    """An assess row as the older API wrote it.
+
+    The newer row says ``status: failed`` with a null verdict and a ``failure``
+    block, and lists unchecked extras as ``more_claims``; the older one says
+    ``verdict: "Error"`` / ``confidence: "low"``, ``error_code`` + ``hint``, and
+    ``identified_claims``. An older row passes through untouched.
+    """
+    if not isinstance(row, dict) or not ('status' in row or 'failure' in row or 'more_claims' in row):
+        return row
+    out = dict(row)
+    failure = _failure_block(row)
+    failed = row.get('status') == 'failed'
+    if failed:
+        out['verdict'] = 'Error' if row.get('verdict') is None else row['verdict']
+        out['confidence'] = 'low' if row.get('confidence') is None else row['confidence']
+    if 'code' in failure:
+        out['error_code'] = 'no_claim' if failure['code'] == _NO_CHECKABLE_CLAIM else failure['code']
+    elif out.get('error_code') == _NO_CHECKABLE_CLAIM:
+        out['error_code'] = 'no_claim'
+    if 'hint' in failure:
+        out['hint'] = failure['hint']
+    if 'more_claims' in row:
+        out['identified_claims'] = row['more_claims']
+    if not failed and out.get('identified_claims') and not out.get('hint'):
+        out['hint'] = _COMPOUND_ROW_HINT
+    return out
+
+
+def _legacy_failed_poll(data: dict[str, Any]) -> dict[str, Any]:
+    """A failed deep check's poll body as the older API wrote it.
+
+    The newer body nests the reason, class and retry signal in ``failure``
+    (the reason as ``code``) and has no ``error``; the older ``error`` text is
+    rebuilt from the code. An older body passes through untouched.
+    """
+    failure = _failure_block(data)
+    if not failure:
+        return data
+    out = {key: value for key, value in data.items() if key != 'failure'}
+    code = failure.get('code')
+    if 'code' in failure:
+        out['failure_reason'] = 'not_a_claim' if code == _NO_CHECKABLE_CLAIM else code
+    for key in ('failure_class', 'retryable'):
+        if key in failure:
+            out[key] = failure[key]
+    if 'error' not in out and isinstance(code, str) and code:
+        out['error'] = _VERIFY_ERROR_TEXT.get(code, f'Pipeline stopped at: {code}')
+    return out
+
+
+def _legacy_detail(data: dict[str, Any]) -> Any:
+    """``detail`` as the older body carried it.
+
+    A request-schema 422 carried a list of validation items; the newer body
+    carries a sentence and the same items under ``errors``. Their ``loc``
+    starts ``["body", "payload", ...]``, which tells them apart from the
+    handler's own checks, whose older ``detail`` was already a sentence.
+    """
+    detail = data.get('detail')
+    errors = data.get('errors')
+    if not isinstance(detail, str) or not isinstance(errors, list) or not errors:
+        return detail
+    items = [e for e in errors if isinstance(e, dict)]
+    if len(items) != len(errors) or not all(list(e.get('loc') or [])[:2] == ['body', 'payload'] for e in items):
+        return detail
+    rebuilt = []
+    for e in items:
+        item = {'type': e.get('type'), 'loc': e.get('loc'), 'msg': e.get('msg')}
+        item.update((key, value) for key, value in e.items() if key not in item)
+        rebuilt.append(item)
+    return rebuilt
+
+
 def _error_result(resp: client.ApiResponse) -> dict[str, Any]:
     """Map a non-2xx API response to a clean, agent-safe tool result."""
     status, data = resp.status, resp.data
-    detail = data.get('detail') or data.get('error')
+    detail = _legacy_detail(data) or data.get('error')
     if status == 0:
         return {'status': 'error', 'message': "Couldn't reach the Lenz API — please retry shortly."}
     if status == 401:
@@ -744,7 +906,7 @@ def _error_result(resp: client.ApiResponse) -> dict[str, Any]:
     if status == 429:
         # Pass the real wait through when the server states one — "shortly" is
         # a lie in front of the /extract daily cap, which can be hours away.
-        retry_after = data.get('reset_in_seconds') or resp.headers.get('retry-after')
+        retry_after = _legacy_wait(data) or resp.headers.get('retry-after')
         message = 'Rate limited — slow down and retry shortly.'
         try:
             seconds = int(retry_after) if retry_after is not None else 0
@@ -868,11 +1030,11 @@ async def assess_claim(
     if not raw_claims:
         return {
             'status': 'no_claim',
-            'message': data.get('error') or 'No verifiable factual claim was detected in the text.',
+            'message': _legacy_body_error(data) or 'No verifiable factual claim was detected in the text.',
         }
 
     claims_out = []
-    for c in raw_claims:
+    for c in map(_legacy_row, raw_claims):
         entry = {
             'claim': c.get('claim', ''),
             'verdict': c.get('verdict', ''),
@@ -1248,7 +1410,7 @@ async def select_claims(
         return _error_result(resp)
 
     items = resp.data.get('items') or []
-    started = [{'task_id': it.get('task_id'), 'claim': it.get('claim_text', '')} for it in items]
+    started = [{'task_id': it.get('task_id'), 'claim': _item_claim(it)} for it in items]
     partial = bool(resp.data.get('partial'))
 
     # One selection is the common case (the user picked the claim that matters):
@@ -1278,7 +1440,7 @@ async def select_claims(
 
 def _needs_input_message(data: dict[str, Any]) -> str:
     """The human-readable half of a multi_claim result: numbered options + what to do."""
-    texts = [c.get('text', '') if isinstance(c, dict) else str(c) for c in data.get('claims') or []]
+    texts = [_option_text(c) if isinstance(c, dict) else str(c) for c in data.get('claims') or []]
     lead = (
         'The text contains several claims and each verification checks one. Show the user '
         'this list and ask which to check (or choose the one that matters to them), then call '
@@ -1321,7 +1483,7 @@ async def _verification_result(
         reason = data.get('reason', '')
         out = {'status': 'needs_input', 'task_id': task_id, 'reason': reason}
         if data.get('claims'):
-            out['claims'] = data['claims']
+            out['claims'] = [_option(c) for c in data['claims']]
         if reason == 'multi_claim':
             # The options ride in the TEXT, numbered, with the instruction to
             # put them to the user. When the picker card was the only path
@@ -1338,6 +1500,7 @@ async def _verification_result(
         return out
 
     if status == 'failed':
+        data = _legacy_failed_poll(data)
         out = {'status': 'failed', 'message': data.get('error') or 'The verification failed.'}
         # Pass the REST contract's two axes through: where it stopped and why
         # (+ the derived retry signal), so an agent can branch on `retryable`
@@ -1531,7 +1694,7 @@ async def _start_verification_for_card(claim: str, ctx: Context, retry_of: str) 
             return {'status': 'invalid_request', 'message': 'That is not a check that can be tried again.'}
         # Ownership is the status API's: another user's task_id reads as not found.
         prior = await client.verify_status(authorization, task_id=retry_of)
-        if not (prior.ok and prior.data.get('status') == 'failed' and prior.data.get('retryable') is True):
+        if not (prior.ok and prior.data.get('status') == 'failed' and _retryable(prior.data) is True):
             return {'status': 'invalid_request', 'message': 'That is not a check that can be tried again.'}
 
     kwargs: dict[str, Any] = {'text': text, 'language': '', 'depth': config.CARD_VERIFY_DEPTH}
@@ -1618,7 +1781,7 @@ async def _select_claims_for_card(task_id: str, claims: list[str], ctx: Context)
         return _error_result(resp)
 
     started = [
-        {'task_id': item.get('task_id'), 'claim': item.get('claim_text', '')}
+        {'task_id': item.get('task_id'), 'claim': _item_claim(item)}
         for item in (resp.data.get('items') or [])
         if item.get('task_id')
     ]
@@ -1743,11 +1906,36 @@ async def check_usage(ctx: Context) -> dict[str, Any]:
 
     data = resp.data
 
-    def _remaining(block: Any) -> int | None:
-        return block.get('remaining') if isinstance(block, dict) else None
-
     raw_credits = data.get('credits')
     credits: dict[str, Any] = raw_credits if isinstance(raw_credits, dict) else {}
+    raw_costs = data.get('costs')
+    costs: dict[str, Any] = raw_costs if isinstance(raw_costs, dict) else {}
+    # The older body carries a block per capability, `quota_resets_at` and a
+    # `bonus` in the pool; the newer one only the pool (with its own
+    # `resets_at`, no `bonus`) and the price list, from which the same
+    # per-capability numbers follow. The newer shape is recognised by what it
+    # has, so an older body that merely lacks a block reads as before.
+    newer = (
+        'resets_at' in credits
+        and 'bonus' not in credits
+        and not any(key in data for key in ('assess', 'verify', 'ask', 'quota_resets_at'))
+    )
+    older = not newer
+
+    def _remaining(capability: str) -> int | None:
+        block = data.get(capability)
+        if older or isinstance(block, dict):
+            return block.get('remaining') if isinstance(block, dict) else None
+        pool, cost = credits.get('remaining'), costs.get(capability)
+        if isinstance(pool, int) and isinstance(cost, int) and cost > 0:
+            return pool // cost
+        return None
+
+    resets_at = (
+        data.get('quota_resets_at') or data.get('resets_at')
+        if older
+        else credits.get('resets_at') or data.get('resets_at')
+    )
 
     return {
         'status': 'ok',
@@ -1757,9 +1945,9 @@ async def check_usage(ctx: Context) -> dict[str, Any]:
         'costs': data.get('costs') or {},
         'cost_options': data.get('cost_options') or {},
         # Kept: the same balance projected into each capability's own unit.
-        'assess_remaining': _remaining(data.get('assess')),
-        'verify_remaining': _remaining(data.get('verify')),
-        'resets_at': data.get('quota_resets_at') or data.get('resets_at'),
+        'assess_remaining': _remaining('assess'),
+        'verify_remaining': _remaining('verify'),
+        'resets_at': resets_at,
         'next': USAGE_NEXT_NOTE,
     }
 
