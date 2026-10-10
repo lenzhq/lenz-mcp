@@ -244,7 +244,11 @@ TRIGGER_SENTENCE = (
 # their budget, so an addition has to replace words rather than append them.
 # There is no soft failure: a client that truncates would cut the end of the
 # tool guidance and nothing local would show it.
-INSTRUCTIONS_MAX_CHARS = 2214
+INSTRUCTIONS_MAX_CHARS = 2372
+# Raised from 2,214 for the two citation-check tools: one sentence (179 characters)
+# saying when `check_citations` is for and that `get_citation_check` waits for a
+# running one, because a tool the instructions do not name is a tool a host that
+# loads tools on demand may never reach.
 # Raised from 1,237 for the draft sentence: the tool-choice eval
 # measured both vendors splitting a pasted draft into `claims` and rewriting it
 # on the way — resolved pronouns, invented figures — so the tool's own text has
@@ -1293,6 +1297,8 @@ _TOOL_NAMES = (
     'check_usage',
     'ask_followup',
     'select_claims',
+    'check_citations',
+    'get_citation_check',
 )
 
 
@@ -1365,8 +1371,12 @@ def test_every_result_string_in_the_server_keeps_the_split():
     # A scan that reads nothing passes forever: name what it must see.
     for must in ('LOW_CONFIDENCE_NEXT_STEP', 'STILL_RUNNING_AFTER_WAIT', 'FOLLOWUP_NOT_COMPLETED', 'ASSESS_NOTES_NOTE'):
         assert must in strings, must
-    bad = {name: v for name, value in strings.items() if (v := _say_do_violations(value.replace('{seconds}', '130')))}
+    # A placeholder stands in for the number a message is filled with.
+    bad = {name: v for name, value in strings.items() if (v := _say_do_violations(re.sub(r'\{\w+\}', '130', value)))}
     assert bad == {}
+    # ... and the citation-check notes are among the strings it read.
+    for must in ('CITECHECK_PRESENTATION_NOTE', 'CITECHECK_MORE_NEXT_STEP', 'CITECHECK_STILL_RUNNING'):
+        assert must in strings, must
 
 
 def test_the_whole_assess_confidence_note_keeps_the_split():
@@ -1381,6 +1391,84 @@ def test_quota_messages_name_credits_and_nothing_to_buy():
         assert 'credits' in text
         for word in ('plan', 'upgrade', 'price', '$', '€', 'Pro'):
             assert word not in text, (word, text)
+
+
+def test_the_citation_check_notes_that_are_not_plain_strings_keep_the_split():
+    # The result strings kept in a table, and the ones the code builds, are scanned
+    # as the plain constants are: a tool is named only as the object of an instruction.
+    texts = list(server.CITECHECK_FAILED_MESSAGES.values())
+    texts += list(server.CITECHECK_FINDING_LABELS.values()) + list(server.CITECHECK_REASONS.values())
+    texts += [server.CITECHECK_FAILED_LABEL, server.CITECHECK_PENDING_LABEL, server.CITECHECK_FALLBACK_REASON]
+    texts.append(server.CITECHECK_IN_FLIGHT_MESSAGE.format(wait='60 seconds'))
+    for text in texts:
+        assert _say_do_violations(text) == [], text
+
+
+def _citation_check_outputs(monkeypatch):
+    """Every result the citation tools build from the API's own shapes, both of them."""
+    import copy
+    import json
+    import pathlib
+
+    shapes = json.loads((pathlib.Path(__file__).parent / 'citecheck_shapes.json').read_text(encoding='utf-8'))
+    outputs = []
+
+    async def _no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(server, '_sleep', _no_sleep)
+    for name, entry in shapes.items():
+        for shape in ('legacy', 'canonical'):
+            raw = entry[shape]
+            response = ApiResponse(
+                status=raw['status'],
+                data=copy.deepcopy(raw['body']),
+                headers={k.lower(): v for k, v in raw.get('headers', {}).items()},
+            )
+            if name.startswith('get_'):
+                _patch_api(monkeypatch, 'citecheck_status', response)
+                outputs.append((name, shape, _run(server.get_citation_check('ab12cd34', _ctx()))))
+            else:
+                _patch_api(monkeypatch, 'citecheck_status', ApiResponse(status=200, data={'status': 'checking'}))
+                _patch_api(monkeypatch, 'citecheck', response)
+                outputs.append((name, shape, _run(server.check_citations('A draft [a](https://e.org/a).', _ctx()))))
+    return outputs
+
+
+_NOTE_KEYS = frozenset({'message', 'next_step', 'presentation', 'resolve_with'})
+
+
+def _built_notes(value, path=''):
+    """The sentences a result tells the model: its notes, wherever they sit in the result."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in _NOTE_KEYS and isinstance(item, str):
+                yield f'{path}.{key}', item
+            else:
+                yield from _built_notes(item, f'{path}.{key}')
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from _built_notes(item, f'{path}[{index}]')
+
+
+def test_every_note_a_citation_check_result_builds_keeps_the_split(monkeypatch):
+    seen = 0
+    for name, shape, out in _citation_check_outputs(monkeypatch):
+        if out['status'] == 'quota_exhausted':
+            continue  # running out is the one moment credits ARE the message (see _SAY_DO_EXEMPT)
+        for path, text in _built_notes(out):
+            seen += 1
+            assert _say_do_violations(text) == [], (name, shape, path, text)
+    # A scan that reads nothing passes forever.
+    assert seen > 20
+
+
+def test_the_continuation_note_a_result_builds_keeps_the_split(monkeypatch):
+    outputs = {name: out for name, shape, out in _citation_check_outputs(monkeypatch) if shape == 'canonical'}
+    more = outputs['get_text_limit_reached']['more_citations']
+    assert more['next_step'] == server.CITECHECK_MORE_NEXT_STEP
+    assert _say_do_violations(more['next_step']) == []
+    assert '`check_citations`' in more['next_step']
 
 
 @pytest.mark.parametrize('already_running', [False, True])

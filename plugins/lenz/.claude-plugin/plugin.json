@@ -1,7 +1,7 @@
 {
   "name": "lenz",
   "displayName": "Lenz Fact-Check",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Check the factual claims in a draft or an answer against independent sources: a quick verdict with a confidence for each claim, or a deep check that shows the key finding and its sources.",
   "author": {
     "name": "Lenz",
