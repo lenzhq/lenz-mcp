@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 
 import * as copy from './copy.js';
 import { createDeepCheck } from './logic/deep-check.js';
-import { domainOf, formatElapsed, isWebUrl, text, verdictKey } from './logic/format.js';
+import { domainOf, formatElapsed, isWebUrl, languageName, text, verdictKey } from './logic/format.js';
 import { buttonStrength, changedFrom, deepResult, isSendableId, routePayload, tally } from './logic/route.js';
 import { DELIVER_MESSAGE, readDelivery } from './logic/delivery.js';
 import { buildSnapshot } from './logic/snapshot.js';
@@ -279,7 +279,7 @@ function Sources({ result, host }) {
                 <p class="lz-body">{title}</p>
               )}
               {meta ? <p class="lz-meta lz-source-meta">{meta}</p> : null}
-              {s.quote ? <p class="lz-quote">{`“${s.quote}”`}</p> : null}
+              {s.quote ? <Quote quote={s.quote} language={s.quoteLanguage} /> : null}
             </li>
           );
         })}
@@ -290,6 +290,21 @@ function Sources({ result, host }) {
         </button>
       ) : null}
     </div>
+  );
+}
+
+// A source's quote. A non-English one is marked with its language (the web's
+// pattern: a small tag before it, `lang` on the quote so it is read and
+// hyphenated as that language). No translation. Both values are text nodes.
+function Quote({ quote, language }) {
+  if (!language) return <p class="lz-quote">{`“${quote}”`}</p>;
+  return (
+    <p class="lz-quote lz-quote-foreign" lang={language}>
+      <span class="lz-quote-lang" lang="en">
+        {languageName(language)}
+      </span>
+      <span dir="auto">{`“${quote}”`}</span>
+    </p>
   );
 }
 
@@ -348,8 +363,8 @@ const TERMINAL = new Set(['failed', 'quota', 'unavailable', 'unrecoverable']);
 // announcements. The single card and every list row use this same hook.
 function useDeepCheck({ row, host, announce, registerCompleted, label = '', store: given, checkKey = '', order = 0, reportState }) {
   const own = useMemo(
-    () => (given === null ? null : createRowStore(safeStorage(), { claim: row.claim, quickVerdict: row.verdict })),
-    [row.claim, row.verdict, given === null],
+    () => (given === null ? null : createRowStore(safeStorage(), { claim: row.claim, quickVerdict: row.verdict, language: row.language })),
+    [row.claim, row.verdict, row.language, given === null],
   );
   const store = given === null ? null : own;
   const [state, setState] = useState({ kind: 'idle' });
@@ -358,6 +373,7 @@ function useDeepCheck({ row, host, announce, registerCompleted, label = '', stor
   useEffect(() => {
     const check = createDeepCheck({
       claim: row.claim,
+      language: row.language,
       host,
       store,
       clock: { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (id) => clearTimeout(id) },
@@ -376,7 +392,7 @@ function useDeepCheck({ row, host, announce, registerCompleted, label = '', stor
       onAdopted: () => reportState && checkKey && reportState(checkKey, 'running'),
     });
     return () => check.dispose();
-  }, [row.claim, row.verdict]);
+  }, [row.claim, row.verdict, row.language]);
 
   // Announce stage changes and the result, once each, through the one status region.
   const lastStage = useRef('');
@@ -605,7 +621,7 @@ function Row({ index, row, host, open, hidden, onToggle, announce, registerCompl
   );
 }
 
-const rowId = (row) => `${row.claim}\u0000${row.verdict}`;
+const rowId = (row) => `${row.claim}\u0000${row.verdict}\u0000${row.language || ''}`;
 
 function ListCard({ rows, host, announce, registerCompleted, reportState }) {
   const [allRows, setAllRows] = useState(false);
@@ -999,7 +1015,7 @@ export function App({ host, payload, announce, registerCompleted, reportState })
     case 'waiting':
       return <Frame heading={copy.WAITING} />;
     case 'single':
-      return <SingleCard key={`${route.row.claim}|${route.row.verdict}`} row={route.row} host={host} announce={announce} registerCompleted={registerCompleted} reportState={reportState} />;
+      return <SingleCard key={`${route.row.claim}|${route.row.verdict}|${route.row.language}`} row={route.row} host={host} announce={announce} registerCompleted={registerCompleted} reportState={reportState} />;
     case 'list':
       return <ListCard rows={route.rows} host={host} announce={announce} registerCompleted={registerCompleted} reportState={reportState} />;
     case 'row-error':

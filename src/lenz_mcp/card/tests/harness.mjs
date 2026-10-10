@@ -53,6 +53,8 @@ window.addEventListener('message', (event) => {
     const delay = (answer && answer.__delay) || 0;
     setTimeout(() => reply(card.frame, msg.id, { content: [{ type: 'text', text: JSON.stringify(answer) }], structuredContent: answer }), delay);
   } else if (msg.id !== undefined && msg.method) {
+    // A host slow to take a context update: hold the answer until released.
+    if (cfg.holdUpdates && msg.method === 'ui/update-model-context') { (card.held = card.held || []).push(msg.id); return; }
     reply(card.frame, msg.id, {});
   }
 });
@@ -76,6 +78,13 @@ window.startCard = (name, config) => {
 window.teardown = (name) => {
   const card = window.cards[name];
   card.frame.contentWindow.postMessage({ jsonrpc: '2.0', id: 9001, method: 'ui/resource-teardown', params: { reason: 'test' } }, '*');
+};
+window.releaseHeld = (name) => {
+  const card = window.cards[name];
+  const held = card.held || [];
+  card.held = [];
+  window.releasedAt = Date.now();
+  for (const id of held) reply(card.frame, id, {});
 };
 window.removeCard = (name) => { window.cards[name].frame.remove(); delete window.cards[name]; };
 // A host may deliver another tool result into a card that is already mounted
@@ -153,6 +162,20 @@ export async function startHarness() {
       });
       await page.goto(`${base}/host.html`);
       if (dark) await page.evaluate(() => { document.body.classList.add('dark'); document.documentElement.style.colorScheme = 'dark'; });
+      return { page, context, errors };
+    },
+    // A second host page in the SAME browser context as `context`: the sandbox
+    // origin's localStorage is shared, sessionStorage and the frames are not.
+    // That is what a new chat is to a card: the same storage as the last one,
+    // a different conversation.
+    async pageInContext(context) {
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(String(e)));
+      page.on('console', (m) => {
+        if (m.type() === 'error') errors.push(m.text());
+      });
+      await page.goto(`${base}/host.html`);
       return { page, context, errors };
     },
     async close() {

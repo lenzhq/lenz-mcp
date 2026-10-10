@@ -174,6 +174,265 @@ test('two cards in one chat each push their own snapshot', async () => {
   await page.context().close();
 });
 
+// ── A later card for the same claim, in a NEW conversation ──────────────
+//
+// What the model has been told lives in the sandbox origin's localStorage,
+// which outlives the conversation. The server stamps every card it mounts with
+// `_card.conversation` (a hash of the host's conversation id, when the host
+// sends one) and `_card.call_id` (minted once per mounting result). A page in
+// the same browser context shares localStorage with the first one and has its
+// own frames, which is a new chat to a card.
+const CONV_A = '1111aaaa2222bbbb';
+const CONV_B = '3333cccc4444dddd';
+const mounted = (result, { conversation, callId }) => ({
+  ...result,
+  _card: { ...(conversation ? { conversation } : {}), call_id: callId },
+});
+const updatesOf = async (page) => (await log(page)).filter((e) => e.method === 'ui/update-model-context');
+const waitForUpdates = (page, count) =>
+  page.waitForFunction((c) => window.log.filter((e) => e.method === 'ui/update-model-context').length >= c, count, { timeout: 5000 });
+
+test('ChatGPT: a later card for the same claim in a new conversation announces its finished check once; a replay of the first does not', async () => {
+  const first = await harness.page();
+  const tools = {
+    start_verification_widget: [withDeliver({ status: 'submitted', task_id: 'task-1' })],
+    get_verification_widget: [withDeliver(COMPLETED)],
+  };
+  await first.page.evaluate((c) => window.startCard('a', c), config({ tools, toolResult: mounted(QUICK_LOW, { conversation: CONV_A, callId: 'a000000000000001' }) }));
+  const frameA = await frameOf(first.page, 'a');
+  await frameA.getByRole('button', { name: /Check against sources/ }).click();
+  await frameA.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await first.page.waitForTimeout(400);
+  assert.equal((await messagesOf(first.page, 'a')).length, 1, 'the first conversation is told once');
+
+  // A new chat: the same storage, the same claim, a new conversation id.
+  const second = await harness.pageInContext(first.context);
+  await second.page.evaluate((c) => window.startCard('b', c), config({
+    tools: { get_verification_widget: [withDeliver(COMPLETED)] },
+    toolResult: mounted(QUICK_LOW, { conversation: CONV_B, callId: 'b000000000000001' }),
+  }));
+  const frameB = await frameOf(second.page, 'b');
+  await frameB.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await second.page.waitForTimeout(600);
+  assert.equal((await messagesOf(second.page, 'b')).length, 1, 'the new conversation is told its finished check, once');
+
+  // The first conversation's card shown again (same payload): nothing new.
+  const replay = await harness.pageInContext(first.context);
+  await replay.page.evaluate((c) => window.startCard('c', c), config({
+    tools: { get_verification_widget: [withDeliver(COMPLETED)] },
+    toolResult: mounted(QUICK_LOW, { conversation: CONV_A, callId: 'a000000000000001' }),
+  }));
+  const frameC = await frameOf(replay.page, 'c');
+  await frameC.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await replay.page.waitForTimeout(600);
+  assert.deepEqual(await messagesOf(replay.page, 'c'), [], 'a replayed payload re-posts nothing');
+  assert.deepEqual([...first.errors, ...second.errors, ...replay.errors].filter((e) => !/Content Security Policy/.test(e)), []);
+  await first.context.close();
+});
+
+test('ChatGPT: two cards for one check in the same conversation announce it once', async () => {
+  const { page } = await harness.page();
+  const tools = {
+    start_verification_widget: [withDeliver({ status: 'submitted', task_id: 'task-1' })],
+    get_verification_widget: [withDeliver(COMPLETED)],
+  };
+  await page.evaluate((c) => window.startCard('s1', c), config({ tools, toolResult: mounted(QUICK_LOW, { conversation: CONV_A, callId: 'a000000000000001' }) }));
+  await page.evaluate((c) => window.startCard('s2', c), config({ tools, toolResult: mounted(QUICK_LOW, { conversation: CONV_A, callId: 'a000000000000002' }) }));
+  const one = await frameOf(page, 's1');
+  const two = await frameOf(page, 's2');
+  await one.getByRole('button', { name: /Check against sources/ }).click();
+  await one.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await two.getByRole('button', { name: /Check against sources/ }).click();
+  await two.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await page.waitForTimeout(600);
+  assert.equal((await log(page)).filter((e) => e.method === 'ui/message').length, 1, 'one check in one conversation, one user turn');
+  await page.context().close();
+});
+
+test('ChatGPT: a host that sends no conversation id keeps the ledger it had', async () => {
+  const first = await harness.page();
+  const tools = {
+    start_verification_widget: [withDeliver({ status: 'submitted', task_id: 'task-1' })],
+    get_verification_widget: [withDeliver(COMPLETED)],
+  };
+  await first.page.evaluate((c) => window.startCard('n1', c), config({ tools, toolResult: mounted(QUICK_LOW, { callId: 'a000000000000001' }) }));
+  const frameA = await frameOf(first.page, 'n1');
+  await frameA.getByRole('button', { name: /Check against sources/ }).click();
+  await frameA.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await first.page.waitForTimeout(400);
+  assert.equal((await messagesOf(first.page, 'n1')).length, 1);
+
+  // Nothing says this is another conversation, so the check stays announced:
+  // never worse than before, and a duplicate user turn is the worse mistake.
+  const second = await harness.pageInContext(first.context);
+  await second.page.evaluate((c) => window.startCard('n2', c), config({
+    tools: { get_verification_widget: [withDeliver(COMPLETED)] },
+    toolResult: mounted(QUICK_LOW, { callId: 'b000000000000001' }),
+  }));
+  const frameB = await frameOf(second.page, 'n2');
+  await frameB.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await second.page.waitForTimeout(600);
+  assert.deepEqual(await messagesOf(second.page, 'n2'), []);
+  await first.context.close();
+});
+
+test('Claude: a new call for the same claim pushes its finished check; a replay of the first call does not', async () => {
+  const first = await harness.page();
+  const tools = {
+    start_verification_widget: [withDeliver({ status: 'submitted', task_id: 'task-1' }, 'context')],
+    get_verification_widget: [withDeliver(COMPLETED, 'context')],
+  };
+  await first.page.evaluate((c) => window.startCard('a', c), config({ tools, toolResult: mounted(QUICK_LOW, { callId: 'a000000000000001' }) }));
+  const frameA = await frameOf(first.page, 'a');
+  await frameA.getByRole('button', { name: /Check against sources/ }).click();
+  await frameA.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await waitForUpdates(first.page, 1);
+
+  // A new chat asks about the same claim: a new call, so a new id. Its card
+  // recovers the finished check and the model of THIS chat has not heard of it.
+  const second = await harness.pageInContext(first.context);
+  await second.page.evaluate((c) => window.startCard('b', c), config({
+    tools: { get_verification_widget: [withDeliver(COMPLETED, 'context')] },
+    toolResult: mounted(QUICK_LOW, { callId: 'b000000000000001' }),
+  }));
+  const frameB = await frameOf(second.page, 'b');
+  await frameB.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await waitForUpdates(second.page, 1);
+  assert.match((await updatesOf(second.page))[0].params.content[0].text, /verification_id abcd1234/);
+
+  // The first call's result replayed by the host: the same id, nothing to push.
+  const replay = await harness.pageInContext(first.context);
+  await replay.page.evaluate((c) => window.startCard('c', c), config({
+    tools: { get_verification_widget: [withDeliver(COMPLETED, 'context')] },
+    toolResult: mounted(QUICK_LOW, { callId: 'a000000000000001' }),
+  }));
+  const frameC = await frameOf(replay.page, 'c');
+  await frameC.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await replay.page.waitForTimeout(600);
+  assert.deepEqual(await updatesOf(replay.page), [], 'a replayed call tells the model nothing twice');
+  await first.context.close();
+});
+
+test('a new mounting result delivered into a mounted card starts its record of what the model was told afresh', async () => {
+  const { page } = await harness.page();
+  const tools = {
+    start_verification_widget: [withDeliver({ status: 'submitted', task_id: 'task-1' }, 'context')],
+    get_verification_widget: [withDeliver(COMPLETED, 'context')],
+  };
+  await page.evaluate((c) => window.startCard('x', c), config({ tools, toolResult: mounted(QUICK_LOW, { callId: 'a000000000000001' }) }));
+  const frame = await frameOf(page, 'x');
+  await frame.getByRole('button', { name: /Check against sources/ }).click();
+  await frame.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await waitForUpdates(page, 1);
+
+  // The host hands the same mounted card another call's result.
+  await page.evaluate((r) => window.pushResult('x', r), mounted(QUICK_LOW, { callId: 'a000000000000002' }));
+  await waitForUpdates(page, 2);
+  assert.equal((await updatesOf(page)).length, 2);
+  await page.context().close();
+});
+
+test('ChatGPT: a new conversation delivered into a mounted card announces again, once', async () => {
+  const { page } = await harness.page();
+  const tools = {
+    start_verification_widget: [withDeliver({ status: 'submitted', task_id: 'task-1' })],
+    get_verification_widget: [withDeliver(COMPLETED)],
+  };
+  await page.evaluate((c) => window.startCard('y', c), config({ tools, toolResult: mounted(QUICK_LOW, { conversation: CONV_A, callId: 'a000000000000001' }) }));
+  const frame = await frameOf(page, 'y');
+  await frame.getByRole('button', { name: /Check against sources/ }).click();
+  await frame.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await page.waitForTimeout(400);
+  assert.equal((await messagesOf(page, 'y')).length, 1);
+
+  await page.evaluate((r) => window.pushResult('y', r), mounted(QUICK_LOW, { conversation: CONV_B, callId: 'b000000000000001' }));
+  await page.waitForFunction(() => window.log.filter((e) => e.method === 'ui/message').length >= 2, null, { timeout: 5000 });
+  await page.waitForTimeout(400);
+  assert.equal((await messagesOf(page, 'y')).length, 2);
+  await page.context().close();
+});
+
+test('a mounting change never overlaps a host write still in flight: B\'s push waits for A\'s, and B\'s is the last', async () => {
+  const { page } = await harness.page();
+  const tools = {
+    start_verification_widget: [withDeliver({ status: 'submitted', task_id: 'task-1' }, 'context')],
+    get_verification_widget: [withDeliver(COMPLETED, 'context')],
+  };
+  await page.evaluate((c) => window.startCard('w', c), config({ tools, holdUpdates: true, toolResult: mounted(QUICK_LOW, { callId: 'a000000000000001' }) }));
+  const frame = await frameOf(page, 'w');
+  await frame.getByRole('button', { name: /Check against sources/ }).click();
+  await frame.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await waitForUpdates(page, 1);
+
+  // Another mounting is delivered while A's update is still pending on the host.
+  await page.evaluate((r) => window.pushResult('w', r), mounted(QUICK_LOW, { callId: 'a000000000000002' }));
+  await frame.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await page.waitForTimeout(800);
+  assert.equal((await updatesOf(page)).length, 1, 'B writes nothing while A\'s write is in flight');
+
+  await page.evaluate(() => window.releaseHeld('w'));
+  await waitForUpdates(page, 2);
+  const updates = await updatesOf(page);
+  assert.equal(updates.length, 2);
+  const releasedAt = await page.evaluate(() => window.releasedAt);
+  assert.ok(updates[1].at >= releasedAt, 'B\'s write started only after A\'s settled, so it is the one the host keeps');
+  await page.evaluate(() => window.releaseHeld('w'));
+  await page.context().close();
+});
+
+test('the same claim and verdict in another language is a different check: no recovery, the start button, and its own language', async () => {
+  const quick = (language) => ({ ...QUICK_LOW, claims: [{ ...QUICK_LOW.claims[0], language }] });
+  const tools = {
+    start_verification_widget: [{ status: 'submitted', task_id: 'task-1' }],
+    get_verification_widget: [COMPLETED],
+  };
+  const first = await harness.page();
+  await first.page.evaluate((c) => window.startCard('a', c), config({ tools, toolResult: quick('de') }));
+  const frameA = await frameOf(first.page, 'a');
+  await frameA.getByRole('button', { name: /Check against sources/ }).click();
+  await frameA.getByText('Claim checked').waitFor({ timeout: 12000 });
+
+  // French, same claim and verdict: the German check is not its check.
+  const second = await harness.pageInContext(first.context);
+  await second.page.evaluate((c) => window.startCard('b', c), config({ tools: { start_verification_widget: [{ status: 'submitted', task_id: 'task-2' }], get_verification_widget: [PROCESSING('research', 2, 5)] }, toolResult: quick('fr') }));
+  const frameB = await frameOf(second.page, 'b');
+  const button = frameB.getByRole('button', { name: /Check against sources/ });
+  await button.waitFor();
+  await second.page.waitForTimeout(400);
+  assert.deepEqual(await calls(second.page, 'b'), [], 'nothing recovered for another language');
+  await button.click();
+  const [start] = await waitForCalls(second.page, 'b', 'start_verification_widget', 1);
+  assert.equal(start.params.arguments.language, 'fr');
+
+  // German again: its own check is found.
+  const third = await harness.pageInContext(first.context);
+  await third.page.evaluate((c) => window.startCard('c', c), config({ tools: { get_verification_widget: [COMPLETED] }, toolResult: quick('de') }));
+  const frameC = await frameOf(third.page, 'c');
+  await frameC.getByText('Claim checked').waitFor({ timeout: 12000 });
+  await first.context.close();
+});
+
+test('the quick check\'s language rides to the card\'s deep check; without one nothing extra is sent', async () => {
+  const german = { ...QUICK_LOW, claims: [{ ...QUICK_LOW.claims[0], language: 'de' }] };
+  const { page } = await harness.page();
+  await page.evaluate((c) => window.startCard('l1', c), config({ toolResult: german }));
+  const frame = await frameOf(page, 'l1');
+  await frame.getByRole('button', { name: /Check against sources/ }).click();
+  const [start] = await waitForCalls(page, 'l1', 'start_verification_widget', 1);
+  assert.deepEqual(start.params.arguments, { claim: '90% of startups fail within their first year.', language: 'de' });
+
+  // A hostile or malformed value is never forwarded.
+  const hostile = { ...QUICK_LOW, claims: [{ ...QUICK_LOW.claims[0], language: 'de"; drop' }] };
+  await page.context().close();
+  const other = await harness.page();
+  await other.page.evaluate((c) => window.startCard('l2', c), config({ toolResult: hostile }));
+  const frame2 = await frameOf(other.page, 'l2');
+  await frame2.getByRole('button', { name: /Check against sources/ }).click();
+  const [start2] = await waitForCalls(other.page, 'l2', 'start_verification_widget', 1);
+  assert.deepEqual(start2.params.arguments, { claim: '90% of startups fail within their first year.' });
+  await other.context.close();
+});
+
 test('a check that cannot be recovered says so; a retryable failure offers Try again with retry_of', async () => {
   const { page } = await harness.page();
   await page.evaluate((c) => window.startCard('f', c), config({
@@ -1631,3 +1890,35 @@ for (const width of [440, 480, 735]) {
     assert.deepEqual(errors, []);
   });
 }
+
+test('a non-English source quote is tagged with its language and marked with lang; others are not', async () => {
+  const { page, errors } = await harness.page();
+  const result = JSON.parse(JSON.stringify(F.deep['deep-quote-languages'].result));
+  // The server drops a malformed code; a card fed one directly must too.
+  result.sources[2].quote_language = '"><img src=x onerror=alert(1)>';
+  result.sources[1].quote_language = null;
+  await page.evaluate((c) => window.startCard('ql', c), config({
+    toolResult: F.quick['quick-low'].toolResult,
+    tools: { start_verification_widget: [SUBMITTED], get_verification_widget: [result] },
+  }));
+  const frame = await frameOf(page, 'ql');
+  await frame.getByRole('button', { name: /Check against sources/ }).click();
+  const card = frame.locator('.lz');
+  await card.getByText('Claim checked').waitFor({ timeout: 10000 });
+  const quotes = card.locator('.lz-sources > li .lz-quote');
+  assert.equal(await quotes.count(), 3);
+  const first = quotes.nth(0);
+  assert.equal(await first.getAttribute('lang'), 'uk');
+  const tag = first.locator('.lz-quote-lang');
+  assert.equal(await tag.textContent(), 'Ukrainian');
+  assert.equal(await tag.getAttribute('lang'), 'en');
+  assert.match(await first.innerText(), /Пішохідний міст/);
+  for (const i of [1, 2]) {
+    assert.equal(await quotes.nth(i).getAttribute('lang'), null);
+    assert.equal(await quotes.nth(i).locator('.lz-quote-lang').count(), 0);
+  }
+  assert.equal(await card.locator('.lz-quote-lang').count(), 1);
+  assert.equal(await frame.locator('img').count(), 0);
+  assert.deepEqual(errors.filter((e) => !/Content Security Policy/.test(e)), []);
+  await page.context().close();
+});

@@ -4,7 +4,7 @@
     "mimeTypes": [
       "text/html;profile=mcp-app"
     ],
-    "uri": "ui://lenz/card-v7"
+    "uri": "ui://lenz/card-v8"
   },
   "client": "no-user-agent",
   "declares_mcp_apps": false,

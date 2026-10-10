@@ -1675,7 +1675,9 @@ def test_protocol_language_is_a_closed_enum_on_every_tool_that_takes_it():
 
     tools = {t.name: t for t in _run(server.mcp.list_tools())}
     takes_language = {n for n, t in tools.items() if 'language' in (t.input_schema or {}).get('properties', {})}
-    assert takes_language == {'assess_claim', 'verify_claim', 'ask_followup'}
+    # `start_verification_widget` is the card's own tool (hidden from the model):
+    # it passes the quick check's language code back, so it takes the same enum.
+    assert takes_language == {'assess_claim', 'verify_claim', 'ask_followup', 'start_verification_widget'}
 
     for name in sorted(takes_language):
         schema = tools[name].input_schema
