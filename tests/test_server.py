@@ -372,10 +372,10 @@ def test_assess_client_idempotency_key_covers_the_list(monkeypatch):
     _run(client.assess('Bearer k', claims=['a b'], language=''))
     _run(client.assess('Bearer k', text='a b', language=''))
     (body1, key1), (body2, key2), (body3, key3), (body4, key4) = captured
-    assert body1 == {'claims': ['a', 'b'], 'language': ''}
+    assert body1 == {'claims': ['a', 'b'], 'language': 'auto'}
     assert key1 == key2
     assert key3 != key1
-    assert body4 == {'claim': 'a b', 'language': ''}
+    assert body4 == {'claim': 'a b', 'language': 'auto'}
     assert key4 != key3
 
 
@@ -1504,13 +1504,13 @@ def test_client_verify_targets_verify_endpoint(monkeypatch):
     _run(client.verify('Bearer k', text='hi', language=''))
     assert cap['method'] == 'POST'
     assert cap['path'] == '/verify'
-    assert cap['json'] == {'claim': 'hi', 'language': '', 'depth': 'standard'}
+    assert cap['json'] == {'claim': 'hi', 'language': 'auto', 'depth': 'standard'}
 
 
 def test_client_verify_sends_the_requested_depth(monkeypatch):
     cap = _capture_request(monkeypatch)
     _run(client.verify('Bearer k', text='hi', language='', depth='low'))
-    assert cap['json'] == {'claim': 'hi', 'language': '', 'depth': 'low'}
+    assert cap['json'] == {'claim': 'hi', 'language': 'auto', 'depth': 'low'}
 
 
 def test_client_verify_status_targets_status_endpoint(monkeypatch):

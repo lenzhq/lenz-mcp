@@ -92,6 +92,12 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
 - **Directional, not absolute.** Confidence is bucketed (high / medium / low), not
   a calibrated probability. Never present a verdict as certain: surface the
   confidence and keep the caveat.
+- **Pass the claim in the user's own language.** Lenz reads the language of the answer from
+  the text you send, so a German claim goes in as German words, not translated or
+  paraphrased into English. Leave `language` unset; set it only when the user explicitly asks
+  for the answer in another language (`en`, `de`, `es` and the other supported codes), never to
+  match the conversation or the locale. Verdicts and written results follow the language; a
+  quick check's reviewer note follows the text the reviewer saw.
 - **Spend `verify_claim` deliberately.** One credit pool funds every tool, and
   `verify_claim` is by far the most expensive draw on it — every deep check is
   quick checks you no longer have. Start with `assess_claim`. `check_usage` shows the

@@ -712,11 +712,13 @@ CASES: tuple[Case, ...] = (
         ),
         prompt='Stimmt das wirklich?',
         expect='assess_claim',
-        expect_args={'claim': _says('330'), 'claims': _unset, 'language': _unset},
+        expect_args={'claim': _says('eiffelturm', '330'), 'claims': _unset, 'language': _unset},
         forbid=('verify_claim',),
         why=(
             'The unnamed triggers are otherwise English only. A doubt in German must still start the '
-            'quick check, and must not set `language` just because the conversation is German.'
+            'quick check. It must not set `language` just because the conversation is German: Lenz '
+            "reads the language from the claim, so the claim goes in the user's own German words "
+            '("Eiffelturm"), never translated into English.'
         ),
     ),
     Case(
@@ -1169,11 +1171,17 @@ CASES: tuple[Case, ...] = (
         history=(('user', 'Hallo, ich hätte eine Frage.'), ('assistant', 'Gerne, worum geht es?')),
         prompt='Stimmt es, dass Deutschland 2023 mehr Strom exportiert als importiert hat?',
         expect='assess_claim',
-        expect_args={'claim': _says('2023', 'strom'), 'claims': _unset, 'language': _unset},
+        expect_args={
+            'claim': _says('2023', 'strom', 'exportiert', 'importiert'),
+            'claims': _unset,
+            'language': _unset,
+        },
         forbid=('verify_claim',),
         why=(
-            'The description says to leave `language` unset unless the user asks for an output '
-            'language. A model that helpfully sets "de" changes the output language the user did not ask for.'
+            'Left unset, Lenz answers in the language of the claim text, so a German user gets German '
+            'without asking. A model that helpfully sets "de" gains nothing and risks a code the user '
+            'never asked for; one that translates the claim into English first throws away the text the '
+            'language is read from, so the German words ("exportiert", "importiert") must survive.'
         ),
     ),
     Case(
@@ -1187,6 +1195,26 @@ CASES: tuple[Case, ...] = (
             'The other half of `language-german-unset`: the field exists for exactly this request, '
             'and a description tightened until the model never sets it would still pass the case '
             'that expects it unset.'
+        ),
+    ),
+    Case(
+        id='language-explicit-english-on-german',
+        group='language',
+        prompt=(
+            'Check this with Lenz, but answer me in English: "Der Rhein fließt durch die Schweiz und '
+            'mündet in die Nordsee."'
+        ),
+        expect='assess_claim',
+        expect_args={
+            'claim': _says('rhein', ('fließt', 'fliesst'), 'nordsee'),
+            'claims': _unset,
+            'language': _is('en'),
+        },
+        forbid=('verify_claim',),
+        why=(
+            'A German statement from a user who asks for the answer in English. Left unset, the answer '
+            'would follow the claim and come back German; the explicit request is what `language` is for, '
+            'so it must be "en". The claim itself stays German and untranslated.'
         ),
     ),
 )

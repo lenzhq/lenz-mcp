@@ -592,6 +592,16 @@ async def _request(
     )
 
 
+def effective_language(language: str) -> str:
+    """The language a request carries: the caller's code, else ``auto``.
+
+    Applied where a request is built, so the body and the idempotency key
+    describe the same thing: ``auto``, an explicit code and nothing are three
+    different requests with three keys.
+    """
+    return language or 'auto'
+
+
 async def assess(
     authorization: Authorization,
     *,
@@ -610,6 +620,7 @@ async def assess(
     # part of the key: a call that does not send it keeps the key it always had
     # (a repeat inside the replay window still replays), and one that does gets
     # its own, since the API refuses a key reused with a different body.
+    language = effective_language(language)
     if claims:
         body: dict = {'claims': list(claims), 'language': language}
         parts: tuple[str, ...] = ('assess', 'claims', '\x1f'.join(claims), language)
@@ -638,6 +649,7 @@ async def verify(
     # `invalid_request` instead of running. The default depth keeps the
     # pre-depth key shape, so a repeat of a claim submitted before this
     # parameter existed still replays (24h) instead of being charged again.
+    language = effective_language(language)
     key_parts = ('verify', text, language) if depth == 'standard' else ('verify', text, language, depth)
     # A retry of a FAILED run needs its own key: the API replays a key's first
     # response for 24 h, failed runs included, so the same key would hand back the
@@ -698,6 +710,7 @@ async def ask(authorization: Authorization, *, verification_id: str, message: st
     # a thing only a caller that owns the retry can tell apart from a re-ask.
     # Longer timeout — /ask is synchronous and can block on source summaries
     # plus the LLM reply.
+    language = effective_language(language)
     return await _request(
         'POST',
         f'/ask/{verification_id}',
