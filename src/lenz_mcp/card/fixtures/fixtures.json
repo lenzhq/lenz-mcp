@@ -673,6 +673,59 @@
     ]
    }
   },
+  "deep-quote-languages": {
+   "provenance": "edited (many-sources: first three; a Ukrainian quote marked uk, an English one null, one malformed)",
+   "quick": "quick-low",
+   "result": {
+    "_card": {
+     "deliver": "context"
+    },
+    "claim": "Annual inspections report no structural faults in the main trusses.",
+    "confidence": "high",
+    "confidence_note": "Bucketed confidence (high/medium/low) reflecting panel agreement, not a calibrated probability. Treat as directional, not a guarantee.",
+    "depth": "standard",
+    "executive_summary": "Its deck was replaced in 1968 and again in 2004, while the original trusses remain. A 2019 survey found the timber had been treated with a preservative every decade. The county heritage register lists it as the oldest timber bridge still open to walkers. A plaque at the east end records the names of the carpenters who built it.",
+    "key_finding": "Annual inspections report no structural faults in the main trusses.",
+    "lenz_score": 10,
+    "presentation": "Show the user the verdict with its score and how confident Lenz is, the key finding, any warnings, how many sources the check drew on (the `sources_total` field), the top sources with what each one says, and, when there is one, the suggested rewrite as a suggestion. Do not reduce this to the verdict label, and do not show the user field or tool names.",
+    "source": "Lenz deep fact-check",
+    "sources": [
+     {
+      "date": "2023-06-20",
+      "publisher": "news.example.org",
+      "quote": "Пішохідний міст через Марроу-Крік було завершено 1911 року окружним управлінням громадських робіт.",
+      "quote_language": "uk",
+      "title": "The Marrow Creek footbridge: news note 1",
+      "url": "https://news.example.org/marrow-creek-footbridge/1"
+     },
+     {
+      "date": "2024-12-28",
+      "publisher": "studies.example.com",
+      "quote": "The Marrow Creek footbridge was completed in 1911 by the county works office. Annual inspections report no structural faults in the main trusses.",
+      "title": "The Marrow Creek footbridge: news note 2",
+      "url": "https://studies.example.com/marrow-creek-footbridge/2"
+     },
+     {
+      "date": "2013-12-13",
+      "publisher": "guides.example.net",
+      "quote": "The county heritage register lists it as the oldest timber bridge still open to walkers. The bridge carries about four hundred walkers on a typical summer weekend. A plaque at the east end records the names of the carpenters who built it. The Marrow Creek footbridge was completed in 1911 by the county works office. A 2019 survey found the timber had been treated with a preservative every decade.",
+      "title": "The Marrow Creek footbridge: records note 3",
+      "url": "https://guides.example.net/marrow-creek-footbridge/3"
+     }
+    ],
+    "sources_total": 3,
+    "status": "completed",
+    "suggested_rewrite": null,
+    "supersedes": "This deep check replaces any earlier quick verdict on the same claim. If the verdict changed, tell the user plainly that it changed and why, from the key finding and the sources. Do not apologise, do not average the two, do not present both as valid.",
+    "verdict": "True",
+    "verification_id": "7c3e9a41",
+    "warnings": [
+     "Annual inspections report no structural faults in the main trusses.",
+     "Its deck was replaced in 1968 and again in 2004, while the original trusses remain.",
+     "The county heritage register lists it as the oldest timber bridge still open to walkers."
+    ]
+   }
+  },
   "deep-unchanged-verdict": {
    "provenance": "synthetic (many-sources), after a quick verdict that matches",
    "quick": "quick-matching-deep",

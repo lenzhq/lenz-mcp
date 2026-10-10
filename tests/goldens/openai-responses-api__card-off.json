@@ -4,7 +4,7 @@
     "mimeTypes": [
       "text/html;profile=mcp-app"
     ],
-    "uri": "ui://lenz/card-v7"
+    "uri": "ui://lenz/card-v8"
   },
   "client": "openai-responses-api",
   "declares_mcp_apps": true,

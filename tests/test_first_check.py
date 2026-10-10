@@ -588,6 +588,56 @@ def test_a_cjk_quote_under_the_limit_passes_uncut():
     assert out['sources'][0]['quote'] == snippet
 
 
+@pytest.mark.parametrize(
+    ('sent', 'forwarded'), [('uk', 'uk'), ('pt-br', 'pt-br'), (' PT-BR ', 'pt-br'), ('fil', 'fil')]
+)
+def test_a_non_english_quote_carries_its_language(sent, forwarded):
+    source = {**_RESULT['sources'][0], 'snippet': 'Обробка є законною лише тоді.', 'snippet_language': sent}
+    row = server._completed_result({**_RESULT, 'sources': [source]})['sources'][0]
+    assert row['quote_language'] == forwarded
+
+
+@pytest.mark.parametrize(
+    'sent',
+    [
+        None,
+        '',
+        '   ',
+        'u',
+        'ukrainian',
+        'uk_UA',
+        'uk-',
+        'uk-a',
+        'en-' + 'x' * 9,
+        '<b>uk</b>',
+        'uk"',
+        3,
+        ['uk'],
+        {'uk': 1},
+    ],
+)
+def test_an_absent_null_or_malformed_quote_language_is_left_out(sent):
+    source = {**_RESULT['sources'][0], 'snippet_language': sent}
+    row = server._completed_result({**_RESULT, 'sources': [source]})['sources'][0]
+    assert 'quote_language' not in row
+    assert row['quote'] == _RESULT['sources'][0]['snippet']
+
+
+def test_a_payload_without_the_field_reads_as_no_language():
+    """Today's API sends no `snippet_language`: absent and null are the same."""
+    source = {k: v for k, v in _RESULT['sources'][0].items() if k != 'snippet_language'}
+    row = server._completed_result({**_RESULT, 'sources': [source]})['sources'][0]
+    assert 'quote_language' not in row
+
+
+def test_no_quote_no_quote_language():
+    for snippet in ('', 'A' * (server.SOURCE_QUOTE_MAX_CHARS + 1)):
+        source = {**_RESULT['sources'][0], 'snippet': snippet, 'snippet_language': 'uk'}
+        row = server._completed_result({**_RESULT, 'sources': [source]})['sources'][0]
+        assert 'quote' not in row
+        assert 'quote_language' not in row
+
+
 # ── a run that outlives the wait ─────────────────────────────────────
 
 

@@ -63,6 +63,29 @@ export function text(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+// A source quote's language as the connector forwards it (`uk`, `pt-br`), or
+// ''. Checked again here: it becomes a `lang` attribute, so anything that is
+// not code-shaped reads as no language.
+const LANGUAGE_CODE = /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/;
+
+export function languageCode(value) {
+  const code = text(value).toLowerCase();
+  return LANGUAGE_CODE.test(code) ? code : '';
+}
+
+// The language's English name ("Ukrainian"), or the code in capitals where the
+// runtime has no name for it (no Intl.DisplayNames, a code it rejects, or one
+// it only echoes back).
+export function languageName(code, DisplayNames = globalThis.Intl && globalThis.Intl.DisplayNames) {
+  const fallback = code.toUpperCase();
+  try {
+    const name = new DisplayNames(['en'], { type: 'language', fallback: 'none' }).of(code);
+    return typeof name === 'string' && name.trim() && name.toLowerCase() !== code ? name : fallback;
+  } catch (_e) {
+    return fallback;
+  }
+}
+
 export function score(value) {
   return Number.isInteger(value) && value >= 1 && value <= 10 ? value : null;
 }

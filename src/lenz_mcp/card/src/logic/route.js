@@ -5,7 +5,7 @@
 // error envelope (`auth_required`, `quota_exhausted`, `rate_limited`,
 // `service_unavailable`, `invalid_request`, `error`, …).
 
-import { confidenceBucket, stageLabel, text, verdictKey } from './format.js';
+import { confidenceBucket, languageCode, stageLabel, text, verdictKey } from './format.js';
 
 // A task id we can send back: the card never invents one, and an unsendable one
 // is not a run (the same guard the server applies).
@@ -137,13 +137,18 @@ export function deepResult(payload) {
   const p = payload && typeof payload === 'object' ? payload : {};
   const sources = (Array.isArray(p.sources) ? p.sources : [])
     .filter((s) => s && typeof s === 'object')
-    .map((s) => ({
-      title: text(s.title),
-      url: text(s.url),
-      publisher: text(s.publisher),
-      date: text(s.date),
-      quote: text(s.quote),
-    }))
+    .map((s) => {
+      const quote = text(s.quote);
+      return {
+        title: text(s.title),
+        url: text(s.url),
+        publisher: text(s.publisher),
+        date: text(s.date),
+        quote,
+        // Set only on a non-English quote; '' for English, unknown or no quote.
+        quoteLanguage: quote ? languageCode(s.quote_language) : '',
+      };
+    })
     .filter((s) => s.title || s.url);
   const total = Number.isInteger(p.sources_total) && p.sources_total >= sources.length ? p.sources_total : sources.length;
   return {

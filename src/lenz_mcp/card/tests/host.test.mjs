@@ -1631,3 +1631,35 @@ for (const width of [440, 480, 735]) {
     assert.deepEqual(errors, []);
   });
 }
+
+test('a non-English source quote is tagged with its language and marked with lang; others are not', async () => {
+  const { page, errors } = await harness.page();
+  const result = JSON.parse(JSON.stringify(F.deep['deep-quote-languages'].result));
+  // The server drops a malformed code; a card fed one directly must too.
+  result.sources[2].quote_language = '"><img src=x onerror=alert(1)>';
+  result.sources[1].quote_language = null;
+  await page.evaluate((c) => window.startCard('ql', c), config({
+    toolResult: F.quick['quick-low'].toolResult,
+    tools: { start_verification_widget: [SUBMITTED], get_verification_widget: [result] },
+  }));
+  const frame = await frameOf(page, 'ql');
+  await frame.getByRole('button', { name: /Check against sources/ }).click();
+  const card = frame.locator('.lz');
+  await card.getByText('Claim checked').waitFor({ timeout: 10000 });
+  const quotes = card.locator('.lz-sources > li .lz-quote');
+  assert.equal(await quotes.count(), 3);
+  const first = quotes.nth(0);
+  assert.equal(await first.getAttribute('lang'), 'uk');
+  const tag = first.locator('.lz-quote-lang');
+  assert.equal(await tag.textContent(), 'Ukrainian');
+  assert.equal(await tag.getAttribute('lang'), 'en');
+  assert.match(await first.innerText(), /Пішохідний міст/);
+  for (const i of [1, 2]) {
+    assert.equal(await quotes.nth(i).getAttribute('lang'), null);
+    assert.equal(await quotes.nth(i).locator('.lz-quote-lang').count(), 0);
+  }
+  assert.equal(await card.locator('.lz-quote-lang').count(), 1);
+  assert.equal(await frame.locator('img').count(), 0);
+  assert.deepEqual(errors.filter((e) => !/Content Security Policy/.test(e)), []);
+  await page.context().close();
+});
