@@ -1040,7 +1040,7 @@ async def assess_claim(
         ),
     ] = None,
 ) -> dict[str, Any]:
-    """Runs the quick check on one claim, or every claim in a text, and tells you whether it
+    """Run the quick check on one claim, or on every claim in a text, and report whether it
     holds up and how confident Lenz is (3-model panel, ~15 seconds, one credit per claim).
     Use it when the user asks to fact-check or double-check a factual statement
     or a text (“fact-check this”, “double-check that”), asks whether one is true
@@ -1389,8 +1389,8 @@ async def verify_claim(
         ),
     ] = 'standard',
 ) -> dict[str, Any]:
-    """Runs the deep check on ONE claim against independent sources: a verdict with a 1–10
-    score, the key finding, warnings and the main sources (~90 seconds).
+    """Run the deep check on ONE claim against independent sources and return a verdict with a
+    1–10 score, the key finding, warnings and the main sources (~90 seconds).
 
     Not the default. Run only when the user asked for sources, a deep check or
     a verification, or agreed after a quick check; a plain "check this" is
@@ -1464,7 +1464,7 @@ async def select_claims(
     ],
     ctx: Context,
 ) -> dict[str, Any]:
-    """When a text holds several claims, runs a deep check on the ones you choose (this
+    """Run a deep check on the claims the user picks when a text holds several (this
     resolves a `needs_input` verification).
 
     When `verify_claim` or `get_verification` returns `status: needs_input`
@@ -1620,7 +1620,7 @@ async def get_verification(
     ],
     ctx: Context,
 ) -> dict[str, Any]:
-    """Fetches the result of a deep check that is running or already finished: wait for a
+    """Get the result of a deep check that is running or already finished: wait for a
     running check by `task_id`, or fetch a completed one by `verification_id`.
 
     With a `task_id` (from `verify_claim` or `select_claims`) this waits for
@@ -1827,8 +1827,8 @@ async def select_claims_widget(
     ],
     ctx: Context,
 ) -> dict[str, Any]:
-    """Used by the Lenz card, never by the assistant: starts the PAID deep checks on the claims you
-    ticked and follows their progress. Ticking the same claims again does not start them twice."""
+    """Used by the Lenz card, never by the assistant: starts the PAID deep checks on the claims ticked
+    in the card and follows their progress. Ticking the same claims again does not start them twice."""
     # Developer notes. The docstring above is what ChatGPT shows an admin, so it stays plain.
     # Called by the Lenz card, never by the assistant: start a PAID deep check
     # for each claim the user ticked, and return their task_ids at once.
@@ -1990,7 +1990,7 @@ def _completed_result(result: dict[str, Any]) -> dict[str, Any]:
 )
 @requires_auth
 async def check_usage(ctx: Context) -> dict[str, Any]:
-    """Shows how many Lenz credits you have left, and what they still buy.
+    """Show how many Lenz credits are left, and what they still buy.
 
     One pool funds every call. `costs` is the live price list — read the
     weight from there rather than assuming one. `verify_claim` is the
@@ -2071,7 +2071,7 @@ async def check_usage(ctx: Context) -> dict[str, Any]:
 )
 @requires_auth
 async def list_verifications(ctx: Context) -> dict[str, Any]:
-    """Lists your most recent completed deep checks (`verify_claim`), newest first, up to 10.
+    """List the most recent completed deep checks (`verify_claim`), newest first, up to 10.
 
     Call this when the user asks about an earlier deep check, or when a
     `verify_claim` was started and its result never arrived: a check that
@@ -2153,7 +2153,7 @@ async def ask_followup(
         Field(description=LANGUAGE_FIELD_DESCRIPTION),
     ] = '',
 ) -> dict[str, Any]:
-    """Answers a question about a finished deep check (a `verify_claim` result), using its
+    """Answer a question about a finished deep check (a `verify_claim` result), using its
     full evidence.
 
     The `verify_claim`/`get_verification` result is trimmed; this reads the FULL
@@ -2789,9 +2789,9 @@ async def check_citations(
         ),
     ] = None,
 ) -> dict[str, Any]:
-    """Checks whether the sources a draft cites really say what the draft says they do: for
-    each link, DOI or numbered reference Lenz reads the source and reports whether it backs
-    the sentence that cites it.
+    """Check whether the sources a draft cites really say what the draft says they do: for
+    each link, DOI or numbered reference, read the source and report whether it backs the
+    sentence that cites it.
 
     Use it only when the user asks whether the sources, links, references or citations
     in a draft support it. A plain request to fact-check a claim or a text is
@@ -2865,8 +2865,8 @@ async def get_citation_check(
         ),
     ] = 0,
 ) -> dict[str, Any]:
-    """Fetches the result of a citation check (`check_citations`) that is running or already
-    finished: waits for a running check by its `citecheck_id` and returns it the same way,
+    """Get the result of a citation check (`check_citations`) that is running or already
+    finished: wait for a running check by its `citecheck_id` and return it the same way,
     with the findings per citation.
 
     Use it when `check_citations` returned `status: running`, or to read an earlier
