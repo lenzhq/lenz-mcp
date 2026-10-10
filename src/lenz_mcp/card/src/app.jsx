@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 
 import * as copy from './copy.js';
 import { createDeepCheck } from './logic/deep-check.js';
-import { domainOf, formatElapsed, isWebUrl, text, verdictKey } from './logic/format.js';
+import { domainOf, formatElapsed, isWebUrl, languageName, text, verdictKey } from './logic/format.js';
 import { buttonStrength, changedFrom, deepResult, isSendableId, routePayload, tally } from './logic/route.js';
 import { DELIVER_MESSAGE, readDelivery } from './logic/delivery.js';
 import { buildSnapshot } from './logic/snapshot.js';
@@ -279,7 +279,7 @@ function Sources({ result, host }) {
                 <p class="lz-body">{title}</p>
               )}
               {meta ? <p class="lz-meta lz-source-meta">{meta}</p> : null}
-              {s.quote ? <p class="lz-quote">{`“${s.quote}”`}</p> : null}
+              {s.quote ? <Quote quote={s.quote} language={s.quoteLanguage} /> : null}
             </li>
           );
         })}
@@ -290,6 +290,21 @@ function Sources({ result, host }) {
         </button>
       ) : null}
     </div>
+  );
+}
+
+// A source's quote. A non-English one is marked with its language (the web's
+// pattern: a small tag before it, `lang` on the quote so it is read and
+// hyphenated as that language). No translation. Both values are text nodes.
+function Quote({ quote, language }) {
+  if (!language) return <p class="lz-quote">{`“${quote}”`}</p>;
+  return (
+    <p class="lz-quote lz-quote-foreign" lang={language}>
+      <span class="lz-quote-lang" lang="en">
+        {languageName(language)}
+      </span>
+      <span dir="auto">{`“${quote}”`}</span>
+    </p>
   );
 }
 

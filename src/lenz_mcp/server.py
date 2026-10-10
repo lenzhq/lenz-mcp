@@ -1860,13 +1860,32 @@ def _source_quote(snippet: Any) -> str:
     return text if len(text) <= SOURCE_QUOTE_MAX_CHARS else ''
 
 
+# A language code as the API writes one (`uk`, `pt-br`). Anything else is
+# dropped: the card sets it as a `lang` attribute and names the language.
+_LANGUAGE_CODE = re.compile(r'[a-z]{2,3}(?:-[a-z0-9]{2,8})*')
+
+
+def _quote_language(value: Any) -> str:
+    """The language of a source's quote when it is not English, or ''.
+
+    The API sends `snippet_language` as a code for a non-English quote and null
+    for English or unknown; an older API sends no key at all. All three read
+    the same here: no language.
+    """
+    code = value.strip().lower() if isinstance(value, str) else ''
+    return code if _LANGUAGE_CODE.fullmatch(code) else ''
+
+
 def _source_row(source: dict[str, Any]) -> dict[str, str]:
     """One top source as the model should show it. Empty values are left out."""
     row = {'title': source.get('title') or '', 'url': source.get('url') or ''}
+    quote = _source_quote(source.get('snippet'))
     optional = {
         'publisher': source.get('source_name'),
         'date': source.get('date'),
-        'quote': _source_quote(source.get('snippet')),
+        'quote': quote,
+        # Only beside a quote it describes: a passage over the limit shows none.
+        'quote_language': _quote_language(source.get('snippet_language')) if quote else '',
     }
     row.update({key: value.strip() for key, value in optional.items() if isinstance(value, str) and value.strip()})
     return row
