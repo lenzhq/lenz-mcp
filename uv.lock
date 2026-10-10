@@ -257,8 +257,8 @@ name = "httpcore2"
 version = "2.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11" },
-    { name = "truststore" },
+    { name = "h11", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
+    { name = "truststore", marker = "python_full_version < '3.12' or sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/15/8c/e925b1c92018abb3a1863ce1549d76d2381e334d21d65d4ac8f65dabd78a/httpcore2-2.13.0.tar.gz", hash = "sha256:2adc8be4fb285fbcd6d894298db3b52c177e74b6674eda3a76bd36be3292a3db", size = 67740, upload-time = "2026-09-14T14:18:04.717Z" }
 wheels = [
@@ -418,10 +418,21 @@ wheels = [
 ]
 
 [[package]]
+name = "lenz-io"
+version = "3.1.1.dev3+g31370dfd7"
+source = { git = "https://github.com/lenzhq/lenz-io-python?rev=31370dfd73344e6113dee38c06c980c919247c4a#31370dfd73344e6113dee38c06c980c919247c4a" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "typing-extensions" },
+]
+
+[[package]]
 name = "lenz-mcp"
 source = { virtual = "." }
 dependencies = [
     { name = "httpx" },
+    { name = "lenz-io" },
     { name = "mcp" },
     { name = "mcp-types" },
     { name = "pydantic" },
@@ -447,6 +458,7 @@ eval = [
 [package.metadata]
 requires-dist = [
     { name = "httpx" },
+    { name = "lenz-io", git = "https://github.com/lenzhq/lenz-io-python?rev=31370dfd73344e6113dee38c06c980c919247c4a" },
     { name = "mcp", specifier = ">=2.2.0,<2.4" },
     { name = "mcp-types" },
     { name = "pydantic" },

@@ -15,6 +15,10 @@ requires-python = ">=3.11,<3.13"
 # Filled in by the export from the connector's own requirements list.
 dependencies = [
     "httpx",
+    # TEMPORARY development pin: lenz-io 3.2.0 is not on PyPI yet. Before this
+    # merges it becomes "lenz-io>=3.2.0,<4" (re-lock, wheel and container check):
+    # the container installs with --require-hashes and has no git.
+    "lenz-io @ git+https://github.com/lenzhq/lenz-io-python@31370dfd73344e6113dee38c06c980c919247c4a",
     "mcp>=2.2.0,<2.4",
     "mcp-types",
     "pydantic",
@@ -49,6 +53,10 @@ eval = [
 [tool.hatch.version]
 source = "code"
 path = "src/lenz_mcp/_build_version.py"
+
+# Only for the temporary git pin of lenz-io above; removed with it.
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lenz_mcp"]
