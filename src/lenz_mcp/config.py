@@ -59,9 +59,9 @@ USER_AGENT: str = _env('MCP_USER_AGENT', 'lenz-mcp/1.0')
 
 # The API response version this server reads, sent on every call to the Lenz
 # API as `X-Lenz-API-Version`. The API describes its bodies by this date, so
-# naming it keeps the answers this server parses fixed. The server reads the
-# older body shapes too (see server.py), so an API that has not reached this
-# version answers in the shape it always did. A version change is a code change.
+# naming it keeps the answers this server parses fixed. The server reads only
+# this shape: the client refuses a successful answer in any other version. A
+# version change is a code change.
 API_VERSION = '2026-10-11'
 API_VERSION_HEADER = 'X-Lenz-API-Version'
 

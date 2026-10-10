@@ -994,7 +994,7 @@
     },
     "failure_class": "invalid_input",
     "failure_reason": "framing_failed",
-    "message": "The verification failed.",
+    "message": "Pipeline stopped at: framing_failed",
     "retryable": false,
     "status": "failed"
    }
@@ -1007,7 +1007,7 @@
     },
     "failure_class": "internal",
     "failure_reason": "conclusion_failed",
-    "message": "The verification failed.",
+    "message": "Pipeline stopped at: conclusion_failed",
     "retryable": false,
     "status": "failed"
    }
@@ -1020,7 +1020,7 @@
     },
     "failure_class": "upstream_unavailable",
     "failure_reason": "research_failed",
-    "message": "The verification failed.",
+    "message": "Pipeline stopped at: research_failed",
     "next_step": "A service the deep check depends on was unavailable, so this attempt has no verdict. Tell the user that source verification is unavailable right now and, when `retryable` is true, that the check can be run again later; any earlier quick verdict still stands as a first read.",
     "retryable": true,
     "status": "failed"
@@ -1543,7 +1543,7 @@
   "nothing": {
    "provenance": "hand-built (API body with no claims)",
    "toolResult": {
-    "message": "This is a request to write something, not a statement that can be checked. Send a statement instead.",
+    "message": "No verifiable claim detected",
     "status": "no_claim"
    }
   },

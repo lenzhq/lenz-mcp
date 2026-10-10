@@ -126,7 +126,7 @@ class FakeLenz:
             )
         if request.method == 'POST' and path == '/verify/task-0/select':
             return httpx.Response(
-                200, json={'batch_id': 'batch-1', 'items': [{'task_id': 'task-1', 'claim_text': 'the claim'}]}
+                200, json={'batch_id': 'batch-1', 'items': [{'task_id': 'task-1', 'claim': 'the claim'}]}
             )
         if request.method == 'POST' and path == '/citecheck':
             return httpx.Response(202, json={'citecheck_id': 'ab12cd34', 'status': 'queued'})

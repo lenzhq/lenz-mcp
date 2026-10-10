@@ -495,7 +495,11 @@ def _record_verify(monkeypatch):
 
 def test_a_retry_of_a_failed_retryable_run_gets_its_own_key(monkeypatch, authed):
     seen = []
-    _status(monkeypatch, {'status': 'failed', 'retryable': True, 'failure_class': 'upstream_unavailable'}, seen=seen)
+    _status(
+        monkeypatch,
+        {'status': 'failed', 'failure': {'retryable': True, 'failure_class': 'upstream_unavailable'}},
+        seen=seen,
+    )
     calls = _record_verify(monkeypatch)
     out = _shape(_run(server.start_verification_widget('The claim.', _Ctx(), retry_of='f' * 32)))
     assert out == {'status': 'submitted', 'task_id': 'n' * 32}
@@ -506,7 +510,7 @@ def test_a_retry_of_a_failed_retryable_run_gets_its_own_key(monkeypatch, authed)
 @pytest.mark.parametrize(
     ('body', 'status'),
     [
-        ({'status': 'failed', 'retryable': False, 'failure_class': 'invalid_input'}, 200),
+        ({'status': 'failed', 'failure': {'retryable': False, 'failure_class': 'invalid_input'}}, 200),
         ({'status': 'completed', 'result': {}}, 200),
         ({'status': 'processing', 'progress': {}}, 200),
         ({'detail': 'Task not found.'}, 404),  # another user's task, or none
@@ -614,8 +618,8 @@ def test_the_picker_starts_every_pick_and_returns_at_once(monkeypatch, authed):
             data={
                 'batch_id': 'b1',
                 'items': [
-                    {'task_id': 'a' * 32, 'claim_text': 'One.'},
-                    {'task_id': 'b' * 32, 'claim_text': 'Two.'},
+                    {'task_id': 'a' * 32, 'claim': 'One.'},
+                    {'task_id': 'b' * 32, 'claim': 'Two.'},
                 ],
             },
         )
@@ -644,7 +648,7 @@ def test_the_picker_starts_every_pick_and_returns_at_once(monkeypatch, authed):
 
 def test_the_picker_says_so_when_only_some_picks_started(monkeypatch, authed):
     async def _select(authorization, **kwargs):
-        return ApiResponse(status=202, data={'partial': True, 'items': [{'task_id': 'a' * 32, 'claim_text': 'One.'}]})
+        return ApiResponse(status=202, data={'partial': True, 'items': [{'task_id': 'a' * 32, 'claim': 'One.'}]})
 
     monkeypatch.setattr(client, 'select', _select)
     out = _run(server.select_claims_widget('t' * 32, ['One.', 'Two.'], _Ctx()))
@@ -675,7 +679,7 @@ def test_a_replayed_selection_starts_nothing_new(monkeypatch, authed):
     # same parent and the same texts derive the same idempotency key, so the
     # API replays its first response and no second check is paid for.
     wire = api_wire.install(monkeypatch)
-    wire.respond(api_wire.answer(202, {'items': [{'task_id': 'a' * 32, 'claim_text': 'One.'}]}))
+    wire.respond(api_wire.answer(202, {'items': [{'task_id': 'a' * 32, 'claim': 'One.'}]}))
     first = _run(server.select_claims_widget('t' * 32, ['One.'], _Ctx()))
     second = _run(server.select_claims_widget('t' * 32, ['One.'], _Ctx()))
     assert first == second
@@ -733,7 +737,7 @@ def test_the_picker_cap_allows_exactly_its_number(monkeypatch, authed):
         seen.append(len(kwargs['texts']))
         return ApiResponse(
             status=202,
-            data={'items': [{'task_id': f'{i}' * 8, 'claim_text': f'Claim {i}.'} for i in range(len(kwargs['texts']))]},
+            data={'items': [{'task_id': f'{i}' * 8, 'claim': f'Claim {i}.'} for i in range(len(kwargs['texts']))]},
         )
 
     monkeypatch.setattr(client, 'select', _select)
