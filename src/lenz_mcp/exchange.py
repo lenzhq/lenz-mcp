@@ -238,7 +238,11 @@ async def _post(data: dict[str, str]) -> httpx.Response:
                 config.TOKEN_ENDPOINT,
                 data=data,
                 auth=httpx.BasicAuth(client_id, secret),
-                headers={'User-Agent': config.USER_AGENT, 'Accept': 'application/json'},
+                headers={
+                    'User-Agent': config.USER_AGENT,
+                    'Accept': 'application/json',
+                    config.API_VERSION_HEADER: config.API_VERSION,
+                },
             )
         except (httpx.HTTPError, httpx.InvalidURL, UnicodeError) as exc:
             last = exc

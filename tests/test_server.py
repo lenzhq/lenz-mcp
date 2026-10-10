@@ -1322,6 +1322,14 @@ def test_outbound_headers_forward_auth_and_stamp_ua():
     assert 'Idempotency-Key' not in headers
 
 
+def test_outbound_headers_name_the_api_version():
+    # Every call states the response version this server reads, so the API
+    # never has to guess it from the client's name.
+    assert client._headers('Bearer lenz_abc')['X-Lenz-API-Version'] == '2026-10-11'
+    assert client._headers(None)['X-Lenz-API-Version'] == config.API_VERSION == '2026-10-11'
+    assert client._headers('Bearer lenz_abc', idempotency_key='k')['X-Lenz-API-Version'] == config.API_VERSION
+
+
 def test_outbound_headers_include_idempotency_key_when_passed():
     headers = client._headers('Bearer lenz_abc', idempotency_key='abc123')
     assert headers['Idempotency-Key'] == 'abc123'
