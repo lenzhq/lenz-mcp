@@ -45,17 +45,15 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
    finds in it gets its own row, up to 20. Use `claims` (a list, up to 20, one call)
    only when the user listed the claims separately themselves. Each row returns a
    verdict (True / Mostly True / Mixed / Mostly False / False), a bucketed confidence
-   and, when available, a `rationale` and a `dissent`: reviewers' notes, not checked
-   sources. A vague claim is assessed on its most likely reading, which the row's
-   `claim` shows. Present every quick verdict as a first read.
+   and, when available, a `rationale`: a reviewer's note, not a checked source. A
+   vague claim is assessed on its most likely reading, which the row's `claim` shows. Present every quick verdict as a first read.
 
 3. **Offer `verify_claim`; do not start it unasked.** It is the deep check: sourced,
    ~90 seconds, ten times the credits of a quick-check row.
    By the row's confidence: on **low** (the row carries `recommend_verify: true`), or
    when the claim is high-stakes for the user (health, safety, legal, financial, about
-   to be published), RECOMMEND it; on **medium**, or when a row carries a `dissent`,
-   offer it; on **high**, mention it is available. On a text with many claims, name at
-   most the one or two that matter. Run it on the user's yes, or directly when they
+   to be published), RECOMMEND it; on **medium**, offer it; on **high**, mention it is
+   available. On a text with many claims, name at most the one or two that matter. Run it on the user's yes, or directly when they
    asked for sources, a deep check or a verification. `depth: "low"` researches fewer
    sources for half the credits; keep the default `standard` where breadth of evidence
    is the point. `verify_claim` waits for the check as long as the client allows. In Claude the
