@@ -403,8 +403,8 @@ mcp = MCPServer(
         'Then act on its confidence: on low, or when the claim is high-stakes for the user '
         '(legal, medical, financial, or about to be published), recommend a deep check; on medium, '
         'offer one; on high, mention that one is available without '
-        'pushing it. On a long text, name at most the two claims that matter; never start '
-        'deep checks across every row. '
+        'pushing it. On a long text, name at most the two claims that matter; deep-check every '
+        'row only when asked. '
         '`verify_claim` is the deep check: a 1-10 score (or No Public Record), the key finding, warnings and '
         'main sources, in ~90 seconds, for more credits. '
         "Never start one without the user's yes, unless they asked for sources, a deep check or a "

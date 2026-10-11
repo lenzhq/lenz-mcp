@@ -770,3 +770,32 @@ def test_a_dropped_negation_or_a_moved_figure_is_named():
     assert any('negations and figures' in note for note in dropped)
     moved = faithfulness(source, ['The firm did not raise 4% more.', 'Sales rose 10% in May.'])
     assert any('negations and figures' in note for note in moved)
+
+
+def test_a_deep_check_of_every_claim_is_twelve_calls_on_twelve_claims():
+    case = cases.by_id('escalate-all-rows-on-request')
+    rows = [r['claim'] for t in case.history if isinstance(t, cases.ToolExchange) for r in t.result['claims']]
+    every = [('verify_claim', {'claim': claim}) for claim in rows]
+    assert scoring.judge(case, _turn(*every)) == (True, '')
+    assert scoring.judge(case, _turn(('check_usage', {}), *every)) == (True, '')
+    # Sizing the batch is the step check_usage's description asks for; the checks follow next turn.
+    assert scoring.judge(case, _turn(('check_usage', {})))[0]
+    assert not scoring.judge(case, _turn(('check_usage', {}), ('check_usage', {})))[0]
+    assert not scoring.judge(case, _turn(*every[:2]))[0]
+    assert not scoring.judge(case, _turn())[0]
+    assert not scoring.judge(case, _turn(*every[:11], every[0]))[0], 'the same claim twice is not twelve claims'
+    assert not scoring.judge(case, _turn(*every[:11], ('verify_claim', {'claim': 'It lists on the exchange.'})))[0]
+    assert not scoring.judge(case, _turn(('assess_claim', {'claim': rows[0]}), *every))[0]
+
+
+def test_the_next_batch_is_the_citation_the_first_check_left():
+    case = cases.by_id('citations-next-batch-passes-candidates-back')
+    exchange = next(t for t in case.history if isinstance(t, cases.ToolExchange))
+    (pair,) = exchange.result['more_citations']['candidates']
+    # The candidate is a citation the draft really holds, as the API lists it.
+    assert pair['url'] in exchange.arguments['text']
+    assert scoring.judge(case, _turn(('check_citations', {'pairs': [pair]}))) == (True, '')
+    trimmed = {**pair, 'statement': pair['statement'].rstrip('.')}
+    assert scoring.judge(case, _turn(('check_citations', {'pairs': [trimmed]})))[0]
+    linked = {**pair, 'statement': 'Sea levels rose 3 mm last year [survey](https://data.example.net/survey).'}
+    assert not scoring.judge(case, _turn(('check_citations', {'pairs': [linked]})))[0]
