@@ -89,6 +89,15 @@ class Case:
     at_most: tuple[tuple[str, int], ...] = ()
     also_allowed: tuple[str, ...] = ()
     independent: bool = False
+    # How many times the one expected tool must be called, each time on a
+    # different claim: above 1 only where the user asked for that many (a deep
+    # check of every claim). `also_allowed` tools may come first, once each.
+    count: int = 1
+    # Results for tools the model may call FIRST (`check_usage` before a large
+    # batch). When a turn calls only these, the eval hands back these results
+    # and asks once more, and judges both turns' calls together: what the model
+    # does after the answer is the behaviour under test, not the question.
+    answers: tuple[tuple[str, dict[str, Any]], ...] = ()
     # The submission's "Tool triggered" line, when the call SHAPE matters to a
     # reviewer (one call; the whole text in `claim`; `get_verification` may
     # follow on its own). Must name every tool in `expect` -- a test holds it
@@ -122,6 +131,26 @@ def _norm(text: str) -> str:
 
 def _unset(value) -> bool:
     return not value
+
+
+def _same_sentence(value, expected: str) -> bool:
+    """The sentence as listed, up to spacing and a trailing full stop. Anything
+    more (a link put back, words dropped) is a statement the model rewrote."""
+    if not isinstance(value, str):
+        return False
+    return _norm(value).rstrip('. ') == _norm(expected).rstrip('. ')
+
+
+def _listed(history):
+    """One of the statements a quick check in `history` listed, as listed
+    (case and spacing aside): the deep check then matches its quick-check row."""
+    rows = {
+        _norm(row['claim'])
+        for turn in history
+        if isinstance(turn, ToolExchange)
+        for row in turn.result.get('claims', ())
+    }
+    return lambda value: isinstance(value, str) and _norm(value) in rows
 
 
 def _is(expected):
@@ -242,6 +271,9 @@ _REPORT = (
     'It acquired two competitors last year. Its main product launched in 2016. Gross margin was 71%. '
     'It has customers in 38 countries. Its chief executive joined in 2019. It lists on the Amsterdam exchange.'
 )
+
+# A balance that covers a deep check of every one of the twelve rows.
+_BALANCE = real.usage_result(1000)
 
 TWELVE_ROWS = (
     ('user', f'Check the claims in this report with Lenz: "{_REPORT}"'),
@@ -381,8 +413,11 @@ _CITED_DRAFT = (
     'Sea levels rose 3 mm last year [survey](https://data.example.net/survey).'
 )
 _CITECHECK_TASK = 'ab12cd34'
-_MORE_SENTENCE = 'Its exports doubled between 2019 and 2023.'
-_MORE_URL = 'https://trade.example.com/exports'
+# The draft's third citation, which the finished check below leaves for later.
+# `more_citations` lists it as the API does: the sentence is cut from the
+# draft with each `[words](url)` link read as its words.
+_MORE_SENTENCE = 'Sea levels rose 3 mm last year survey.'
+_MORE_URL = 'https://data.example.net/survey'
 
 CITECHECK_RUNNING = (
     ('user', f'Do the links in this draft really support what it says? "{_CITED_DRAFT}"'),
@@ -834,7 +869,7 @@ CASES: tuple[Case, ...] = (
                 isinstance(v, list)
                 and len(v) == 1
                 and isinstance(v[0], dict)
-                and v[0].get('statement') == _MORE_SENTENCE
+                and _same_sentence(v[0].get('statement'), _MORE_SENTENCE)
                 and v[0].get('url') == _MORE_URL
                 and not v[0].get('doi')
             ),
@@ -1028,25 +1063,42 @@ CASES: tuple[Case, ...] = (
         id='escalate-not-twelve-rows',
         group='escalation',
         history=TWELVE_ROWS,
-        prompt='check them all properly',
+        prompt='This is going into our board report on Monday.',
         expect=RESTRAINT,
-        # `check_usage` is ALLOWED here, and that is not a concession: its own
-        # description says "Call this … or before a large batch to size it
-        # against credits_remaining. It is not a prerequisite: never call it
-        # before an ordinary check." A model that checks the balance before 12
-        # deep checks is following that sentence exactly. It is not the
-        # instructions contradicting themselves: the rule is in the tool's
-        # description. `house-no-usage-preflight` guards the other half: before
-        # a SINGLE check it is still a failure.
-        at_most=(('verify_claim', 2), ('check_usage', 1)),
-        forbid=('assess_claim',),
+        # `check_usage` is allowed: its description says to size a large batch
+        # against the balance, and a model about to offer twelve deep checks
+        # may do that. It is not a prerequisite.
+        at_most=(('check_usage', 1),),
+        answers=(('check_usage', _BALANCE),),
+        forbid=('verify_claim', 'assess_claim'),
         why=(
-            'The instructions say to name at most the two that matter and never to deep-check '
-            'every row: twelve deep checks is 120 credits from one sentence. Calling NOTHING and '
-            'asking which ones matter is the BEST answer, not a failure, so the '
-            'ceiling is what is judged and zero passes. Re-running the quick check is forbidden: '
-            'the result is already in the history. Sizing a 12-row batch against the balance first '
-            "is allowed, because check_usage's description tells the model to do exactly that."
+            'High stakes and a long text, and no request: the instructions say to recommend a deep '
+            'check on the claims that matter and to start none without a yes. Twelve deep checks '
+            'here would be 120 credits nobody asked for. Re-running the quick check is forbidden: '
+            'the result is already in the history.'
+        ),
+    ),
+    Case(
+        id='escalate-all-rows-on-request',
+        group='escalation',
+        history=TWELVE_ROWS,
+        prompt='Run a deep check on every one of them.',
+        expect='verify_claim',
+        # Every one of the twelve calls is held to this, and to a different claim:
+        # a row's statement exactly as the quick check listed it.
+        expect_args={'claim': _listed(TWELVE_ROWS)},
+        count=12,
+        also_allowed=('check_usage',),
+        answers=(('check_usage', _BALANCE),),
+        forbid=('assess_claim', 'select_claims'),
+        why=(
+            'The user asked for a deep check of every claim, so every claim gets one: twelve '
+            '`verify_claim` calls, one per row, without asking again. Picking two, or asking which '
+            'ones, is refusing what was asked. Sizing the batch against the balance first is allowed: '
+            'the eval then answers it (1,000 credits, enough for all twelve) and the checks must '
+            'follow; asking for confirmation instead is the cost step the user did not ask for. '
+            "Each call passes a row's statement exactly as listed, so the deep check matches its "
+            'quick-check row; "It opened offices" is not a claim anyone can check.'
         ),
     ),
     Case(
@@ -1115,6 +1167,22 @@ CASES: tuple[Case, ...] = (
     ),
     # ── Deep-check arguments ──────────────────────────────────────────
     Case(
+        id='deep-claim-stands-on-its-own',
+        group='deep_check',
+        history=(
+            ('user', 'Halden Systems grew revenue 40% in 2025, according to its annual report.'),
+            ('assistant', 'That is a strong year. Do you want me to check it?'),
+        ),
+        prompt='Use Lenz to verify with sources that it also opened an office in Lyon the same year.',
+        expect='verify_claim',
+        expect_args={'claim': _says('halden', 'lyon', '2025')},
+        forbid=('assess_claim',),
+        why=(
+            'The call carries the claim and nothing else from the conversation. "It ... the same year" '
+            'names nothing on its own, so the claim must say who and when: Halden Systems, 2025.'
+        ),
+    ),
+    Case(
         id='depth-low-requested',
         group='deep_check',
         prompt='Use Lenz to verify with sources, but keep it cheap: Mount Everest grows a few millimetres a year.',
@@ -1158,11 +1226,16 @@ CASES: tuple[Case, ...] = (
         id='house-followup-uses-id',
         group='housekeeping',
         history=DEEP_DONE,
-        prompt='What did the sources actually say about that?',
+        prompt='Ask Lenz a follow-up: when did the horned image first appear, according to the sources?',
         expect='ask_followup',
-        expect_args={'verification_id': _is('a1b2c3d4'), 'question': _says('source')},
+        expect_args={'verification_id': _is('a1b2c3d4'), 'question': _says('horn')},
         forbid=('verify_claim',),
-        why='The id is in the history; a new check would charge again for an answer we hold.',
+        why=(
+            'The id is in the history; a new check would charge again for an answer we hold. The '
+            'question asks for more than the result in the history shows (its quotes name no date), '
+            'so answering from the history alone is not an option: a question those quotes do '
+            'answer is fairly answered without a call.'
+        ),
     ),
     # ── Language ──────────────────────────────────────────────────────
     Case(

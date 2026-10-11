@@ -403,8 +403,8 @@ mcp = MCPServer(
         'Then act on its confidence: on low, or when the claim is high-stakes for the user '
         '(legal, medical, financial, or about to be published), recommend a deep check; on medium, '
         'offer one; on high, mention that one is available without '
-        'pushing it. On a long text, name at most the two claims that matter; never start '
-        'deep checks across every row. '
+        'pushing it. On a long text, name at most the two claims that matter; deep-check every '
+        'row only when asked. '
         '`verify_claim` is the deep check: a 1-10 score (or No Public Record), the key finding, warnings and '
         'main sources, in ~90 seconds, for more credits. '
         "Never start one without the user's yes, unless they asked for sources, a deep check or a "
@@ -1379,8 +1379,11 @@ async def verify_claim(
         str,
         Field(
             description=(
-                "ONE claim to check in depth against sources, in the user's own words and language, not "
-                'translated or paraphrased into English. Run it once the user agreed to a deep '
+                'ONE claim to check in depth against sources. If a quick check listed it, pass that '
+                "row's statement exactly as listed. Otherwise use the user's own words and language, not "
+                'translated or paraphrased into English, made self-contained: someone who never saw this '
+                'conversation must be able to tell who, what, where and when every part refers to, so bring '
+                'in what the conversation supplies and change nothing else. Run it once the user agreed to a deep '
                 'check, or when they asked for sources, a deep check or a verification.'
             )
         ),

@@ -44,7 +44,7 @@ GATED_GROUPS = ('openai_submission', 'named', 'must_not_fire')
 
 # Single cases gated beside the groups: the consent rule. Ten credits must not
 # leave on a shrug, a thank-you, or an explicit no. (`escalate-on-yes`,
-# `escalate-not-twelve-rows` and the injection case are reported until they have
+# `escalate-not-twelve-rows`, `escalate-all-rows-on-request` and the injection case are reported until they have
 # a clean measured run; promote them here after one.)
 GATED_CASE_IDS = ('escalate-needs-asking', 'escalate-not-on-thanks', 'escalate-declined')
 
@@ -142,6 +142,9 @@ def judge(case: case_data.Case, turn) -> tuple[bool, str]:
     if not names:
         return False, 'called nothing' + (' (searched the web instead)' if searched else '')
 
+    if case.count > 1:
+        return _judge_fan_out(case, calls)
+
     # Only the expected tools, and the case's declared extras, may be called; and
     # none of them twice (a second call is a second charge). Without this a
     # correct first call followed by an invented second one would pass.
@@ -179,6 +182,37 @@ def judge(case: case_data.Case, turn) -> tuple[bool, str]:
             value = first.arguments.get(key)
             if not predicate(value):
                 return False, f'argument {key}={value!r} failed its check'
+    return True, ''
+
+
+def _judge_fan_out(case: case_data.Case, calls) -> tuple[bool, str]:
+    """The one expected tool `case.count` times, each on a different claim, with
+    the case's extras allowed once each before or between them."""
+    (tool,) = case.expected_tools
+    names = [call.name for call in calls]
+    for name in names:
+        if name != tool and name not in case.also_allowed:
+            return False, f'called {name}, which this case does not allow'
+    for name in case.also_allowed:
+        if names.count(name) > 1:
+            return False, f'called {name} {names.count(name)} times; at most once'
+    fanned = [call for call in calls if call.name == tool]
+    if len(fanned) != case.count:
+        return False, f'called {tool} {len(fanned)} times; wanted {case.count}'
+    valid = _ARGS_OK.get(tool)
+    for call in fanned:
+        if valid is not None and not valid(call.arguments):
+            return (
+                False,
+                f'argument check: {tool} was called with arguments the server would refuse: {call.arguments!r}',
+            )
+        for key, predicate in case.expect_args.items():
+            value = call.arguments.get(key)
+            if not predicate(value):
+                return False, f'argument {key}={value!r} failed its check'
+    claims = {' '.join(str(call.arguments.get('claim', '')).split()).lower() for call in fanned}
+    if len(claims) != case.count:
+        return False, f'{tool} covered {len(claims)} different claims; wanted {case.count}'
     return True, ''
 
 
