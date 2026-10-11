@@ -34,3 +34,19 @@ test('the copy names no assistant: the same card runs in every host', () => {
 test('no brand label: the host already names the app above the card', () => {
   assert.equal(copy.BRAND, undefined);
 });
+
+test('the pages disclosure reads exactly as agreed, and says pages, not sources', () => {
+  assert.equal(copy.pagesSummary(1), 'Pages the reviewers looked at (1)');
+  assert.equal(copy.pagesSummary(12), 'Pages the reviewers looked at (12)');
+  assert.equal(copy.showAllPages(7), 'Show all 7');
+  for (const s of [copy.pagesSummary(3), copy.showAllPages(3)]) {
+    assert.doesNotMatch(s, /source|evidence|citation/i, s);
+  }
+});
+
+test('a quick check no longer says it shows no sources', () => {
+  assert.equal(copy.QUICK_FOOTER, undefined);
+  for (const line of Object.values(copy.CONFIDENCE_LINE)) assert.doesNotMatch(line, /no sources/i, line);
+  assert.equal(copy.CONFIDENCE_LINE.high, 'Confidence: high · a first read');
+  assert.equal(copy.CONFIDENCE_LINE.medium, 'Confidence: medium · a first read');
+});
