@@ -150,6 +150,19 @@ LOW_CONFIDENCE_NEXT_STEP = (
     '`verify_claim` with this claim.'
 )
 
+# The low-confidence step for a "No Public Record" quick row. The generic one
+# says Lenz is not confident in the verdict, which misdescribes it: the quick
+# search came back empty, and that is the answer. This one says so and offers
+# the deep check as a fuller search. Same rules as above: what to SAY, the tool
+# named only in the separate instruction, never started without the user's yes,
+# and never a word that turns "no record" into "false".
+NO_PUBLIC_RECORD_NEXT_STEP = (
+    'The quick search found no public record that would show this claim. Tell the user that, and that '
+    'a deep check is a fuller search for one and takes about a minute or two, and ask whether to run it. '
+    'Do not call the claim false or say it is wrong. Do not mention tool names or credits to the user. '
+    'If they say yes, call `verify_claim` with this claim.'
+)
+
 # How the model is asked to show a completed deep check: without it a sourced
 # result reached the user as the bare label.
 PRESENTATION_NOTE = (
@@ -1208,7 +1221,9 @@ async def assess_claim(
         # and there is no verdict to check.
         if c.get('confidence') == 'low' and not c.get('error_code') and c.get('verdict') != 'Error':
             entry['recommend_verify'] = True
-            entry['next_step'] = LOW_CONFIDENCE_NEXT_STEP
+            entry['next_step'] = (
+                NO_PUBLIC_RECORD_NEXT_STEP if c.get('verdict') == 'No Public Record' else LOW_CONFIDENCE_NEXT_STEP
+            )
         # The language the quick check was answered in, as a code. The card
         # sends it back with the deep check so both answer in the same one; it is
         # never shown. Whatever the row names outside the served set is dropped.
