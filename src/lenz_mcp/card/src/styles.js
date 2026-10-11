@@ -119,6 +119,7 @@ body { font-family: var(--lz-font); color: var(--lz-ink); -webkit-font-smoothing
 .v-mostly-false { color: var(--lz-mostly-false); }
 .v-false { color: var(--lz-false); }
 .v-unknown { color: var(--lz-ink); }
+.v-no-record { color: var(--lz-ink); }
 
 .lz-region { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--lz-hair); }
 .lz-region.first { margin-top: 12px; padding-top: 0; border-top: 0; }

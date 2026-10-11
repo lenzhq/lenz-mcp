@@ -318,6 +318,22 @@ def build() -> dict[str, Any]:
     )
     add_deep('deep-no-sources', 'edited (many-sources: sources removed)', row(many, sources=[]), 'quick-low')
     add_deep(
+        'deep-no-public-record',
+        'edited (many-sources: verdict No Public Record, no score, no rewrite, sources removed)',
+        row(
+            many,
+            verdict='No Public Record',
+            lenz_score=None,
+            confidence='medium',
+            key_finding='No public source records this claim.',
+            executive_summary='Lenz found no public record of this claim.',
+            suggested_rewrite=None,
+            warnings=[],
+            sources=[],
+        ),
+        'quick-high',
+    )
+    add_deep(
         'deep-no-score',
         'edited (many-sources: lenz_score null, a pre-score payload)',
         row(many, lenz_score=None),

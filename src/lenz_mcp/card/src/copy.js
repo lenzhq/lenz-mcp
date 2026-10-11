@@ -35,10 +35,11 @@ export const TALLY_WORDS = {
   wrong: (n) => (n === 1 ? '1 looks wrong' : `${n} look wrong`),
   mixed: (n) => `${n} mixed`,
   hold: (n) => (n === 1 ? '1 holds up' : `${n} hold up`),
+  norecord: (n) => (n === 1 ? '1 has no public record' : `${n} have no public record`),
   error: (n) => `${n} could not be checked`,
 };
 export const tallyLine = (counts) =>
-  ['wrong', 'mixed', 'hold', 'error']
+  ['wrong', 'mixed', 'hold', 'norecord', 'error']
     .filter((key) => counts[key] > 0)
     .map((key) => TALLY_WORDS[key](counts[key]))
     .join(' · ');
@@ -81,7 +82,10 @@ export const QUOTA_NEXT = 'Ask how many Lenz credits you have left.';
 
 // Deep check, completed
 export const DEEP_EYEBROW = 'Claim checked';
-export const changedFrom = (verdict) => `Changed from the quick verdict: was ${verdict}`;
+export const changedFrom = (verdict, now = '') =>
+  now.trim().toLowerCase() === 'no public record'
+    ? `Changed from the quick verdict: was ${verdict}. The deep check found no public record of this claim.`
+    : `Changed from the quick verdict: was ${verdict}`;
 export const deepConfidence = (bucket) => `Confidence: ${bucket}`;
 export const scoreLabel = (score) => `Score ${score} out of 10`;
 export const CAVEATS = 'Caveats';

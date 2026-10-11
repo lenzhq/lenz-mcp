@@ -128,7 +128,9 @@ PRESENTATION_NOTE = (
     'Show the user the verdict with its score and how confident Lenz is, the key finding, any '
     'warnings, how many sources the check drew on (the `sources_total` field), the top sources '
     'with what each one says, and, when there is one, the suggested rewrite as a suggestion. Do '
-    'not reduce this to the verdict label, and do not show the user field or tool names.'
+    'not reduce this to the verdict label, and do not show the user field or tool names. A '
+    'verdict of "No Public Record" has no score: it says nothing public records the claim, which '
+    'does not make it false, so never present it as a False verdict.'
 )
 
 # On every completed deep check. The server is stateless and cannot know what a
@@ -403,7 +405,7 @@ mcp = MCPServer(
         'offer one; on high, mention that one is available without '
         'pushing it. On a long text, name at most the two claims that matter; never start '
         'deep checks across every row. '
-        '`verify_claim` is the deep check: a 1-10 score, the key finding, warnings and the '
+        '`verify_claim` is the deep check: a 1-10 score (or No Public Record), the key finding, warnings and '
         'main sources, in ~90 seconds, for more credits. '
         "Never start one without the user's yes, unless they asked for sources, a deep check or a "
         'verification: then run it directly. Say a deep check is running; if the call returns '
@@ -414,9 +416,9 @@ mcp = MCPServer(
         '`list_verifications` finds an earlier deep check, or one whose result never arrived. '
         '`ask_followup` answers a follow-up on a completed deep check. '
         '`check_citations` checks whether the sources a draft cites support it, only when the user asks '
-        'that; it takes up to two minutes, and `get_citation_check` waits for a running one. '
+        'that; it takes up to two minutes; `get_citation_check` waits for a running one. '
         '`check_usage` shows credits left; never a prerequisite. '
-        'Verdicts are directional, not absolute: always show the confidence.'
+        'Verdicts are directional: always show the confidence.'
     ),
     website_url=config.FRONTEND_URL,
     # 2.x defaults `version` to '', and an
@@ -1404,7 +1406,8 @@ async def verify_claim(
     ] = 'standard',
 ) -> dict[str, Any]:
     """Run the deep check on ONE claim against independent sources and return a verdict with a
-    1–10 score, the key finding, warnings and the main sources (~90 seconds).
+    1–10 score (or No Public Record when nothing public records the claim), the key finding,
+    warnings and the main sources (~90 seconds).
 
     Not the default. Run only when the user asked for sources, a deep check or
     a verification, or agreed after a quick check; a plain "check this" is
@@ -1641,7 +1644,7 @@ async def get_verification(
 
     With a `task_id` (from `verify_claim` or `select_claims`) this waits for
     the run to finish and returns `status: completed` with the
-    verdict, the 1–10 Lenz score, confidence, key finding, executive summary,
+    verdict, the 1–10 Lenz score (or No Public Record, with no score, when nothing public records the claim), confidence, key finding, executive summary,
     top sources, a `suggested_rewrite` when the claim can be corrected (not
     verified itself: a suggestion to review, never a checked fact), the
     `depth` the verdict was produced at and the
@@ -2008,7 +2011,8 @@ def _completed_result(result: dict[str, Any]) -> dict[str, Any]:
         'verification_id': result.get('verification_id', ''),
         'claim': result.get('claim', ''),
         'verdict': result.get('verdict', ''),
-        # The 1-10 score agents were asking chat for; absent (None) only on pre-score payloads.
+        # The 1-10 score agents were asking chat for. None on pre-score payloads and on
+        # a verdict of "No Public Record", which carries no score.
         'lenz_score': result.get('lenz_score'),
         'confidence': result.get('confidence', ''),
         'confidence_note': CONFIDENCE_NOTE,
@@ -2135,7 +2139,7 @@ async def list_verifications(ctx: Context) -> dict[str, Any]:
     finished after the wait ended is listed here. A row appears only once a
     check has finished, so a check still running is not listed yet, and quick
     checks (`assess_claim`) are not stored. Each row carries the claim, the
-    verdict, the score, the confidence, the key finding and a
+    verdict, the score (none for No Public Record), the confidence, the key finding and a
     `verification_id`: pass it to `get_verification` for the full result
     with its sources, or to `ask_followup`. Read-only: it never starts a check
     and costs no credits.

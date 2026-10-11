@@ -113,11 +113,34 @@ test('the tally counts each row by its current verdict, and error rows apart', (
     { claim: 'f', verdict: 'Error', error: 'upstream_unavailable' },
     { claim: 'g', verdict: '' },
   ];
-  assert.deepEqual(tally(rows), { wrong: 2, mixed: 1, hold: 2, error: 2 });
+  assert.deepEqual(tally(rows), { wrong: 2, mixed: 1, hold: 2, norecord: 0, error: 2 });
   assert.equal(copy.tallyLine(tally(rows)), '2 look wrong · 1 mixed · 2 hold up · 2 could not be checked');
   assert.equal(copy.tallyLine(tally([{ claim: 'a', verdict: 'False' }])), '1 looks wrong');
   assert.equal(copy.tallyLine(tally([{ claim: 'a', verdict: 'True' }])), '1 holds up');
-  assert.equal(copy.tallyLine({ wrong: 0, mixed: 0, hold: 3, error: 0 }), '3 hold up');
+  assert.equal(copy.tallyLine({ wrong: 0, mixed: 0, hold: 3, norecord: 0, error: 0 }), '3 hold up');
+});
+
+test('No Public Record is counted apart from errors and from wrong, and has a neutral ink', () => {
+  const rows = [
+    { claim: 'a', verdict: 'No Public Record' },
+    { claim: 'b', verdict: 'no public record' },
+    { claim: 'c', verdict: 'False' },
+    { claim: 'd', verdict: 'Error', error: 'upstream_unavailable' },
+  ];
+  assert.deepEqual(tally(rows), { wrong: 1, mixed: 0, hold: 0, norecord: 2, error: 1 });
+  assert.equal(copy.tallyLine(tally(rows)), '1 looks wrong · 2 have no public record · 1 could not be checked');
+  assert.equal(copy.tallyLine(tally([rows[0]])), '1 has no public record');
+  assert.equal(verdictKey('No Public Record'), 'no-record');
+});
+
+test('a deep No Public Record reads with a null score and never calls the claim false', () => {
+  const result = deepResult({ status: 'completed', verdict: 'No Public Record', lenz_score: null, confidence: 'medium' });
+  assert.equal(result.verdict, 'No Public Record');
+  assert.equal(result.score, null);
+  assert.equal(changedFrom('True', result.verdict), 'True');
+  assert.match(copy.changedFrom('True', result.verdict), /was True\. The deep check found no public record/);
+  assert.doesNotMatch(copy.changedFrom('True', result.verdict), /false/i);
+  assert.equal(copy.changedFrom('True', 'False'), 'Changed from the quick verdict: was True');
 });
 
 test('a deep check the model ran routes to its own card, whatever state it is in', () => {

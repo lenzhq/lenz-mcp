@@ -184,10 +184,11 @@ export function changedFrom(quickVerdict, deepVerdict) {
   return q && d && q.toLowerCase() !== d.toLowerCase() ? q : '';
 }
 
-// The list's tally: how many rows read wrong, mixed, fine, or could not be checked.
+// The list's tally: how many rows read wrong, mixed, fine, have no public record
+// (not an error: the check ran), or could not be checked.
 // Counted on each row's CURRENT verdict, so a deep check that changes one moves it.
 export function tally(rows) {
-  const counts = { wrong: 0, mixed: 0, hold: 0, error: 0 };
+  const counts = { wrong: 0, mixed: 0, hold: 0, norecord: 0, error: 0 };
   for (const row of rows) {
     if (row.error || !row.verdict) {
       counts.error += 1;
@@ -197,6 +198,7 @@ export function tally(rows) {
     if (key === 'false' || key === 'mostly-false') counts.wrong += 1;
     else if (key === 'true' || key === 'mostly-true') counts.hold += 1;
     else if (key === 'mixed') counts.mixed += 1;
+    else if (key === 'no-record') counts.norecord += 1;
     else counts.error += 1;
   }
   return counts;

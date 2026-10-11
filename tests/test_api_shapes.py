@@ -285,6 +285,12 @@ _OLD_NOTES_NOTE = (
 #
 # A run that found too few public sources (`insufficient_evidence`) tells the
 # model a sentence, not the step name "Pipeline stopped at: research_empty".
+_OLD_PRESENTATION_NOTE = (
+    'Show the user the verdict with its score and how confident Lenz is, the key finding, any '
+    'warnings, how many sources the check drew on (the `sources_total` field), the top sources '
+    'with what each one says, and, when there is one, the suggested rewrite as a suggestion. Do '
+    'not reduce this to the verdict label, and do not show the user field or tool names.'
+)
 _OLD_INSUFFICIENT_MESSAGE = 'Pipeline stopped at: research_empty'
 
 
@@ -292,6 +298,8 @@ def _since_the_oracle(value: Any) -> Any:
     if not isinstance(value, dict):
         return value
     out = dict(value)
+    if out.get('presentation') == _OLD_PRESENTATION_NOTE:
+        out['presentation'] = server.PRESENTATION_NOTE
     if out.get('failure_class') == 'insufficient_evidence' and out.get('message') == _OLD_INSUFFICIENT_MESSAGE:
         out['message'] = server.INSUFFICIENT_EVIDENCE_MESSAGE
     note = out.get('confidence_note')
@@ -310,6 +318,8 @@ def test_the_oracle_changes_still_apply():
     assert _NEW_FIRST_READ in server.ASSESS_ESCALATION_NOTE
     assert json.dumps(_OLD_NOTES_NOTE, ensure_ascii=False)[1:-1] in raw
     assert _NEW_ESCALATION_CLAUSE in server.ASSESS_ESCALATION_NOTE
+    assert json.dumps(_OLD_PRESENTATION_NOTE, ensure_ascii=False)[1:-1] in raw
+    assert server.PRESENTATION_NOTE.startswith(_OLD_PRESENTATION_NOTE[:-1])
 
 
 def _output(scenario: str, shape: str) -> Any:
