@@ -7,7 +7,6 @@
 
 // Quick check
 export const QUICK_EYEBROW = 'Quick check';
-export const QUICK_FOOTER = 'Quick check';
 export const QUICK_VERDICT_LABEL = 'quick verdict';
 export const CONFIDENCE_LINE = {
   high: 'Confidence: high · a first read',

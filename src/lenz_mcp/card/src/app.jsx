@@ -547,7 +547,6 @@ function SingleCard({ row, host, announce, registerCompleted, reportState }) {
       {['failed', 'quota', 'unavailable', 'unrecoverable'].includes(state.kind) ? (
         <NotFinished state={state} onRetry={press} focusRef={terminalRef} />
       ) : null}
-      <Footer right={copy.QUICK_FOOTER} />
     </div>
   );
 }
@@ -690,6 +689,7 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
 
   return (
     <div class="lz">
+      <p class="lz-eyebrow">{copy.QUICK_EYEBROW}</p>
       <div class="lz-head">
         <h1 class="lz-claim" tabIndex={-1}>
           {copy.listHeading(rows.length)}
@@ -720,7 +720,6 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
           </button>
         ) : null}
       </div>
-      <Footer right={copy.QUICK_FOOTER} />
     </div>
   );
 }
@@ -1074,7 +1073,6 @@ export function App({ host, payload, announce, registerCompleted, reportState })
           eyebrow={copy.QUICK_EYEBROW}
           heading={route.row.claim}
           lines={[copy.ROW_ERROR[route.row.error] || copy.ROW_ERROR_DEFAULT, route.row.hint]}
-          footer={copy.QUICK_FOOTER}
         />
       );
     case 'deep':

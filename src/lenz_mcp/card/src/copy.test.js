@@ -45,7 +45,7 @@ test('the pages disclosure reads exactly as agreed, and says pages, not sources'
 });
 
 test('a quick check no longer says it shows no sources', () => {
-  assert.equal(copy.QUICK_FOOTER, 'Quick check');
+  assert.equal(copy.QUICK_FOOTER, undefined);
   for (const line of Object.values(copy.CONFIDENCE_LINE)) assert.doesNotMatch(line, /no sources/i, line);
   assert.equal(copy.CONFIDENCE_LINE.high, 'Confidence: high · a first read');
   assert.equal(copy.CONFIDENCE_LINE.medium, 'Confidence: medium · a first read');
