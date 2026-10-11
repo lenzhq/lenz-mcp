@@ -258,8 +258,9 @@ INSTRUCTIONS_MAX_CHARS = 2372
 # verdict on a claim the user never made. Raised again for the trigger
 # sentence: each example phrase sits beside the intent it stands for, followed
 # by what the tool is not for, so the description states the user's intent
-# rather than a list of words to react to.
-ASSESS_DESCRIPTION_MAX_CHARS = 1799
+# rather than a list of words to react to. Raised once more for the sixth
+# verdict word and the one sentence that says what it means.
+ASSESS_DESCRIPTION_MAX_CHARS = 1855
 # Raised from 1,575 for the sentence saying a row for a claim found false may carry a
 # `suggested_rewrite`: a suggestion built from the reviewers' reasoning, not verified.
 # Raised again to 1,799 for what follows the language of the text, and what does not.

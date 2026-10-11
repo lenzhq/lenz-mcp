@@ -460,6 +460,106 @@ def test_assess_claims_list_one_row_per_item_in_position(monkeypatch):
     assert rows[3]['hint'].startswith('This item was not processed')
 
 
+def _canonical_assess_row(**changes):
+    row = {
+        'claim': 'The claim.',
+        'language': 'en',
+        'status': 'completed',
+        'verdict': 'Mixed',
+        'confidence': 'medium',
+        'verification_url': None,
+        'rationale': None,
+        'dissent': None,
+        'suggested_rewrite': None,
+        'more_claims': [],
+        'failure': None,
+    }
+    row.update(changes)
+    return row
+
+
+def test_a_quick_no_public_record_row_is_a_verdict_not_an_error(monkeypatch):
+    """The label arrives like any other: no error key, no score, no rewrite, and
+    the low-confidence recommendation follows the one rule that already exists."""
+    _patch_api(
+        monkeypatch,
+        'assess',
+        ApiResponse(
+            status=200,
+            data={
+                'claims': [
+                    _canonical_assess_row(claim='A', verdict='No Public Record', confidence='medium'),
+                    _canonical_assess_row(claim='B', verdict='No Public Record', confidence='low'),
+                ]
+            },
+        ),
+    )
+    out = _run(server.assess_claim(claim='A. B.', ctx=_ctx()))
+    medium, low = out['claims']
+    assert medium == {'claim': 'A', 'verdict': 'No Public Record', 'confidence': 'medium'}
+    assert low['verdict'] == 'No Public Record'
+    assert low['recommend_verify'] is True
+    for row in (medium, low):
+        assert 'error' not in row
+        assert 'suggested_rewrite' not in row
+        assert 'lenz_score' not in row
+
+
+def test_a_failed_row_names_its_class_or_the_input_it_could_not_read(monkeypatch):
+    """Failure codes are the class (upstream_unavailable, internal) or an input
+    code (no_checkable_claim, page_unreadable). Each row stays in position."""
+
+    def failed(claim, code, failure_class, retryable):
+        return _canonical_assess_row(
+            claim=claim,
+            status='failed',
+            verdict=None,
+            confidence=None,
+            failure={
+                'code': code,
+                'detail': 'Detail.',
+                'hint': 'Hint.',
+                'failure_class': failure_class,
+                'retryable': retryable,
+            },
+        )
+
+    _patch_api(
+        monkeypatch,
+        'assess',
+        ApiResponse(
+            status=200,
+            data={
+                'claims': [
+                    failed('a', 'no_checkable_claim', 'invalid_input', False),
+                    failed('b', 'upstream_unavailable', 'upstream_unavailable', True),
+                    failed('c', 'internal', 'internal', False),
+                    failed('d', 'page_unreadable', 'invalid_input', False),
+                ]
+            },
+        ),
+    )
+    out = _run(server.assess_claim(claims=['a', 'b', 'c', 'd'], ctx=_ctx()))
+    assert [row['error'] for row in out['claims']] == [
+        'no_claim',
+        'upstream_unavailable',
+        'internal',
+        'page_unreadable',
+    ]
+    assert all(row['verdict'] == 'Error' for row in out['claims'])
+    assert all('recommend_verify' not in row for row in out['claims'])
+
+
+def test_the_quick_check_description_names_no_public_record_and_says_what_it_is():
+    doc = server.assess_claim.__doc__ or ''
+    assert 'No Public Record' in doc
+    # What the result is, not what it is not: no public record was found that
+    # would show the claim; it is not a verdict of False and not an error.
+    sentence = doc.split('No Public Record means', 1)[1].split('.', 1)[0].lower()
+    assert 'no public record' in sentence
+    assert 'false' in sentence
+
+
 def test_assess_claims_list_strips_blank_items_and_rejects_both_forms():
     out = _run(server.assess_claim(claim='x', ctx=_ctx(), claims=['y']))
     assert out['status'] == 'error'

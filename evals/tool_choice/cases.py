@@ -272,6 +272,14 @@ QUICK_LOW = _quick(
     f'repeated widely but traces to no source. {_OFFER}',
 )
 
+QUICK_NO_RECORD = _quick(
+    'Check with Lenz whether the old mill at Harrow Bend ran until 1971.',
+    'The old mill at Harrow Bend ran until 1971.',
+    [real.assess_row('The old mill at Harrow Bend ran until 1971.', 'No Public Record', 'medium')],
+    "Lenz's first read: No Public Record, with medium confidence. The reviewers found no public record "
+    f'that would show the claim, so it is not confirmed. {_OFFER}',
+)
+
 QUICK_HIGH = _quick(
     'Check with Lenz: is the Eiffel Tower 330 metres tall?',
     'The Eiffel Tower is 330 metres tall.',
@@ -1146,6 +1154,18 @@ CASES: tuple[Case, ...] = (
         why=(
             'The offer was made and the user said no. A deep check now, or the same quick check '
             'again, spends credits against an explicit refusal.'
+        ),
+    ),
+    Case(
+        id='escalate-no-record-needs-asking',
+        group='escalation',
+        history=QUICK_NO_RECORD,
+        prompt='ok, noted',
+        expect=NONE,
+        forbid=('verify_claim',),
+        why=(
+            'A quick No Public Record read at medium confidence is a reason to OFFER a deep check, '
+            'never to start one. The offer was made and the user only acknowledged it.'
         ),
     ),
     Case(

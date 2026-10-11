@@ -130,6 +130,11 @@ function Pages({ pages, host, id }) {
   );
 }
 
+// What a quick No Public Record verdict means, in one plain sentence under it.
+function NoRecordLine({ row }) {
+  return verdictKey(row.verdict) === 'no-record' ? <p class="lz-body lz-no-record">{copy.NO_RECORD_QUICK}</p> : null;
+}
+
 function Reasoning({ row, host, idSuffix = '' }) {
   const pages = row.pages || [];
   if (!row.rationale && !row.dissent && !pages.length) return null;
@@ -540,6 +545,7 @@ function SingleCard({ row, host, announce, registerCompleted, reportState }) {
         {row.verdict}
         {busy ? <span class="lz-verdict-label">{copy.QUICK_VERDICT_LABEL}</span> : null}
       </p>
+      {busy ? null : <NoRecordLine row={row} />}
       <p class="lz-meta lz-conf">{copy.CONFIDENCE_LINE[row.confidence]}</p>
       {busy ? null : <Reasoning row={row} host={host} />}
       {state.kind === 'idle' && host.capabilities.serverTools ? (
@@ -645,6 +651,7 @@ function Row({ index, row, host, open, hidden, onToggle, announce, registerCompl
             {/* The confidence belongs to the verdict the row is showing: the deep
                 check's once it has one, the quick read's until then. */}
             {result ? <p class="lz-meta lz-conf">{copy.deepConfidence(result.confidence)}</p> : null}
+            {result || row.error ? null : <NoRecordLine row={row} />}
             {result || row.error ? null : <p class="lz-meta lz-conf">{copy.CONFIDENCE_LINE[row.confidence]}</p>}
             {result ? (
               <>
