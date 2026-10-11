@@ -968,6 +968,59 @@ def test_get_verification_too_few_sources_says_so_in_a_sentence(monkeypatch, bod
     assert out['failure_class'] == 'insufficient_evidence'
 
 
+def test_get_verification_no_public_record_passes_through_with_no_score(monkeypatch):
+    _patch_api(
+        monkeypatch,
+        'verify_status',
+        ApiResponse(
+            status=200,
+            data={
+                'status': 'completed',
+                'result': {
+                    'verification_id': 'abcd1234',
+                    'claim': 'The claim.',
+                    'verdict': 'No Public Record',
+                    'lenz_score': None,
+                    'confidence': 'medium',
+                    'key_finding': 'No public source records this claim.',
+                    'sources': [],
+                },
+            },
+        ),
+    )
+    out = _run(server.get_verification('tid', _ctx()))
+    assert out['status'] == 'completed'
+    assert out['verdict'] == 'No Public Record'
+    assert out['lenz_score'] is None
+    assert out['confidence'] == 'medium'
+    assert out['suggested_rewrite'] is None
+    # the model is told it is not a False verdict
+    assert 'does not make it false' in out['presentation']
+    assert 'No Public Record' in server.PRESENTATION_NOTE
+
+
+@pytest.mark.parametrize(
+    ('code', 'text'),
+    [
+        ('upstream_unavailable', 'Lenz could not reach the sources it needed just now.'),
+        ('internal', 'Pipeline failed.'),
+        ('cancelled', 'Cancelled.'),
+        ('no_checkable_claim', 'Not a verifiable claim.'),
+    ],
+)
+def test_get_verification_the_collapsed_failure_codes_read_as_sentences(monkeypatch, code, text):
+    body = {'status': 'failed', 'failure': {'code': code, 'failure_class': 'internal', 'retryable': False}}
+    _patch_api(monkeypatch, 'verify_status', ApiResponse(status=200, data=body))
+    out = _run(server.get_verification('tid', _ctx()))
+    assert out['status'] == 'failed'
+    assert out['message'] == text
+
+
+def test_the_deep_check_descriptions_name_no_public_record():
+    for doc in (server.verify_claim.__doc__, server.get_verification.__doc__, server.mcp.instructions):
+        assert 'No Public Record' in (doc or '')
+
+
 def test_get_verification_completed_no_link(monkeypatch):
     _patch_api(
         monkeypatch,

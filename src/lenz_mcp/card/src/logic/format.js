@@ -9,6 +9,8 @@ const VERDICT_KEYS = {
   mixed: 'mixed',
   'mostly false': 'mostly-false',
   false: 'false',
+  // Not a verdict on the claim: nothing public records it. Neutral ink, no score.
+  'no public record': 'no-record',
 };
 
 // The CSS modifier for a verdict word's ink; anything else reads as neutral.

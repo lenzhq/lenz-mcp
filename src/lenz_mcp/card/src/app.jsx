@@ -246,6 +246,8 @@ function Sources({ result, host }) {
   const all = result.sources;
   const list = open ? all : all.slice(0, SOURCES_SHOWN);
   const hidden = all.length - SOURCES_SHOWN;
+  // No Public Record already says nothing public records the claim: no "could not be read" line.
+  if (!all.length && verdictKey(result.verdict) === 'no-record') return null;
   if (!all.length) {
     return (
       <div class="lz-region">
@@ -320,7 +322,7 @@ function DeepResult({ result, quickVerdict, host, headingRef, compact = false })
           {result.claim}
         </h1>
       )}
-      {was && !compact ? <p class="lz-meta lz-changed">{copy.changedFrom(was)}</p> : null}
+      {was && !compact ? <p class="lz-meta lz-changed">{copy.changedFrom(was, result.verdict)}</p> : null}
       {compact ? null : <Stamp result={result} />}
       {compact ? null : <p class="lz-meta lz-conf">{copy.deepConfidence(result.confidence)}</p>}
       {result.keyFinding ? <p class="lz-finding">{result.keyFinding}</p> : null}
@@ -588,7 +590,7 @@ function Row({ index, row, host, open, hidden, onToggle, announce, registerCompl
         {open ? (
           <div class="lz-row-panel" id={panelId}>
             {result && changedFrom(row.verdict, result.verdict) ? (
-              <p class="lz-meta lz-row-changed">{copy.changedFrom(changedFrom(row.verdict, result.verdict))}</p>
+              <p class="lz-meta lz-row-changed">{copy.changedFrom(changedFrom(row.verdict, result.verdict), result.verdict)}</p>
             ) : null}
             {row.error ? <p class="lz-body">{row.hint}</p> : null}
             {/* The confidence belongs to the verdict the row is showing: the deep
