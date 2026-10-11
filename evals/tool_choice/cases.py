@@ -141,6 +141,18 @@ def _same_sentence(value, expected: str) -> bool:
     return _norm(value).rstrip('. ') == _norm(expected).rstrip('. ')
 
 
+def _listed(history):
+    """One of the statements a quick check in `history` listed, as listed
+    (case and spacing aside): the deep check then matches its quick-check row."""
+    rows = {
+        _norm(row['claim'])
+        for turn in history
+        if isinstance(turn, ToolExchange)
+        for row in turn.result.get('claims', ())
+    }
+    return lambda value: isinstance(value, str) and _norm(value) in rows
+
+
 def _is(expected):
     return lambda value: value == expected
 
@@ -1072,8 +1084,9 @@ CASES: tuple[Case, ...] = (
         history=TWELVE_ROWS,
         prompt='Run a deep check on every one of them.',
         expect='verify_claim',
-        # Every one of the twelve calls is held to this, and to a different claim.
-        expect_args={'claim': _says('halden')},
+        # Every one of the twelve calls is held to this, and to a different claim:
+        # a row's statement exactly as the quick check listed it.
+        expect_args={'claim': _listed(TWELVE_ROWS)},
         count=12,
         also_allowed=('check_usage',),
         answers=(('check_usage', _BALANCE),),
@@ -1084,8 +1097,8 @@ CASES: tuple[Case, ...] = (
             'ones, is refusing what was asked. Sizing the batch against the balance first is allowed: '
             'the eval then answers it (1,000 credits, enough for all twelve) and the checks must '
             'follow; asking for confirmation instead is the cost step the user did not ask for. '
-            'Each call must name the company, as the rows do: "It opened offices" is not a claim '
-            'anyone can check.'
+            "Each call passes a row's statement exactly as listed, so the deep check matches its "
+            'quick-check row; "It opened offices" is not a claim anyone can check.'
         ),
     ),
     Case(
@@ -1153,6 +1166,22 @@ CASES: tuple[Case, ...] = (
         ),
     ),
     # ── Deep-check arguments ──────────────────────────────────────────
+    Case(
+        id='deep-claim-stands-on-its-own',
+        group='deep_check',
+        history=(
+            ('user', 'Halden Systems grew revenue 40% in 2025, according to its annual report.'),
+            ('assistant', 'That is a strong year. Do you want me to check it?'),
+        ),
+        prompt='Use Lenz to verify with sources that it also opened an office in Lyon the same year.',
+        expect='verify_claim',
+        expect_args={'claim': _says('halden', 'lyon', '2025')},
+        forbid=('assess_claim',),
+        why=(
+            'The call carries the claim and nothing else from the conversation. "It ... the same year" '
+            'names nothing on its own, so the claim must say who and when: Halden Systems, 2025.'
+        ),
+    ),
     Case(
         id='depth-low-requested',
         group='deep_check',
