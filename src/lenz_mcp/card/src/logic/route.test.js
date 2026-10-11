@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { buttonStrength, changedFrom, deepResult, modelRanIt, routePayload, routeQuick, tally } from './route.js';
 import * as copy from '../copy.js';
-import { confidenceBucket, domainOf, formatElapsed, isWebUrl, languageCode, languageName, stageLabel, text, verdictKey } from './format.js';
+import { confidenceBucket, domainOf, formatElapsed, isWebUrl, languageCode, languageName, stageLabel, text, verdictKey, verdictLabel } from './format.js';
 
 test('a single quick-check row', () => {
   const out = routeQuick({
@@ -130,6 +130,9 @@ test('No Public Record is counted apart from errors and from wrong, and has a ne
   assert.equal(copy.tallyLine(tally(rows)), '1 looks wrong · 2 have no public record · 1 could not be checked');
   assert.equal(copy.tallyLine(tally([rows[0]])), '1 has no public record');
   assert.equal(verdictKey('No Public Record'), 'no-record');
+  // Shown as everywhere else Lenz shows it; every other verdict is its own word.
+  assert.equal(verdictLabel('No Public Record'), 'Not on the public record');
+  assert.equal(verdictLabel('Mostly False'), 'Mostly False');
 });
 
 test('a deep No Public Record reads with a null score and says it is not a false verdict', () => {
