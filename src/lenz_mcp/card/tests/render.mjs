@@ -115,6 +115,11 @@ async function openState(state, { scale, bypassCSP, phone = 0 }) {
   const frame = await cardFrame(page);
   await frame.waitForSelector('#lenz-card > *', { timeout: 5000 });
   await settle(page, state);
+  if (state.openPages) {
+    await frame.getByText(/^Pages the reviewers looked at/).first().click();
+    if (state.showAllPages) await frame.getByRole('button', { name: /^Show all/ }).click();
+    await page.waitForTimeout(150);
+  }
   if (state.openFullCheck) {
     await frame.getByRole('button', { name: 'Show the full check' }).click();
     await page.waitForTimeout(150);

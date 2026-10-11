@@ -271,6 +271,10 @@ KNOWN_DIFFERENCES: dict[str, dict[str, Any]] = {
 # longer describes it.
 _OLD_ESCALATION_CLAUSE = 'on medium confidence or a dissent offer one;'
 _NEW_ESCALATION_CLAUSE = 'on medium confidence offer one;'
+# The quick check now forwards the pages the reviewers looked at, so its note no
+# longer says it shows no sources.
+_OLD_FIRST_READ = 'This is a quick check: a first read that shows no sources.'
+_NEW_FIRST_READ = 'This is a quick check: a first read.'
 _OLD_NOTES_NOTE = (
     " `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when "
     "set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked "
@@ -300,7 +304,7 @@ def _since_the_oracle(value: Any) -> Any:
         out['message'] = server.INSUFFICIENT_EVIDENCE_MESSAGE
     note = out.get('confidence_note')
     if isinstance(note, str):
-        note = note.replace(_OLD_ESCALATION_CLAUSE, _NEW_ESCALATION_CLAUSE)
+        note = note.replace(_OLD_ESCALATION_CLAUSE, _NEW_ESCALATION_CLAUSE).replace(_OLD_FIRST_READ, _NEW_FIRST_READ)
         out['confidence_note'] = note.replace(_OLD_NOTES_NOTE, server.ASSESS_NOTES_NOTE)
     return out
 
@@ -310,6 +314,8 @@ def test_the_oracle_changes_still_apply():
     text is what the server says now."""
     raw = ORACLE_PATH.read_text(encoding='utf-8')
     assert _OLD_ESCALATION_CLAUSE in raw
+    assert _OLD_FIRST_READ in raw
+    assert _NEW_FIRST_READ in server.ASSESS_ESCALATION_NOTE
     assert json.dumps(_OLD_NOTES_NOTE, ensure_ascii=False)[1:-1] in raw
     assert _NEW_ESCALATION_CLAUSE in server.ASSESS_ESCALATION_NOTE
     assert json.dumps(_OLD_PRESENTATION_NOTE, ensure_ascii=False)[1:-1] in raw

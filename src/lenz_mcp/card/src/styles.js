@@ -201,6 +201,15 @@ a.lz-link { display: inline-block; }
 .lz-button:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .lz-source-meta { margin-top: 2px; }
+/* The pages the reviewers looked at: a native disclosure, closed by default.
+   The summary is a quiet 13px label like the reasoning label, with a 44px hit
+   area on touch; the marker is the browser's own. */
+.lz-pages-block { margin-top: 12px; }
+.lz-pages > summary { cursor: pointer; font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--lz-meta); padding: 6px 0; }
+@media (pointer: coarse) { .lz-pages > summary { min-height: 44px; display: flex; align-items: center; } }
+.lz-pages-list { margin-top: 6px; }
+.lz-pages-list > li { overflow-wrap: anywhere; }
+.lz-pages > .lz-link { margin-top: 8px; }
 .lz-quote { margin-top: 6px; font-size: 15px; line-height: 1.6; text-indent: -0.4em; }
 /* A non-English quote's language, before it: the quote no longer starts the
    line, so its opening mark does not hang. */

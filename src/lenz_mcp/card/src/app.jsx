@@ -87,8 +87,53 @@ function Clamped({ id, children }) {
   );
 }
 
-function Reasoning({ row }) {
-  if (!row.rationale && !row.dissent) return null;
+// The pages the reviewers looked at: a disclosure, closed until the reader opens
+// it, under the reviewers' note. Five titles, then "Show all N". Titles are text
+// nodes; a link opens through the host, or is plain text where the host cannot
+// open links. Opening it, or a link, calls no tool and sends no message.
+const PAGES_SHOWN = 5;
+
+function Pages({ pages, host, id }) {
+  const [all, setAll] = useState(false);
+  const list = all ? pages : pages.slice(0, PAGES_SHOWN);
+  const canOpen = host.capabilities.openLinks;
+  return (
+    <details class="lz-pages">
+      <summary class="lz-pages-summary">{copy.pagesSummary(pages.length)}</summary>
+      <ul class="lz-list lz-pages-list" id={id}>
+        {list.map((page, i) => (
+          <li key={i}>
+            {canOpen && isWebUrl(page.url) ? (
+              <a
+                class="lz-link"
+                href={page.url}
+                rel="noopener noreferrer nofollow ugc"
+                onClick={(event) => {
+                  event.preventDefault();
+                  host.openLink(page.url).catch(() => {});
+                }}
+              >
+                {page.title}
+              </a>
+            ) : (
+              <p class="lz-body">{page.title}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+      {pages.length > PAGES_SHOWN && !all ? (
+        <button type="button" class="lz-link" aria-controls={id} onClick={() => setAll(true)}>
+          {copy.showAllPages(pages.length)}
+        </button>
+      ) : null}
+    </details>
+  );
+}
+
+function Reasoning({ row, host, idSuffix = '' }) {
+  const pages = row.pages || [];
+  if (!row.rationale && !row.dissent && !pages.length) return null;
+  const hasNote = Boolean(row.rationale || row.dissent);
   return (
     <div class="lz-region first">
       {row.rationale ? (
@@ -105,6 +150,11 @@ function Reasoning({ row }) {
             {copy.DISSENT_PREFIX}
             {row.dissent}
           </Clamped>
+        </div>
+      ) : null}
+      {pages.length ? (
+        <div class={hasNote ? 'lz-pages-block' : ''}>
+          <Pages pages={pages} host={host} id={`lz-pages${idSuffix}`} />
         </div>
       ) : null}
     </div>
@@ -492,7 +542,7 @@ function SingleCard({ row, host, announce, registerCompleted, reportState }) {
         {busy ? <span class="lz-verdict-label">{copy.QUICK_VERDICT_LABEL}</span> : null}
       </p>
       <p class="lz-meta lz-conf">{copy.CONFIDENCE_LINE[row.confidence]}</p>
-      {busy ? null : <Reasoning row={row} />}
+      {busy ? null : <Reasoning row={row} host={host} />}
       {state.kind === 'idle' && host.capabilities.serverTools ? (
         <CheckButton row={row} onPress={press} buttonRef={buttonRef} />
       ) : null}
@@ -500,7 +550,6 @@ function SingleCard({ row, host, announce, registerCompleted, reportState }) {
       {['failed', 'quota', 'unavailable', 'unrecoverable'].includes(state.kind) ? (
         <NotFinished state={state} onRetry={press} focusRef={terminalRef} />
       ) : null}
-      <Footer right={copy.QUICK_FOOTER} />
     </div>
   );
 }
@@ -609,7 +658,7 @@ function Row({ index, row, host, open, hidden, onToggle, announce, registerCompl
               </>
             ) : (
               <>
-                {busy ? null : <Reasoning row={row} />}
+                {busy ? null : <Reasoning row={row} host={host} idSuffix={`-${index}`} />}
                 {state.kind === 'idle' && !row.error && host.capabilities.serverTools ? (
                   <CheckButton row={row} onPress={press} />
                 ) : null}
@@ -643,6 +692,7 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
 
   return (
     <div class="lz">
+      <p class="lz-eyebrow">{copy.QUICK_EYEBROW}</p>
       <div class="lz-head">
         <h1 class="lz-claim" tabIndex={-1}>
           {copy.listHeading(rows.length)}
@@ -673,7 +723,6 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
           </button>
         ) : null}
       </div>
-      <Footer right={copy.QUICK_FOOTER} />
     </div>
   );
 }
@@ -1027,7 +1076,6 @@ export function App({ host, payload, announce, registerCompleted, reportState })
           eyebrow={copy.QUICK_EYEBROW}
           heading={route.row.claim}
           lines={[copy.ROW_ERROR[route.row.error] || copy.ROW_ERROR_DEFAULT, route.row.hint]}
-          footer={copy.QUICK_FOOTER}
         />
       );
     case 'deep':

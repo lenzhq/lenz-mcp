@@ -19,6 +19,22 @@ export function buildStates(fixtures) {
   for (const [name, f] of Object.entries(quick)) {
     states.push({ name, group: name.startsWith('list') ? 'Interim list' : 'Quick check', provenance: f.provenance, toolResult: f.toolResult });
   }
+  // The pages disclosure, opened by the gallery (the dev switcher leaves it closed: click it).
+  states.push({
+    name: 'quick-pages-open',
+    group: 'Quick check',
+    provenance: `${quick['quick-pages'].provenance}, disclosure opened`,
+    toolResult: quick['quick-pages'].toolResult,
+    openPages: true,
+  });
+  states.push({
+    name: 'quick-pages-open-all',
+    group: 'Quick check',
+    provenance: `${quick['quick-pages'].provenance}, disclosure opened and "Show all" pressed`,
+    toolResult: quick['quick-pages'].toolResult,
+    openPages: true,
+    showAllPages: true,
+  });
   states.push({
     name: 'quick-low-no-server-tools',
     group: 'Quick check',

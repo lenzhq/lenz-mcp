@@ -210,6 +210,41 @@ def build() -> dict[str, Any]:
         error_code='no_claim',
         hint='This is a request to write something, not a statement that can be checked. Send a statement instead.',
     )
+    # The pages the reviewers looked at: invented titles on invented hosts.
+    pages_7 = [
+        {'title': 'Annual filings register, 2024 edition', 'url': 'https://registry.example.org/filings/2024'},
+        {'title': 'Filing statistics by year', 'url': 'https://registry.example.org/statistics'},
+        {'title': 'Guidance note on late filings', 'url': 'https://regulator.example.net/guidance/late-filings'},
+        {'title': 'Press office: filings reach a record', 'url': 'https://news.example.com/2025/02/filings-record'},
+        {'title': 'How the register counts a filing', 'url': 'https://registry.example.org/about/counting'},
+        {'title': 'Open data portal: filings, monthly', 'url': 'https://data.example.org/datasets/filings-monthly'},
+        {
+            'title': 'A long page title that wraps onto a second line on a narrow card, to show how it sits',
+            'url': 'https://archive.example.org/long',
+        },
+    ]
+    add_quick(
+        'quick-pages',
+        'edited (two-claims row 1: seven pages added)',
+        body_of([row(medium, searched_pages=pages_7)]),
+    )
+    add_quick(
+        'quick-pages-few',
+        'edited (one-claim row 1: two pages added)',
+        body_of([row(high, searched_pages=pages_7[:2])]),
+    )
+    add_quick(
+        'quick-pages-no-rationale',
+        'edited (two-claims row 1: rationale removed, three pages added)',
+        body_of([row(medium, rationale=None, searched_pages=pages_7[:3])]),
+    )
+    add_quick(
+        'list-2-pages',
+        'edited (two-claims: pages added to both rows)',
+        body_of(
+            [row(rows_2['claims'][0], searched_pages=pages_7), row(rows_2['claims'][1], searched_pages=pages_7[:2])]
+        ),
+    )
     add_quick('list-2', 'synthetic (two-claims)', rows_2)
     add_quick('list-4', 'synthetic (four-claims)', rows_4)
     add_quick('list-5', 'synthetic (five-claims)', rows_5)
@@ -234,9 +269,22 @@ def build() -> dict[str, Any]:
     )
     add_quick(
         'quick-hostile',
-        'hand-built (markup in the claim, an instruction in the rationale and dissent)',
+        'hand-built (markup in the claim, an instruction in the rationale and dissent, markup and an instruction in page titles)',
         body_of(
-            [row(low, claim=f'{HOSTILE_MARKUP} Vaccines cause autism.', rationale=INJECTION, dissent=HOSTILE_MARKUP)]
+            [
+                row(
+                    low,
+                    claim=f'{HOSTILE_MARKUP} Vaccines cause autism.',
+                    rationale=INJECTION,
+                    dissent=HOSTILE_MARKUP,
+                    searched_pages=[
+                        {'title': HOSTILE_MARKUP, 'url': 'https://e.example/markup'},
+                        {'title': INJECTION, 'url': 'https://e.example/instructions'},
+                        {'title': 'Dropped by the server', 'url': 'javascript:alert(3)'},
+                        {'title': 'Dropped, has credentials', 'url': 'https://user:pass@e.example/secret'},
+                    ],
+                )
+            ]
         ),
     )
 
@@ -278,7 +326,7 @@ def build() -> dict[str, Any]:
             lenz_score=None,
             confidence='medium',
             key_finding='No public source records this claim.',
-            executive_summary='Lenz found no public record of this claim. That does not make it false.',
+            executive_summary='Lenz found no public record of this claim.',
             suggested_rewrite=None,
             warnings=[],
             sources=[],

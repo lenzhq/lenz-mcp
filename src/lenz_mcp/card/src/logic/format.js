@@ -98,3 +98,38 @@ export function languageName(code, DisplayNames = globalThis.Intl && globalThis.
 export function score(value) {
   return Number.isInteger(value) && value >= 1 && value <= 10 ? value : null;
 }
+
+// A page title is third-party text: control characters and line breaks become
+// spaces, runs of space collapse, and it is cut at this length.
+export const PAGE_TITLE_MAX_CHARS = 200;
+// eslint-disable-next-line no-control-regex
+const URL_FORBIDDEN = /[\s\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+const TITLE_CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g;
+
+// The pages the reviewers looked at, from a payload that cannot be trusted
+// (the server filters the same way; this is the card's own check). An entry is
+// kept only if it is an object with a non-empty string `title` and a string
+// `url` that starts with http:// or https:// (any case), holds no whitespace or
+// control character, has a host and carries no credentials. Anything else is dropped; a value that is not a list is no list.
+// Only `title` and `url` are read.
+export function searchedPages(value) {
+  if (!Array.isArray(value)) return [];
+  const pages = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const { title: rawTitle, url } = entry;
+    if (typeof rawTitle !== 'string' || typeof url !== 'string') continue;
+    const title = rawTitle.replace(TITLE_CONTROL, ' ').replace(/\s+/g, ' ').trim().slice(0, PAGE_TITLE_MAX_CHARS).trim();
+    // The raw string must name a host itself (`https:///x` is read by browsers as host `x`).
+    if (!title || !/^https?:\/\/[^/?#\\]/i.test(url) || URL_FORBIDDEN.test(url)) continue;
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (_e) {
+      continue;
+    }
+    if (!parsed.hostname || parsed.username || parsed.password || /^[^/?#]*@/.test(url.replace(/^[a-z]+:\/\//i, ''))) continue;
+    pages.push({ title, url });
+  }
+  return pages;
+}
