@@ -81,8 +81,6 @@ export const QUOTA_SHORT = 'Not enough Lenz credits for a deep check.';
 export const QUOTA_NEXT = 'Ask how many Lenz credits you have left.';
 
 // Deep check, completed
-// The verdict word the card shows for the API's "No Public Record", as on the web and in the other apps.
-export const NO_PUBLIC_RECORD_LABEL = 'Not on the public record';
 export const DEEP_EYEBROW = 'Claim checked';
 export const changedFrom = (verdict, now = '') =>
   now.trim().toLowerCase() === 'no public record'

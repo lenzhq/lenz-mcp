@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 
 import * as copy from './copy.js';
 import { createDeepCheck } from './logic/deep-check.js';
-import { domainOf, formatElapsed, isWebUrl, languageName, text, verdictKey, verdictLabel } from './logic/format.js';
+import { domainOf, formatElapsed, isWebUrl, languageName, text, verdictKey } from './logic/format.js';
 import { buttonStrength, changedFrom, deepResult, isSendableId, routePayload, tally } from './logic/route.js';
 import { DELIVER_MESSAGE, readDelivery } from './logic/delivery.js';
 import { buildSnapshot } from './logic/snapshot.js';
@@ -244,11 +244,10 @@ function NotFinished({ state, onRetry, focusRef }) {
 
 function Stamp({ result }) {
   const key = verdictKey(result.verdict);
-  const label = verdictLabel(result.verdict);
-  const twoWords = label.includes(' ');
+  const twoWords = result.verdict.trim().includes(' ');
   return (
     <div class={`lz-stamp v-${key}`}>
-      <span class={`lz-stamp-word ${twoWords ? 'two-words' : ''}`}>{label}</span>
+      <span class={`lz-stamp-word ${twoWords ? 'two-words' : ''}`}>{result.verdict}</span>
       {result.score != null ? (
         <>
           <span class="lz-stamp-score">
@@ -457,7 +456,7 @@ function useDeepCheck({ row, host, announce, registerCompleted, label = '', stor
     if (TERMINAL.has(state.kind)) announce(copy.announceRow(notFinishedText(state), label));
     if (state.kind === 'completed') {
       const r = deepResult(state.result);
-      announce(copy.announceResult(verdictLabel(r.verdict), r.score, r.confidence, label));
+      announce(copy.announceResult(r.verdict, r.score, r.confidence, label));
       // A model-started card tells the model nothing: it ran the tool itself.
       // `checkKey` is the SAME identity `reportState` uses: the card counts what
       // is still running by it, so a completion under a different key would
@@ -617,7 +616,7 @@ function Row({ index, row, host, open, hidden, onToggle, announce, registerCompl
           ) : (
             <>
               <span class="row-line">
-                <span class={`row-verdict ${busy ? 'dimmed' : `v-${verdictKey(verdict)}`}`}>{verdictLabel(verdict)}</span>
+                <span class={`row-verdict ${busy ? 'dimmed' : `v-${verdictKey(verdict)}`}`}>{verdict}</span>
                 {result && result.score != null ? <span class="lz-meta row-score">{`${result.score}/10`}</span> : null}
               </span>
               {/* The meta has its own line, but read aloud the row still runs "True 9/10 ·
@@ -1022,7 +1021,7 @@ function PickedRow({ index, pick, host, announce, registerCompleted, reportState
           {result ? (
             <>
               <span class="row-line">
-                <span class={`row-verdict v-${verdictKey(result.verdict)}`}>{verdictLabel(result.verdict)}</span>
+                <span class={`row-verdict v-${verdictKey(result.verdict)}`}>{result.verdict}</span>
                 {result.score != null ? <span class="lz-meta row-score">{`${result.score}/10`}</span> : null}
               </span>
               <span class="lz-meta row-meta">

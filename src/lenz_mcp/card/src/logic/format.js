@@ -1,7 +1,7 @@
 // Pure formatting: verdict inks, the stage a status reports, elapsed time, URLs.
 // No DOM, no host: unit-tested with `node --test`.
 
-import { NO_PUBLIC_RECORD_LABEL, STAGE_LABELS } from '../copy.js';
+import { STAGE_LABELS } from '../copy.js';
 
 const VERDICT_KEYS = {
   true: 'true',
@@ -16,13 +16,6 @@ const VERDICT_KEYS = {
 // The CSS modifier for a verdict word's ink; anything else reads as neutral.
 export function verdictKey(verdict) {
   return VERDICT_KEYS[String(verdict || '').trim().toLowerCase()] || 'unknown';
-}
-
-// The word the card shows for a verdict: the API's "No Public Record" reads
-// "Not on the public record", as everywhere else Lenz shows it. The model's
-// own data keeps the API value.
-export function verdictLabel(verdict) {
-  return verdictKey(verdict) === 'no-record' ? NO_PUBLIC_RECORD_LABEL : text(verdict);
 }
 
 // Every value here is attacker-controlled: an object whose `toString` is null
