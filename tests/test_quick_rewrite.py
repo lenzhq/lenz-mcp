@@ -225,7 +225,7 @@ def test_the_note_says_what_it_is_and_is_not_the_deep_checks_wording():
 def test_the_description_has_one_sentence_about_it():
     description = ' '.join({t.name: t for t in _run(server.mcp.list_tools())}['assess_claim'].description.split())
     assert description.count('suggested_rewrite') == 1
-    assert 'not verified' in description
+    assert 'an unchecked suggestion' in description
 
 
 # ── a slow quick check on a host with less room ──────────────────────

@@ -108,7 +108,20 @@ _ARGS_OK = {
 
 
 def judge(case: case_data.Case, turn) -> tuple[bool, str]:
-    """Did this attempt satisfy the case? Deterministic; no model judges.
+    """Did this attempt satisfy the case: its calls, then (when the case says
+    what the user must be told) its reply. Deterministic; no model judges."""
+    ok, note = _judge_calls(case, turn)
+    # A case that allows calls (RESTRAINT) judges the reply only on a turn that
+    # made none: a call that does the work is an answer too.
+    made_calls = any(call.name != DISTRACTOR_NAME for call in turn.calls)
+    judge_reply = case.reply is not None and (case.expect != case_data.RESTRAINT or not made_calls)
+    if ok and judge_reply and not case.reply(turn.text or ''):
+        return False, 'the reply does not say what this case requires'
+    return ok, note
+
+
+def _judge_calls(case: case_data.Case, turn) -> tuple[bool, str]:
+    """Did this attempt make the right calls? Deterministic; no model judges.
 
     A call to the distractor `web_search` is never a Lenz call: it is dropped
     before scoring (a model that searches the web instead of staying quiet has not
@@ -143,7 +156,7 @@ def judge(case: case_data.Case, turn) -> tuple[bool, str]:
         return False, 'called nothing' + (' (searched the web instead)' if searched else '')
 
     if case.count > 1:
-        return _judge_fan_out(case, calls)
+        return _judge_fan_out(case, calls, turn.batches or (tuple(call.name for call in turn.calls),))
 
     # Only the expected tools, and the case's declared extras, may be called; and
     # none of them twice (a second call is a second charge). Without this a
@@ -185,7 +198,7 @@ def judge(case: case_data.Case, turn) -> tuple[bool, str]:
     return True, ''
 
 
-def _judge_fan_out(case: case_data.Case, calls) -> tuple[bool, str]:
+def _judge_fan_out(case: case_data.Case, calls, turn_batches: tuple[tuple[str, ...], ...] = ()) -> tuple[bool, str]:
     """The one expected tool `case.count` times, each on a different claim, with
     the case's extras allowed once each before or between them."""
     (tool,) = case.expected_tools
@@ -194,9 +207,15 @@ def _judge_fan_out(case: case_data.Case, calls) -> tuple[bool, str]:
         if name != tool and name not in case.also_allowed:
             return False, f'called {name}, which this case does not allow'
     for name in case.also_allowed:
-        if names.count(name) > 1:
+        # Waiting on a started check is polling, once per check or more; any
+        # other extra (a balance check) is once.
+        if name != 'get_verification' and names.count(name) > 1:
             return False, f'called {name} {names.count(name)} times; at most once'
     fanned = [call for call in calls if call.name == tool]
+    if case.batch:
+        widest = max((names.count(tool) for names in turn_batches), default=0)
+        if widest > case.batch:
+            return False, f'started {widest} calls in one turn; batches of at most {case.batch}'
     if len(fanned) != case.count:
         return False, f'called {tool} {len(fanned)} times; wanted {case.count}'
     valid = _ARGS_OK.get(tool)

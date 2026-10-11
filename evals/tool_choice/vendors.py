@@ -65,7 +65,15 @@ DISTRACTOR_TOOL = {
     },
 }
 
-MAX_TOKENS = 1024
+# Room for a batch of ten deep checks, each with a claim of a sentence or two:
+# at 1024 the tenth call of a fan-out came back cut (`verify_claim({})`), which
+# read as a routing failure. A turn the vendor still cuts raises
+# `TruncatedTurn`: an errored attempt, never a pass or a fail.
+MAX_TOKENS = 4096
+
+
+class TruncatedTurn(RuntimeError):
+    """The vendor stopped at the output limit: the turn is incomplete, not wrong."""
 
 
 @dataclass(frozen=True)
@@ -105,6 +113,9 @@ class Turn:
     calls: list[Call]
     text: str
     usage: Usage = Usage()
+    # The tools each model turn called, when the eval answered calls and asked
+    # again (`Case.answers`): a batch of deep checks is judged per turn.
+    batches: tuple[tuple[str, ...], ...] = ()
 
     @property
     def names(self) -> list[str]:
@@ -212,6 +223,8 @@ def ask_anthropic(
     if system:
         kwargs['system'] = [{'type': 'text', 'text': system, 'cache_control': {'type': 'ephemeral'}}]
     message = client.messages.create(**kwargs)
+    if getattr(message, 'stop_reason', None) == 'max_tokens':
+        raise TruncatedTurn('anthropic stopped at max_tokens')
 
     calls: list[Call] = []
     text: list[str] = []
@@ -261,6 +274,8 @@ def ask_openai(
     if system:
         kwargs['instructions'] = system
     response = client.responses.create(**kwargs)
+    if getattr(response, 'status', None) == 'incomplete':
+        raise TruncatedTurn('openai response incomplete')
 
     calls: list[Call] = []
     text: list[str] = []

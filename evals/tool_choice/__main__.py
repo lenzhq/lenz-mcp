@@ -52,25 +52,50 @@ def _load_env() -> None:
 MAX_CONSECUTIVE_ERRORS = 5
 
 
+# How many more turns the eval takes after answering calls: enough for a
+# second batch of deep checks with polling around it and the reply after it
+# (a model may poll a batch twice before starting the next), never endless.
+MAX_FOLLOW_TURNS = 6
+
+
 def _answer_and_continue(case, turn, ask, *, model: str, with_instructions: bool):
-    """When the model only asked something the case answers (`case.answers`),
-    hand the answers back and ask once more. The two turns are judged as one."""
-    answers = dict(case.answers)
-    if not answers or not turn.calls or any(call.name not in answers for call in turn.calls):
+    """While the model only calls tools the case answers (`case.answers`), hand
+    the answers back and ask again, up to MAX_FOLLOW_TURNS. Every turn's calls
+    are judged together; `batches` records what each turn called."""
+    # An answer marked `per_attempt` is a factory: called once per attempt so
+    # its state (a balance being spent) starts fresh every time.
+    answers = {name: (a() if getattr(a, 'per_attempt', False) else a) for name, a in case.answers}
+    if not answers:
         return turn
     from evals.tool_choice.cases import ToolExchange
     from evals.tool_choice.vendors import Turn, Usage
 
+    def answered(t) -> bool:
+        return bool(t.calls) and all(call.name in answers for call in t.calls)
+
+    def result_for(call) -> dict:
+        answer = answers[call.name]
+        return answer(call.arguments) if callable(answer) else answer
+
     history = (*case.history, *((('user', case.prompt),) if case.prompt else ()))
-    history += tuple(ToolExchange(call.name, call.arguments, answers[call.name]) for call in turn.calls)
-    then = ask(history, '', model=model, with_instructions=with_instructions)
+    turns = [turn]
+    while answered(turns[-1]) and len(turns) <= MAX_FOLLOW_TURNS:
+        history += tuple(ToolExchange(call.name, call.arguments, result_for(call)) for call in turns[-1].calls)
+        turns.append(ask(history, '', model=model, with_instructions=with_instructions))
+    if len(turns) == 1:
+        return turn
     usage = Usage(
         *(
-            getattr(turn.usage, name) + getattr(then.usage, name)
+            sum(getattr(t.usage, name) for t in turns)
             for name in ('input_tokens', 'output_tokens', 'cached_tokens', 'cache_write_tokens')
         )
     )
-    return Turn(calls=[*turn.calls, *then.calls], text='\n'.join(t for t in (turn.text, then.text) if t), usage=usage)
+    return Turn(
+        calls=[call for t in turns for call in t.calls],
+        text='\n'.join(t.text for t in turns if t.text),
+        usage=usage,
+        batches=tuple(tuple(call.name for call in t.calls) for t in turns),
+    )
 
 
 def _run_case(
@@ -84,6 +109,9 @@ def _run_case(
     outcomes: list[bool] = []
     notes: list[str] = []
     observed: list[list[dict[str, Any]]] = []
+    # The reply text of each attempt, for a case that judges what the user is
+    # told: a failed reply check must be readable afterwards without a re-run.
+    replies: list[str] = []
     usages = []
     errors = 0
     state = state if state is not None else {'consecutive_errors': 0}
@@ -96,6 +124,7 @@ def _run_case(
             state['consecutive_errors'] = state.get('consecutive_errors', 0) + 1
             notes.append(f'errored: {type(exc).__name__}')
             observed.append([])
+            replies.append('')
             if state['consecutive_errors'] >= MAX_CONSECUTIVE_ERRORS:
                 break
             continue
@@ -107,7 +136,16 @@ def _run_case(
         # called the right tool and put the draft somewhere other than `claim`,
         # and the record could not say where — so the finding needed another
         # paid call to read. Arguments are what makes a result file re-readable.
-        observed.append([{'name': call.name, 'arguments': call.arguments} for call in turn.calls])
+        # Which model turn made each call, when the eval answered calls and asked
+        # again: a batch is judged per turn, and a re-read must be able to tell.
+        turn_of = [i for i, names in enumerate(turn.batches) for _ in names] or [0] * len(turn.calls)
+        observed.append(
+            [
+                {'name': call.name, 'arguments': call.arguments, 'turn': t}
+                for call, t in zip(turn.calls, turn_of, strict=True)
+            ]
+        )
+        replies.append(turn.text or '')
         if note:
             notes.append(note)
     passes = sum(outcomes)
@@ -124,6 +162,7 @@ def _run_case(
         'attempts': attempts,
         'errors': errors,
         'observed': observed,
+        **({'replies': replies} if case.reply is not None else {}),
         'notes': sorted(set(notes)),
         'usage': {
             'input': sum(u.input_tokens for u in usages),
@@ -327,7 +366,9 @@ def main(argv: list[str] | None = None) -> int:
     arms = [True, False] if args.both_arms else [not args.no_instructions]
 
     # A case that answers a first call (`case.answers`) may take a second one.
-    planned = sum(2 if case.answers else 1 for case in selected) * len(vendors) * len(arms) * args.repeat
+    planned = (
+        sum(1 + (MAX_FOLLOW_TURNS if case.answers else 0) for case in selected) * len(vendors) * len(arms) * args.repeat
+    )
     if planned > args.max_calls:
         print(
             f'REFUSED: this run would make {planned} paid model calls, over the --max-calls '

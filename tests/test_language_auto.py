@@ -192,9 +192,17 @@ def test_the_field_description_states_the_rule():
     for name in ('assess_claim', 'verify_claim', 'ask_followup'):
         text = ' '.join(_tools()[name].input_schema['properties']['language']['description'].split())
         assert 'Leave unset' in text, name
-        assert "language of the user's text" in text, name
-        assert 'explicitly asked for the answer in another language' in text, name
-        assert "never to match the conversation, the user's locale or the language of the claim" in text, name
+        # The reason, then when to set it: Lenz already answers in the text's language.
+        assert 'Leave unset' in text and 'Set it only when the user asks for the answer in' in text, name
+        if name == 'ask_followup':
+            # A follow-up answers in the check's language, not the question's.
+            assert 'the answer follows the language of the deep check it is about' in text
+        else:
+            assert 'Lenz answers in the language of the text it checks' in text, name
+            # The conversation's language and the user's locale are not a request.
+            assert "the conversation's language and the user's locale are not a request" in text, name
+            # The answer's language is the field's job, never a reason to translate the text.
+            assert 'a translated text is a different claim' in text, name
         assert 'ISO 639-1' not in text, name
         for code in config.SUPPORTED_LANGUAGES:
             assert code in text, (name, code)
@@ -203,13 +211,12 @@ def test_the_field_description_states_the_rule():
 def test_the_claim_is_to_be_passed_in_the_users_own_language():
     for name, param in (('assess_claim', 'claim'), ('verify_claim', 'claim')):
         text = ' '.join(_tools()[name].input_schema['properties'][param]['description'].split())
-        assert "the user's own words and language, not translated" in text, name
+        assert "the user's own words and language" in text and 'not translated' in text, name
 
 
 def test_the_assess_description_qualifies_what_follows_the_language():
     text = ' '.join(_tools()['assess_claim'].description.split())
-    assert 'Verdicts and written results follow the language of the text' in text
-    assert "a reviewer's note follows the text it saw" in text
+    assert 'Results follow the language of the text; set `language` only when the user asks' in text
 
 
 def test_the_ask_description_says_the_reply_follows_the_check():

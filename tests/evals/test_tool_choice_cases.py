@@ -270,7 +270,7 @@ def test_one_call_is_enforced_wherever_it_is_promised():
     for case in cases.CASES:
         # A counted fan-out may size itself against the balance first, as
         # `check_usage`'s description tells the model to before a large batch.
-        extras = {'get_verification'} | ({'check_usage'} if case.count > 1 else set())
+        extras = {'get_verification'} | ({'check_usage', 'list_verifications'} if case.count > 1 else set())
         assert set(case.also_allowed) <= extras, (case.id, case.also_allowed)
 
 

@@ -256,6 +256,14 @@ CARD_VERIFY_DEPTH = 'standard'
 # tests/test_card.py pins the two together.
 CARD_PICKER_MAX_CLAIMS = 5
 
+# How much of ONE text `/assess` reads: the API cuts a longer text there
+# without an error, so the tool says so on the result.
+ASSESS_TEXT_MAX_CHARS = 10_000
+
+# How many deep checks the model starts at once when the user asks for a deep
+# check of several or all claims; the next batch follows once these started.
+DEEP_CHECK_BATCH = 10
+
 # How many items `assess_claim`'s `claims` list may carry, as the tool tells the
 # model. The API owns the number (`/assess`'s item cap); the connector is a
 # plain API client, so it mirrors the API's limits as constants.
