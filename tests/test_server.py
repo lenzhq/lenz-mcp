@@ -1052,6 +1052,33 @@ def test_get_verification_failed_passes_the_retry_contract_through(monkeypatch):
     assert out['retryable'] is True
 
 
+@pytest.mark.parametrize(
+    'body',
+    [
+        # The older body: its own `error` is a step name.
+        {
+            'status': 'failed',
+            'error': 'Pipeline stopped at: research_empty',
+            'failure_reason': 'research_empty',
+            'failure_class': 'insufficient_evidence',
+            'retryable': False,
+        },
+        # The newer body: a code and a class, no `error`.
+        {
+            'status': 'failed',
+            'failure': {'code': 'research_insufficient', 'failure_class': 'insufficient_evidence', 'retryable': False},
+        },
+    ],
+)
+def test_get_verification_too_few_sources_says_so_in_a_sentence(monkeypatch, body):
+    _patch_api(monkeypatch, 'verify_status', ApiResponse(status=200, data=body))
+    out = _run(server.get_verification('tid', _ctx()))
+    assert out['status'] == 'failed'
+    assert out['message'] == 'Lenz found too few public sources to check this claim; nothing was charged.'
+    assert 'Pipeline stopped' not in out['message']
+    assert out['failure_class'] == 'insufficient_evidence'
+
+
 def test_get_verification_completed_no_link(monkeypatch):
     _patch_api(
         monkeypatch,

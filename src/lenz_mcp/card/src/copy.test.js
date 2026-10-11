@@ -35,6 +35,13 @@ test('no brand label: the host already names the app above the card', () => {
   assert.equal(copy.BRAND, undefined);
 });
 
+test('a check that found too few sources says so, in one sentence', () => {
+  const text = copy.FAILED_BY_CLASS.insufficient_evidence;
+  assert.match(text, /too few public sources/);
+  assert.match(text, /Nothing was charged/);
+  assert.notEqual(text, copy.FAILED_DEFAULT);
+});
+
 test('the pages disclosure reads exactly as agreed, and says pages, not sources', () => {
   assert.equal(copy.pagesSummary(1), 'Pages the reviewers looked at (1)');
   assert.equal(copy.pagesSummary(12), 'Pages the reviewers looked at (12)');

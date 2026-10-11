@@ -947,6 +947,19 @@
   }
  },
  "polls": {
+  "failed-insufficient-evidence": {
+   "provenance": "hand-built (failed status body)",
+   "result": {
+    "_card": {
+     "deliver": "context"
+    },
+    "failure_class": "insufficient_evidence",
+    "failure_reason": "research_empty",
+    "message": "Lenz found too few public sources to check this claim; nothing was charged.",
+    "retryable": false,
+    "status": "failed"
+   }
+  },
   "failed-invalid-input": {
    "provenance": "hand-built (failed status body)",
    "result": {
