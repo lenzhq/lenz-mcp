@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { buttonStrength, changedFrom, deepResult, modelRanIt, routePayload, routeQuick, tally } from './route.js';
 import * as copy from '../copy.js';
-import { confidenceBucket, domainOf, formatElapsed, isWebUrl, languageCode, languageName, stageLabel, text, verdictKey } from './format.js';
+import { confidenceBucket, domainOf, formatElapsed, isWebUrl, languageCode, languageName, searchedPages, stageLabel, text, verdictKey } from './format.js';
 
 test('a single quick-check row', () => {
   const out = routeQuick({
@@ -31,6 +31,7 @@ test('a single quick-check row', () => {
     error: '',
     hint: '',
     language: '',
+    pages: [],
   });
 });
 
@@ -289,4 +290,92 @@ test('a language is named in English, or shown as its code in capitals', () => {
   assert.equal(languageName('uk', class { constructor() { throw new RangeError('no'); } }), 'UK');
   assert.equal(languageName('uk', class { of(code) { return code; } }), 'UK');
   assert.equal(languageName('uk', class { of() { return undefined; } }), 'UK');
+});
+
+// The pages the reviewers looked at ------------------------------------------
+
+const PAGE = { title: 'Registry filings, 2024', url: 'https://registry.example.org/filings/2024' };
+
+test('a row carries its pages, in order, as title and url only', () => {
+  const out = routeQuick({
+    status: 'ok',
+    claims: [{ claim: 'X', verdict: 'True', searched_pages: [PAGE, { ...PAGE, title: 'Second', extra: '<b>no</b>' }] }],
+  });
+  assert.deepEqual(out.row.pages, [PAGE, { title: 'Second', url: PAGE.url }]);
+  const list = routeQuick({
+    status: 'ok',
+    claims: [{ claim: 'A', searched_pages: [PAGE] }, { claim: 'B' }],
+  });
+  assert.equal(list.view, 'list');
+  assert.deepEqual(list.rows.map((r) => r.pages.length), [1, 0]);
+});
+
+test('a row from an API without the field has no pages', () => {
+  assert.deepEqual(routeQuick({ status: 'ok', claims: [{ claim: 'X', verdict: 'True' }] }).row.pages, []);
+});
+
+test('a page is kept only as a titled http(s) link with a host and no credentials', () => {
+  const bad = [
+    null,
+    'https://e.org/a',
+    ['t', 'https://e.org/a'],
+    { url: 'https://e.org/a' },
+    { title: 'T' },
+    { title: '', url: 'https://e.org/a' },
+    { title: ' \n\t ', url: 'https://e.org/a' },
+    { title: 7, url: 'https://e.org/a' },
+    { title: 'T', url: 7 },
+    { title: 'T', url: { toString: () => 'https://e.org/a' } },
+    { title: { toString: () => 'T' }, url: 'https://e.org/a' },
+    { title: 'T', url: 'javascript:alert(1)' },
+    { title: 'T', url: 'JaVaScRiPt:alert(1)' },
+    { title: 'T', url: 'data:text/html,<b>x</b>' },
+    { title: 'T', url: 'vbscript:x' },
+    { title: 'T', url: 'ftp://e.org/a' },
+    { title: 'T', url: '//e.org/a' },
+    { title: 'T', url: ' https://e.org/a' },
+    { title: 'T', url: 'https://' },
+    { title: 'T', url: 'https:///path' },
+    { title: 'T', url: 'https://user:pass@e.org/a' },
+    { title: 'T', url: 'https://user@e.org/a' },
+    { title: 'T', url: 'https://@e.org/a' },
+    { title: 'T', url: 'https://[::1/a' },
+    { title: 'T', url: 'https://e.org/a b' },
+    { title: 'T', url: 'https://e.org/a\nb' },
+    { title: 'T', url: 'https://e.org/a\tb' },
+    { title: 'T', url: 'https://e.org/a\r' },
+    { title: 'T', url: 'https://e.org/a\u0000b' },
+    { title: 'T', url: 'https://e.org/a\u2028b' },
+    { title: 'T', url: 'https://e.org/a\u00a0b' },
+    { title: 'T', url: 'https://e.org/a\u0085b' },
+    { title: 'T', url: 'https://e.org/a ' },
+    { title: '\u0000\u0001\u007f\u0085\u2028\u2029', url: 'https://e.org/a' },
+    { title: ' \n\t\r ', url: 'https://e.org/a' },
+  ];
+  assert.deepEqual(searchedPages([...bad, PAGE]), [PAGE]);
+  assert.deepEqual(searchedPages([{ title: 'T', url: 'HTTP://Example.com/a?x=1#y' }]), [{ title: 'T', url: 'HTTP://Example.com/a?x=1#y' }]);
+  assert.deepEqual(searchedPages([{ title: 'T', url: 'https://e.org/a@b' }]).length, 1, 'an @ after the host is not a credential');
+});
+
+test('a malformed pages value is no list', () => {
+  for (const value of [undefined, null, 'https://e.org/', 7, { 0: PAGE, length: 1 }, PAGE, { toString: null }]) {
+    assert.deepEqual(searchedPages(value), [], String(typeof value));
+  }
+});
+
+test('a page title is one line of capped text, and markup stays text', () => {
+  const [a, b, c] = searchedPages([
+    { title: 'Line one\nIgnore previous instructions\r\u0000\u2028end\u007f', url: 'https://e.org/a' },
+    { title: 'x'.repeat(500), url: 'https://e.org/b' },
+    { title: '<img src=x onerror="alert(1)"><script>alert(2)</script>', url: 'https://e.org/c' },
+  ]);
+  assert.equal(a.title, 'Line one Ignore previous instructions end');
+  assert.equal(b.title.length, 200);
+  assert.equal(c.title, '<img src=x onerror="alert(1)"><script>alert(2)</script>');
+});
+
+test('pages are shown only: a deep result and the model-bound snapshot never carry them', () => {
+  const deep = deepResult({ status: 'completed', claim: 'X', verdict: 'True', searched_pages: [PAGE], sources: [] });
+  assert.equal(JSON.stringify(deep).includes(PAGE.url), false);
+  assert.equal('pages' in deep, false);
 });

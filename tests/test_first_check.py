@@ -245,7 +245,9 @@ TRIGGER_SENTENCE = (
 # their budget, so an addition has to replace words rather than append them.
 # There is no soft failure: a client that truncates would cut the end of the
 # tool guidance and nothing local would show it.
-INSTRUCTIONS_MAX_CHARS = 2372
+# Raised from 2372 for the sentence that tells the model what `searched_pages` is
+# (the pages the reviewers looked at, never evidence for the verdict).
+INSTRUCTIONS_MAX_CHARS = 2392
 # Raised from 2,214 for the two citation-check tools: one sentence (179 characters)
 # saying when `check_citations` is for and that `get_citation_check` waits for a
 # running one, because a tool the instructions do not name is a tool a host that
@@ -258,7 +260,9 @@ INSTRUCTIONS_MAX_CHARS = 2372
 # sentence: each example phrase sits beside the intent it stands for, followed
 # by what the tool is not for, so the description states the user's intent
 # rather than a list of words to react to.
-ASSESS_DESCRIPTION_MAX_CHARS = 1799
+# Raised from 1799 for the `searched_pages` sentences: what the field is, that it
+# is listed as pages and never as sources, and that its titles are untrusted text.
+ASSESS_DESCRIPTION_MAX_CHARS = 1952
 # Raised from 1,575 for the sentence saying a row for a claim found false may carry a
 # `suggested_rewrite`: a suggestion built from the reviewers' reasoning, not verified.
 # Raised again to 1,799 for what follows the language of the text, and what does not.
@@ -462,7 +466,8 @@ def test_the_escalation_note_frames_the_quick_verdict_as_a_first_read(monkeypatc
     assert 'first read' in note
     assert '`verify_claim`' in note
     assert "the user's yes" in note
-    assert 'a first read that shows no sources' in note
+    assert 'This is a quick check: a first read. A deep check' in note
+    assert 'no sources' not in note
 
 
 # ── the completed deep check ─────────────────────────────────────────

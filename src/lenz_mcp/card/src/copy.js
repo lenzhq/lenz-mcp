@@ -7,15 +7,19 @@
 
 // Quick check
 export const QUICK_EYEBROW = 'Quick check';
-export const QUICK_FOOTER = 'Quick check · no sources';
+export const QUICK_FOOTER = 'Quick check';
 export const QUICK_VERDICT_LABEL = 'quick verdict';
 export const CONFIDENCE_LINE = {
-  high: 'Confidence: high · a first read, no sources',
-  medium: 'Confidence: medium · a first read, no sources',
+  high: 'Confidence: high · a first read',
+  medium: 'Confidence: medium · a first read',
   low: 'Confidence: low · Lenz is not sure about this one',
 };
 export const REASONING_LABEL = "Reviewers' reasoning";
 export const DISSENT_PREFIX = 'One reviewer disagreed: ';
+// The pages the reviewers looked at, closed by default under the reviewers'
+// note. "Pages", never "sources" or "evidence": those belong to the deep check.
+export const pagesSummary = (n) => `Pages the reviewers looked at (${n})`;
+export const showAllPages = (n) => `Show all ${n}`;
 export const SHOW_MORE = 'Show more';
 export const SHOW_LESS = 'Show less';
 // No timing on the button: it wrapped the label onto two rows on a phone, and
