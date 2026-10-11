@@ -1103,8 +1103,9 @@ def test_get_verification_no_public_record_passes_through_with_no_score(monkeypa
     assert out['lenz_score'] is None
     assert out['confidence'] == 'medium'
     assert out['suggested_rewrite'] is None
-    # the model is told it is not a False verdict
-    assert 'does not make it false' in out['presentation']
+    # the model is told what the result is, and that it is not a False verdict
+    assert 'neither confirm nor refute' in out['presentation']
+    assert 'make it false' not in out['presentation']
     assert 'No Public Record' in server.PRESENTATION_NOTE
 
 

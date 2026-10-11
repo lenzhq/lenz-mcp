@@ -157,8 +157,9 @@ PRESENTATION_NOTE = (
     'warnings, how many sources the check drew on (the `sources_total` field), the top sources '
     'with what each one says, and, when there is one, the suggested rewrite as a suggestion. Do '
     'not reduce this to the verdict label, and do not show the user field or tool names. A '
-    'verdict of "No Public Record" has no score: it says nothing public records the claim, which '
-    'does not make it false, so never present it as a False verdict.'
+    'verdict of "No Public Record" has no score: no public source records the claim, so the check '
+    'could neither confirm nor refute it. Say exactly that, and never present it as a False or as '
+    'a confirmed verdict.'
 )
 
 # On every completed deep check. The server is stateless and cannot know what a
