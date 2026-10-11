@@ -776,6 +776,10 @@ _COMPOUND_ROW_HINT = 'Assessed the main claim only. Send identified_claims as th
 # The older API's `error` on an assess answer with no rows, by code.
 _ASSESS_ERROR_TEXT = {_NO_CHECKABLE_CLAIM: 'No verifiable claim detected'}
 
+# What a deep check that found too few public sources says, whichever body
+# reports it: the older body's own `error` is a step name, not a sentence.
+INSUFFICIENT_EVIDENCE_MESSAGE = 'Lenz found too few public sources to check this claim; nothing was charged.'
+
 # The older API's `error` on a failed deep check, by failure code; any other
 # code read "Pipeline stopped at: <code>".
 _VERIFY_ERROR_TEXT = {
@@ -784,6 +788,8 @@ _VERIFY_ERROR_TEXT = {
     'cancelled': 'Cancelled.',
     'task_error': 'Pipeline failed.',
     'task_stuck': 'The task was never completed and has been marked failed.',
+    'research_empty': INSUFFICIENT_EVIDENCE_MESSAGE,
+    'research_insufficient': INSUFFICIENT_EVIDENCE_MESSAGE,
 }
 
 # 429 codes whose older wait field was `retry_after_seconds`, which this server
@@ -1579,6 +1585,8 @@ async def _verification_result(
     if status == 'failed':
         data = _legacy_failed_poll(data)
         out = {'status': 'failed', 'message': data.get('error') or 'The verification failed.'}
+        if data.get('failure_class') == 'insufficient_evidence':
+            out['message'] = INSUFFICIENT_EVIDENCE_MESSAGE
         # Pass the REST contract's two axes through: where it stopped and why
         # (+ the derived retry signal), so an agent can branch on `retryable`
         # instead of re-submitting blindly. Absent on older/odd bodies.

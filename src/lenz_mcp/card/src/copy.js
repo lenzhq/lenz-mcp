@@ -69,6 +69,7 @@ export const FAILED_HEADING = 'This check did not finish.';
 // A closed table: the server's own message is never shown.
 export const FAILED_BY_CLASS = {
   invalid_input: 'Lenz could not read a checkable claim in this text.',
+  insufficient_evidence: 'Lenz found too few public sources to check this claim. Nothing was charged for it.',
 };
 export const FAILED_DEFAULT = 'Something went wrong on our side. Nothing was charged for it.';
 export const QUOTA_EMPTY = 'You are out of Lenz credits.';

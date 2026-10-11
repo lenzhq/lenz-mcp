@@ -395,6 +395,10 @@ def build() -> dict[str, Any]:
         'provenance': 'hand-built (failed status body)',
         'result': failed('invalid_input', False, 'framing_failed'),
     }
+    polls['failed-insufficient-evidence'] = {
+        'provenance': 'hand-built (failed status body)',
+        'result': failed('insufficient_evidence', False, 'research_empty'),
+    }
     polls['needs-input'] = {
         'provenance': 'hand-built (needs_input status body)',
         'result': poll({'status': 'needs_input', 'reason': 'multi_claim', 'claims': [{'text': 'a'}, {'text': 'b'}]}),

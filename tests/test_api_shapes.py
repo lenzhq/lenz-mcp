@@ -278,10 +278,18 @@ _OLD_NOTES_NOTE = (
 )
 
 
+#
+# A run that found too few public sources (`insufficient_evidence`) tells the
+# model a sentence, not the step name "Pipeline stopped at: research_empty".
+_OLD_INSUFFICIENT_MESSAGE = 'Pipeline stopped at: research_empty'
+
+
 def _since_the_oracle(value: Any) -> Any:
     if not isinstance(value, dict):
         return value
     out = dict(value)
+    if out.get('failure_class') == 'insufficient_evidence' and out.get('message') == _OLD_INSUFFICIENT_MESSAGE:
+        out['message'] = server.INSUFFICIENT_EVIDENCE_MESSAGE
     note = out.get('confidence_note')
     if isinstance(note, str):
         note = note.replace(_OLD_ESCALATION_CLAUSE, _NEW_ESCALATION_CLAUSE)
