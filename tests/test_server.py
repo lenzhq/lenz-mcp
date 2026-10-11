@@ -505,6 +505,60 @@ def test_a_quick_no_public_record_row_is_a_verdict_not_an_error(monkeypatch):
         assert 'lenz_score' not in row
 
 
+def test_a_low_confidence_no_public_record_row_has_its_own_next_step(monkeypatch):
+    """The generic low-confidence step says Lenz is not confident in the verdict;
+    for this verdict that misdescribes it (the search came back empty, which is
+    the answer). Its step says so, offers the deep check as a fuller search, and
+    never starts it or calls the claim false."""
+    _patch_api(
+        monkeypatch,
+        'assess',
+        ApiResponse(
+            status=200,
+            data={
+                'claims': [
+                    _canonical_assess_row(claim='A', verdict='No Public Record', confidence='low'),
+                    _canonical_assess_row(claim='B', verdict='Mixed', confidence='low'),
+                ]
+            },
+        ),
+    )
+    out = _run(server.assess_claim(claim='A. B.', ctx=_ctx()))
+    npr, other = out['claims']
+    assert npr['recommend_verify'] is True
+    assert npr['next_step'] == server.NO_PUBLIC_RECORD_NEXT_STEP
+    assert npr['next_step'] != server.LOW_CONFIDENCE_NEXT_STEP
+    assert 'not confident' not in npr['next_step']
+    # The ordinary low-confidence row keeps the step it always had.
+    assert other['next_step'] == server.LOW_CONFIDENCE_NEXT_STEP
+
+
+def test_the_no_public_record_next_step_states_the_finding_and_offers_not_starts():
+    step = server.NO_PUBLIC_RECORD_NEXT_STEP
+    lowered = step.lower()
+    # What the quick search found, in the product's words.
+    assert 'no public record' in lowered
+    # The deep check is a fuller search, offered with a question, started on a yes.
+    assert 'deep check' in lowered and 'ask' in lowered
+    assert 'verify_claim' in step and 'yes' in lowered
+    # Never "false" as a reading of it, and never a tool name or credits for the user to repeat.
+    assert 'do not call the claim false' in lowered
+    assert 'do not mention tool names or credits' in lowered
+
+
+def test_a_medium_no_public_record_row_still_gets_no_next_step(monkeypatch):
+    _patch_api(
+        monkeypatch,
+        'assess',
+        ApiResponse(
+            status=200,
+            data={'claims': [_canonical_assess_row(claim='A', verdict='No Public Record', confidence='medium')]},
+        ),
+    )
+    row = _run(server.assess_claim(claim='A.', ctx=_ctx()))['claims'][0]
+    assert 'next_step' not in row and 'recommend_verify' not in row
+
+
 def test_a_failed_row_names_its_class_or_the_input_it_could_not_read(monkeypatch):
     """Failure codes are the class (upstream_unavailable, internal) or an input
     code (no_checkable_claim, page_unreadable). Each row stays in position."""
