@@ -793,8 +793,6 @@ _VERIFY_ERROR_TEXT = {
     'cancelled': 'Cancelled.',
     'task_error': 'Pipeline failed.',
     'task_stuck': 'The task was never completed and has been marked failed.',
-    'upstream_unavailable': 'Lenz could not reach the sources it needed just now.',
-    'internal': 'Pipeline failed.',
     'research_empty': INSUFFICIENT_EVIDENCE_MESSAGE,
     'research_insufficient': INSUFFICIENT_EVIDENCE_MESSAGE,
 }

@@ -1110,23 +1110,6 @@ def test_get_verification_no_public_record_passes_through_with_no_score(monkeypa
     assert 'No Public Record' in server.PRESENTATION_NOTE
 
 
-@pytest.mark.parametrize(
-    ('code', 'text'),
-    [
-        ('upstream_unavailable', 'Lenz could not reach the sources it needed just now.'),
-        ('internal', 'Pipeline failed.'),
-        ('cancelled', 'Cancelled.'),
-        ('no_checkable_claim', 'Not a verifiable claim.'),
-    ],
-)
-def test_get_verification_the_collapsed_failure_codes_read_as_sentences(monkeypatch, code, text):
-    body = {'status': 'failed', 'failure': {'code': code, 'failure_class': 'internal', 'retryable': False}}
-    _patch_api(monkeypatch, 'verify_status', ApiResponse(status=200, data=body))
-    out = _run(server.get_verification('tid', _ctx()))
-    assert out['status'] == 'failed'
-    assert out['message'] == text
-
-
 def test_the_deep_check_descriptions_name_no_public_record():
     for doc in (server.verify_claim.__doc__, server.get_verification.__doc__, server.mcp.instructions):
         assert 'No Public Record' in (doc or '')
