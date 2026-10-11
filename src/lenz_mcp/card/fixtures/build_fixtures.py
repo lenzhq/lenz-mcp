@@ -259,6 +259,25 @@ def build() -> dict[str, Any]:
         body_of([*(all_rows * 2)[:19], error_row]),
     )
     add_quick('row-error', 'hand-built (API error row)', body_of([error_row]))
+    add_quick(
+        'row-error-internal',
+        'hand-built (API error row, class internal)',
+        body_of(
+            [
+                row(
+                    error_row,
+                    claim='The bridge opened in 1932.',
+                    error_code='internal',
+                    hint='Something went wrong on our side. Nothing was charged.',
+                )
+            ]
+        ),
+    )
+    add_quick(
+        'quick-no-public-record',
+        'edited (two-claims row 1: verdict No Public Record at medium confidence, rationale and rewrite removed)',
+        body_of([row(medium, verdict='No Public Record', confidence='medium', rationale=None, suggested_rewrite=None)]),
+    )
     add_quick('nothing', 'hand-built (API body with no claims)', {'error': no_claim_row['hint'], 'claims': []})
     add_quick('reconnect', 'hand-built (API 401)', {'detail': 'Invalid API key.'}, status=401)
     add_quick(

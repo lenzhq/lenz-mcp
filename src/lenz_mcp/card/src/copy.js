@@ -103,13 +103,19 @@ export const followUpPrefill = (verificationId) => `Ask Lenz about this check (v
 
 // A quick check that did not produce a verdict (row error codes, whole-call envelopes)
 export const NOTHING_TO_CHECK = 'Nothing to check here';
+// Keyed on what the row says failed: the input it could not read (no_claim is the
+// server's word for no_checkable_claim; page_unreadable is a link whose page could
+// not be read), else the failure's class. A code not listed reads as the default.
 export const ROW_ERROR = {
   no_claim: 'Not a checkable statement',
-  timeout: 'Could not be checked just now',
+  no_checkable_claim: 'Not a checkable statement',
+  page_unreadable: 'The page could not be read',
   upstream_unavailable: 'Could not be checked just now',
-  framing_failed: 'Could not be read',
+  internal: 'Could not be checked',
 };
-export const ROW_ERROR_DEFAULT = 'Could not be checked just now';
+export const ROW_ERROR_DEFAULT = 'Could not be checked';
+// Under a quick No Public Record verdict: what the label means. Never "false".
+export const NO_RECORD_QUICK = 'A quick search found no public record that would show this.';
 export const RECONNECT = 'Reconnect Lenz in your settings, under apps or connectors.';
 export const ASK_AGAIN = 'Ask for it to run again.';
 

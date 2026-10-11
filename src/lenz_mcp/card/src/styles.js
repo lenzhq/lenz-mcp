@@ -112,6 +112,7 @@ body { font-family: var(--lz-font); color: var(--lz-ink); -webkit-font-smoothing
 }
 .lz-meta { font-size: 13px; line-height: 1.5; color: var(--lz-meta); }
 .lz-conf { margin-top: 6px; }
+.lz-no-record { margin-top: 8px; }
 
 .v-true { color: var(--lz-true); }
 .v-mostly-true { color: var(--lz-mostly-true); }

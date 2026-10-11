@@ -402,3 +402,33 @@ test('pages are shown only: a deep result and the model-bound snapshot never car
   assert.equal(JSON.stringify(deep).includes(PAGE.url), false);
   assert.equal('pages' in deep, false);
 });
+
+test('a quick No Public Record row is a verdict, in the single view and in the list tally', () => {
+  const noRecord = { claim: 'A', verdict: 'No Public Record', confidence: 'medium' };
+  const single = routeQuick({ status: 'ok', claims: [noRecord] });
+  assert.equal(single.view, 'single');
+  assert.equal(single.row.verdict, 'No Public Record');
+  assert.equal(single.row.error, '');
+  const list = routeQuick({ status: 'ok', claims: [noRecord, { claim: 'B', verdict: 'False', confidence: 'high' }] });
+  assert.equal(list.view, 'list');
+  assert.deepEqual(tally(list.rows), { wrong: 1, mixed: 0, hold: 0, norecord: 1, error: 0 });
+});
+
+test('a failed row reads by its class or the input it could not read, not by a retired code', () => {
+  const failed = (error) => routeQuick({ status: 'ok', claims: [{ claim: 'A', verdict: 'Error', error }] });
+  assert.equal(failed('no_claim').view, 'row-error');
+  assert.equal(copy.ROW_ERROR.no_claim, 'Not a checkable statement');
+  assert.equal(copy.ROW_ERROR.no_checkable_claim, copy.ROW_ERROR.no_claim);
+  assert.equal(copy.ROW_ERROR.page_unreadable, 'The page could not be read');
+  assert.equal(copy.ROW_ERROR.upstream_unavailable, 'Could not be checked just now');
+  assert.equal(copy.ROW_ERROR.internal, 'Could not be checked');
+  // The two codes the API retired are not keys: an unknown code falls to the default.
+  assert.equal(Object.hasOwn(copy.ROW_ERROR, 'timeout'), false);
+  assert.equal(Object.hasOwn(copy.ROW_ERROR, 'framing_failed'), false);
+  assert.equal(copy.ROW_ERROR_DEFAULT, 'Could not be checked');
+});
+
+test('a quick No Public Record row says what it is, and says it is a quick search', () => {
+  assert.equal(copy.NO_RECORD_QUICK, 'A quick search found no public record that would show this.');
+  assert.doesNotMatch(copy.NO_RECORD_QUICK, /false|error|unverified/i);
+});
