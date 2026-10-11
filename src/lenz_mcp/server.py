@@ -1906,7 +1906,7 @@ def _text_list(value: Any) -> list[str]:
 # breaks become spaces, and the length is capped.
 SEARCHED_PAGE_TITLE_MAX_CHARS = 200
 _CONTROL_CHARS = re.compile('[\x00-\x1f\x7f-\x9f\u2028\u2029]')
-_URL_FORBIDDEN = re.compile('[\\s\x00-\x1f\x7f-\x9f\u2028\u2029]')
+_URL_FORBIDDEN = re.compile(r'\s|[\x00-\x1f\x7f-\x9f]')
 
 
 def _searched_page(entry: Any) -> dict[str, str] | None:
