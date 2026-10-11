@@ -5,7 +5,7 @@
 // error envelope (`auth_required`, `quota_exhausted`, `rate_limited`,
 // `service_unavailable`, `invalid_request`, `error`, …).
 
-import { confidenceBucket, languageCode, stageLabel, text, verdictKey } from './format.js';
+import { confidenceBucket, languageCode, searchedPages, stageLabel, text, verdictKey } from './format.js';
 
 // A task id we can send back: the card never invents one, and an unsendable one
 // is not a run (the same guard the server applies).
@@ -39,6 +39,8 @@ function quickRow(entry) {
     error,
     hint: text(e.hint),
     language: answerLanguage(e.language),
+    // The pages the reviewers looked at: shown, never sent anywhere.
+    pages: searchedPages(e.searched_pages),
   };
 }
 

@@ -886,3 +886,13 @@ def test_a_missing_key_is_refused_like_a_missing_credential(wire, monkeypatch):
     resp = _run(client.me_usage('Bearer whatever'))
     assert resp.status == 401 and resp.data == {}
     assert wire.requests == []
+
+
+def test_a_row_keeps_its_searched_pages_through_the_sdk(wire):
+    """The connector reads the SDK's `raw` body, so a field the pinned SDK does
+    not model yet (`searched_pages`, lenz-io 3.3) reaches the tool intact."""
+    pages = [{'title': 'A page', 'url': 'https://e.org/a'}]
+    row = {'claim': 'c', 'verdict': 'True', 'confidence': 'high', 'searched_pages': pages}
+    wire.respond(api_wire.answer(200, {'claims': [row], 'more_claims': []}))
+    out = _run(server.assess_claim('c', _ctx()))
+    assert out['claims'][0]['searched_pages'] == pages

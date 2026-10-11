@@ -462,7 +462,8 @@ def test_the_escalation_note_frames_the_quick_verdict_as_a_first_read(monkeypatc
     assert 'first read' in note
     assert '`verify_claim`' in note
     assert "the user's yes" in note
-    assert 'a first read that shows no sources' in note
+    assert 'This is a quick check: a first read. A deep check' in note
+    assert 'no sources' not in note
 
 
 # ── the completed deep check ─────────────────────────────────────────
