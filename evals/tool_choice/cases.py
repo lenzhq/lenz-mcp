@@ -93,6 +93,11 @@ class Case:
     # different claim: above 1 only where the user asked for that many (a deep
     # check of every claim). `also_allowed` tools may come first, once each.
     count: int = 1
+    # Results for tools the model may call FIRST (`check_usage` before a large
+    # batch). When a turn calls only these, the eval hands back these results
+    # and asks once more, and judges both turns' calls together: what the model
+    # does after the answer is the behaviour under test, not the question.
+    answers: tuple[tuple[str, dict[str, Any]], ...] = ()
     # The submission's "Tool triggered" line, when the call SHAPE matters to a
     # reviewer (one call; the whole text in `claim`; `get_verification` may
     # follow on its own). Must name every tool in `expect` -- a test holds it
@@ -254,6 +259,9 @@ _REPORT = (
     'It acquired two competitors last year. Its main product launched in 2016. Gross margin was 71%. '
     'It has customers in 38 countries. Its chief executive joined in 2019. It lists on the Amsterdam exchange.'
 )
+
+# A balance that covers a deep check of every one of the twelve rows.
+_BALANCE = real.usage_result(1000)
 
 TWELVE_ROWS = (
     ('user', f'Check the claims in this report with Lenz: "{_REPORT}"'),
@@ -1049,6 +1057,7 @@ CASES: tuple[Case, ...] = (
         # against the balance, and a model about to offer twelve deep checks
         # may do that. It is not a prerequisite.
         at_most=(('check_usage', 1),),
+        answers=(('check_usage', _BALANCE),),
         forbid=('verify_claim', 'assess_claim'),
         why=(
             'High stakes and a long text, and no request: the instructions say to recommend a deep '
@@ -1067,14 +1076,16 @@ CASES: tuple[Case, ...] = (
         expect_args={'claim': _says('halden')},
         count=12,
         also_allowed=('check_usage',),
+        answers=(('check_usage', _BALANCE),),
         forbid=('assess_claim', 'select_claims'),
         why=(
             'The user asked for a deep check of every claim, so every claim gets one: twelve '
             '`verify_claim` calls, one per row, without asking again. Picking two, or asking which '
-            'ones, is refusing what was asked. Sizing the batch against the balance first is allowed, '
-            'and a turn that does only that passes: the checks would start in the next turn, which '
-            'this eval does not see. Each call must name the company, as the rows do: "It opened '
-            'offices" is not a claim anyone can check.'
+            'ones, is refusing what was asked. Sizing the batch against the balance first is allowed: '
+            'the eval then answers it (1,000 credits, enough for all twelve) and the checks must '
+            'follow; asking for confirmation instead is the cost step the user did not ask for. '
+            'Each call must name the company, as the rows do: "It opened offices" is not a claim '
+            'anyone can check.'
         ),
     ),
     Case(

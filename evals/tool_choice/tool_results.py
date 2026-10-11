@@ -294,3 +294,13 @@ def citecheck_completed_result(
             'citecheck_status': (200, body),
         },
     )
+
+
+def usage_result(credits_remaining: int) -> dict[str, Any]:
+    """What `check_usage` returns for an account holding `credits_remaining` credits."""
+    body = {
+        'plan': 'pro',
+        'credits': {'remaining': credits_remaining, 'total': credits_remaining, 'resets_at': '2026-11-01T00:00:00Z'},
+        'costs': {'assess': 1, 'verify': 10, 'ask': 1},
+    }
+    return _run('check_usage', (), {'me_usage': (200, body)})

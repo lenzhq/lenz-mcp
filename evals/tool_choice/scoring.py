@@ -190,11 +190,6 @@ def _judge_fan_out(case: case_data.Case, calls) -> tuple[bool, str]:
     the case's extras allowed once each before or between them."""
     (tool,) = case.expected_tools
     names = [call.name for call in calls]
-    if names and set(names) <= set(case.also_allowed) and tool not in names:
-        # Sizing the batch first (`check_usage`) is the step its description
-        # asks for; the checks would start in the next turn, which this eval
-        # does not see.
-        return len(names) == len(set(names)), ''
     for name in names:
         if name != tool and name not in case.also_allowed:
             return False, f'called {name}, which this case does not allow'

@@ -778,8 +778,8 @@ def test_a_deep_check_of_every_claim_is_twelve_calls_on_twelve_claims():
     every = [('verify_claim', {'claim': claim}) for claim in rows]
     assert scoring.judge(case, _turn(*every)) == (True, '')
     assert scoring.judge(case, _turn(('check_usage', {}), *every)) == (True, '')
-    # Sizing the batch is the step check_usage's description asks for; the checks follow next turn.
-    assert scoring.judge(case, _turn(('check_usage', {})))[0]
+    # Sizing the batch and then stopping (asking to confirm) is not the twelve checks asked for.
+    assert not scoring.judge(case, _turn(('check_usage', {})))[0]
     assert not scoring.judge(case, _turn(('check_usage', {}), ('check_usage', {})))[0]
     assert not scoring.judge(case, _turn(*every[:2]))[0]
     assert not scoring.judge(case, _turn())[0]
@@ -799,3 +799,35 @@ def test_the_next_batch_is_the_citation_the_first_check_left():
     assert scoring.judge(case, _turn(('check_citations', {'pairs': [trimmed]})))[0]
     linked = {**pair, 'statement': 'Sea levels rose 3 mm last year [survey](https://data.example.net/survey).'}
     assert not scoring.judge(case, _turn(('check_citations', {'pairs': [linked]})))[0]
+
+
+def test_a_balance_check_is_answered_and_the_next_turn_judged_with_it():
+    from evals.tool_choice import __main__ as runner
+
+    case = cases.by_id('escalate-all-rows-on-request')
+    rows = [r['claim'] for t in case.history if isinstance(t, cases.ToolExchange) for r in t.result['claims']]
+    seen = []
+
+    def ask(history, prompt, *, model, with_instructions):
+        seen.append((history, prompt))
+        return _turn(*[('verify_claim', {'claim': claim}) for claim in rows])
+
+    turn = runner._answer_and_continue(case, _turn(('check_usage', {})), ask, model='m', with_instructions=True)
+    ((history, prompt),) = seen
+    assert prompt == ''
+    assert history[-2] == ('user', case.prompt)
+    assert history[-1].name == 'check_usage' and history[-1].result['credits_remaining'] == 1000
+    assert [c.name for c in turn.calls] == ['check_usage'] + ['verify_claim'] * 12
+    assert scoring.judge(case, turn) == (True, '')
+
+    # A model that asks to confirm after seeing the balance has not done what was asked.
+    stops = runner._answer_and_continue(
+        case, _turn(('check_usage', {})), lambda *a, **k: _turn(), model='m', with_instructions=True
+    )
+    assert not scoring.judge(case, stops)[0]
+
+    # Anything else is judged as it came: no second turn.
+    seen.clear()
+    first = _turn(('verify_claim', {'claim': rows[0]}))
+    assert runner._answer_and_continue(case, first, ask, model='m', with_instructions=True) is first
+    assert not seen

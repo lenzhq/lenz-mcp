@@ -52,6 +52,27 @@ def _load_env() -> None:
 MAX_CONSECUTIVE_ERRORS = 5
 
 
+def _answer_and_continue(case, turn, ask, *, model: str, with_instructions: bool):
+    """When the model only asked something the case answers (`case.answers`),
+    hand the answers back and ask once more. The two turns are judged as one."""
+    answers = dict(case.answers)
+    if not answers or not turn.calls or any(call.name not in answers for call in turn.calls):
+        return turn
+    from evals.tool_choice.cases import ToolExchange
+    from evals.tool_choice.vendors import Turn, Usage
+
+    history = (*case.history, *((('user', case.prompt),) if case.prompt else ()))
+    history += tuple(ToolExchange(call.name, call.arguments, answers[call.name]) for call in turn.calls)
+    then = ask(history, '', model=model, with_instructions=with_instructions)
+    usage = Usage(
+        *(
+            getattr(turn.usage, name) + getattr(then.usage, name)
+            for name in ('input_tokens', 'output_tokens', 'cached_tokens', 'cache_write_tokens')
+        )
+    )
+    return Turn(calls=[*turn.calls, *then.calls], text='\n'.join(t for t in (turn.text, then.text) if t), usage=usage)
+
+
 def _run_case(
     case, manifest, ask, *, model: str, with_instructions: bool, repeat: int, state: dict[str, int] | None = None
 ) -> dict[str, Any]:
@@ -69,6 +90,7 @@ def _run_case(
     for _ in range(repeat):
         try:
             turn = ask(case.history, case.prompt, model=model, with_instructions=with_instructions)
+            turn = _answer_and_continue(case, turn, ask, model=model, with_instructions=with_instructions)
         except Exception as exc:  # noqa: BLE001 -- any vendor failure is an errored attempt
             errors += 1
             state['consecutive_errors'] = state.get('consecutive_errors', 0) + 1
@@ -304,7 +326,8 @@ def main(argv: list[str] | None = None) -> int:
     vendors = ['anthropic', 'openai'] if args.vendor == 'both' else [args.vendor]
     arms = [True, False] if args.both_arms else [not args.no_instructions]
 
-    planned = len(selected) * len(vendors) * len(arms) * args.repeat
+    # A case that answers a first call (`case.answers`) may take a second one.
+    planned = sum(2 if case.answers else 1 for case in selected) * len(vendors) * len(arms) * args.repeat
     if planned > args.max_calls:
         print(
             f'REFUSED: this run would make {planned} paid model calls, over the --max-calls '
