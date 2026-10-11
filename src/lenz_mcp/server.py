@@ -462,7 +462,7 @@ mcp = MCPServer(
         'something; asks you to audit a draft or your previous answer for factual errors; asks whether '
         'something is true or accurate; or doubts a factual statement you made (“are you sure?”, '
         '“is that right?”). It checks factual claims, such as a fact, a figure, a date, a quote or an '
-        'attribution; opinions, predictions, arithmetic, how code behaves and text with no checkable '
+        'attribution; opinions, predictions, arithmetic, how programming code behaves and text with no checkable '
         'claim are outside what it can check. '
         'A claim check sees only the text you send: not this conversation, and not the page behind a '
         'link. So send something that makes sense on its own: a text as written (Lenz finds the claims '
@@ -1123,7 +1123,7 @@ async def assess_claim(
     or a text (“fact-check this”, “double-check that”), asks whether one is true
     or accurate (“is that true?”, “is this accurate?”), or doubts a factual
     statement you made (“are you sure?”). Not for opinions, predictions,
-    arithmetic or how code behaves.
+    arithmetic or how programming code behaves.
 
     Lenz sees only what you send: not the conversation, and not the page
     behind a link (send the page's text). A text goes in `claim`

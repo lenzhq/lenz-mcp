@@ -235,7 +235,7 @@ TRIGGER_SENTENCE = (
     'something; asks you to audit a draft or your previous answer for factual errors; asks whether '
     'something is true or accurate; or doubts a factual statement you made (“are you sure?”, '
     '“is that right?”). It checks factual claims, such as a fact, a figure, a date, a quote or an '
-    'attribution; opinions, predictions, arithmetic, how code behaves and text with no checkable '
+    'attribution; opinions, predictions, arithmetic, how programming code behaves and text with no checkable '
     'claim are outside what it can check.'
 )
 
@@ -259,8 +259,9 @@ INSTRUCTIONS_MAX_CHARS = 2372
 # sentence: each example phrase sits beside the intent it stands for, followed
 # by what the tool is not for, so the description states the user's intent
 # rather than a list of words to react to. Raised once more for the sixth
-# verdict word and the one sentence that says what it means.
-ASSESS_DESCRIPTION_MAX_CHARS = 1855
+# verdict word and the one sentence that says what it means. Raised to 1,862
+# for "programming" before "code" in the scope sentence.
+ASSESS_DESCRIPTION_MAX_CHARS = 1862
 # Raised from 1,575 for the sentence saying a row for a claim found false may carry a
 # `suggested_rewrite`: a suggestion built from the reviewers' reasoning, not verified.
 # Raised again to 1,799 for what follows the language of the text, and what does not.
@@ -322,7 +323,7 @@ def test_assess_claim_description_carries_the_trigger_phrases():
         assert phrase in second, phrase
     assert 'doubts a factual statement you made (“are you sure?”)' in second
     # The scope sentence right after it keeps the phrases from reading as keywords.
-    assert 'Not for opinions, predictions, arithmetic or how code behaves.' in description
+    assert 'Not for opinions, predictions, arithmetic or how programming code behaves.' in description
     # What to send, explained: Lenz sees only what is sent.
     assert 'Lenz sees only what you send: not the conversation, and not the page behind a link' in description
     assert 'One claim from the conversation goes in `claim` as a statement that makes sense on its own' in description
