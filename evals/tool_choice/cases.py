@@ -57,6 +57,7 @@ GROUPS = (
     'language',
     'deep_check',
     'tool_results',
+    'normal_use',
 )
 
 
@@ -97,7 +98,14 @@ class Case:
     # batch). When a turn calls only these, the eval hands back these results
     # and asks once more, and judges both turns' calls together: what the model
     # does after the answer is the behaviour under test, not the question.
-    answers: tuple[tuple[str, dict[str, Any]], ...] = ()
+    answers: tuple[tuple[str, Any], ...] = ()
+    # At most this many calls of the expected tool in one model turn (0: no
+    # limit). A deep check of every claim runs in batches of ten.
+    batch: int = 0
+    # What the reply to the user must say, as a predicate on its text (the
+    # turns' text joined), for a case where the rule is about what the user is
+    # told. Judged after the calls; never a model judge.
+    reply: Callable[[str], bool] | None = None
     # The submission's "Tool triggered" line, when the call SHAPE matters to a
     # reviewer (one call; the whole text in `claim`; `get_verification` may
     # follow on its own). Must name every tool in `expect` -- a test holds it
@@ -142,15 +150,28 @@ def _same_sentence(value, expected: str) -> bool:
 
 
 def _listed(history):
-    """One of the statements a quick check in `history` listed, as listed
-    (case and spacing aside): the deep check then matches its quick-check row."""
-    rows = {
-        _norm(row['claim'])
-        for turn in history
-        if isinstance(turn, ToolExchange)
-        for row in turn.result.get('claims', ())
-    }
-    return lambda value: isinstance(value, str) and _norm(value) in rows
+    """One of the statements a quick check in `history` listed, exactly as
+    listed (surrounding spaces aside): the deep check then matches its
+    quick-check row, and Lenz's exact-match cache and pre-cleared registry
+    recognise it."""
+    rows = {row['claim'] for turn in history if isinstance(turn, ToolExchange) for row in turn.result.get('claims', ())}
+    return lambda value: isinstance(value, str) and value.strip() in rows
+
+
+def _statement(*tokens):
+    """A claim written as a statement, not as the user's question: it carries
+    every token (as `_says`) and does not end in a question mark."""
+    says = _says(*tokens)
+    return lambda value: says(value) and not value.rstrip().endswith('?')
+
+
+def _never(*tokens):
+    """None of these words (case aside): what a claim must not gain."""
+    return lambda value: isinstance(value, str) and not any(t in _norm(value) for t in tokens)
+
+
+def _all(*predicates):
+    return lambda value: all(p(value) for p in predicates)
 
 
 def _is(expected):
@@ -457,6 +478,83 @@ CITECHECK_WITH_MORE = (
     ),
 )
 
+_EVERY_TASK = '4b9e1c07d23a46f58e0b7a91c6d2f3e8'
+_EVERY = [
+    'The Danube flows through ten countries.',
+    'Vienna lies on the Danube.',
+    'The Danube empties into the Black Sea.',
+]
+_EVERY_TEXT = ' '.join(_EVERY)
+EVERY_CLAIM_PICKER = (
+    ('user', f'Run a deep check with sources on every claim in this: "{_EVERY_TEXT}"'),
+    ToolExchange(
+        'verify_claim', {'claim': _EVERY_TEXT}, real.verify_needs_input_result(_EVERY_TEXT, _EVERY_TASK, _EVERY)
+    ),
+)
+
+# A report long enough that one quick check covers 20 of its claims and leaves
+# two, as the API does for a text with more claims than one check takes.
+_LONG_ROWS = [
+    f'Halden Systems opened an office in {city} in {year}.'
+    for city, year in (
+        ('Lyon', 2014),
+        ('Porto', 2015),
+        ('Gdansk', 2015),
+        ('Ghent', 2016),
+        ('Bilbao', 2016),
+        ('Turin', 2017),
+        ('Brno', 2017),
+        ('Aarhus', 2018),
+        ('Tampere', 2018),
+        ('Graz', 2019),
+        ('Malmo', 2019),
+        ('Cork', 2020),
+        ('Leipzig', 2020),
+        ('Utrecht', 2021),
+        ('Bergen', 2021),
+        ('Krakow', 2022),
+        ('Seville', 2022),
+        ('Linz', 2023),
+        ('Tartu', 2023),
+        ('Nantes', 2024),
+    )
+]
+_LEFT_OVER = ['Halden Systems has 900 employees.', 'Halden Systems was founded in 2011.']
+_LONG_REPORT = ' '.join([*_LONG_ROWS, *_LEFT_OVER])
+LONG_TEXT_CHECKED = (
+    ('user', f'Check the claims in this report with Lenz: "{_LONG_REPORT}"'),
+    ToolExchange(
+        'assess_claim',
+        {'claim': _LONG_REPORT},
+        real.assess_result([real.assess_row(row, 'True', 'high') for row in _LONG_ROWS], more=_LEFT_OVER),
+    ),
+    (
+        'assistant',
+        'Lenz checked 20 claims as a first read, all True with high confidence. The report holds 2 more '
+        'claims that this check did not cover. Do you want them checked too?',
+    ),
+)
+
+_OWN_ANSWER = (
+    'Marie Curie was the first woman to win a Nobel Prize, in 1903, and she is still the only person '
+    'to have won Nobel Prizes in two different sciences. She was born in Warsaw in 1867.'
+)
+OWN_ANSWER = (
+    ('user', 'Tell me briefly about Marie Curie.'),
+    ('assistant', _OWN_ANSWER),
+)
+
+_GERMAN_ROW = 'Der Rhein ist der längste Fluss Deutschlands.'
+QUICK_GERMAN_LOW = _quick(
+    'Prüf das bitte mit Lenz: Der Rhein ist der längste Fluss Deutschlands.',
+    _GERMAN_ROW,
+    [real.assess_row(_GERMAN_ROW, 'Mostly True', 'low', 'Die Länge hängt davon ab, wie man misst.')],
+    'Erste Einschätzung von Lenz: Mostly True, mit geringer Sicherheit. Soll ich eine gründliche '
+    'Prüfung mit Quellen starten?',
+)
+
+_SHORT_BALANCE = real.usage_result(50)
+
 CASES: tuple[Case, ...] = (
     # ── The eight OpenAI submission cases, verbatim ───────────────────
     Case(
@@ -684,7 +782,7 @@ CASES: tuple[Case, ...] = (
         history=(('user', 'How tall is the Eiffel Tower?'), ('assistant', 'It is about 330 metres tall.')),
         prompt='are you sure?',
         expect='assess_claim',
-        expect_args={'claim': _says('330'), 'claims': _unset},
+        expect_args={'claim': _statement('eiffel', '330'), 'claims': _unset},
         forbid=('verify_claim',),
         why=(
             'Doubting a factual statement the assistant just made is a check request, and a quick '
@@ -700,7 +798,7 @@ CASES: tuple[Case, ...] = (
         ),
         prompt='is that right?',
         expect='assess_claim',
-        expect_args={'claim': _says('2024'), 'claims': _unset},
+        expect_args={'claim': _statement('ai act', '2024'), 'claims': _unset},
         forbid=('verify_claim',),
         why='The same doubt, second phrasing.',
     ),
@@ -713,7 +811,7 @@ CASES: tuple[Case, ...] = (
         ),
         prompt='double-check that',
         expect='assess_claim',
-        expect_args={'claim': _says('80'), 'claims': _unset},
+        expect_args={'claim': _statement('ocean', '80'), 'claims': _unset},
         forbid=('verify_claim',),
         why='The same doubt, imperative phrasing.',
     ),
@@ -734,7 +832,7 @@ CASES: tuple[Case, ...] = (
         group='unnamed_triggers',
         prompt='Is it true that honey never spoils?',
         expect='assess_claim',
-        expect_args={'claim': _says('honey'), 'claims': _unset},
+        expect_args={'claim': _statement('honey'), 'claims': _unset},
         forbid=('verify_claim',),
         why='A yes/no question about a fact is a checkable claim.',
     ),
@@ -761,7 +859,7 @@ CASES: tuple[Case, ...] = (
         group='unnamed_triggers',
         prompt='Did Einstein say "God does not play dice"?',
         expect='assess_claim',
-        expect_args={'claim': _says('einstein', 'dice'), 'claims': _unset},
+        expect_args={'claim': _statement('einstein', 'dice'), 'claims': _unset},
         forbid=('verify_claim',),
         why=(
             'The instructions name a quote or an attribution as a checkable claim. It is a question '
@@ -1020,7 +1118,7 @@ CASES: tuple[Case, ...] = (
         prompt='yes, go deeper',
         expect='verify_claim',
         expect_args={
-            'claim': _says(('startups', 'start-ups'), ('90%', '90 percent')),
+            'claim': _listed(QUICK_LOW),
             'depth': lambda v: v in (None, 'standard'),
         },
         why='Low confidence plus an explicit yes is the one clean consent. The claim is the one the user asked about.',
@@ -1082,14 +1180,20 @@ CASES: tuple[Case, ...] = (
         id='escalate-all-rows-on-request',
         group='escalation',
         history=TWELVE_ROWS,
-        prompt='Run a deep check on every one of them.',
+        prompt='Run a deep check on every one of them.',  # twelve: a batch of ten, then two
         expect='verify_claim',
         # Every one of the twelve calls is held to this, and to a different claim:
         # a row's statement exactly as the quick check listed it.
         expect_args={'claim': _listed(TWELVE_ROWS)},
         count=12,
-        also_allowed=('check_usage',),
-        answers=(('check_usage', _BALANCE),),
+        batch=10,
+        also_allowed=('check_usage', 'get_verification', 'list_verifications'),
+        answers=(
+            ('check_usage', _BALANCE),
+            ('verify_claim', real.verify_started_result),
+            ('get_verification', real.verification_finished_result),
+            ('list_verifications', real.list_recent_result),
+        ),
         forbid=('assess_claim', 'select_claims'),
         why=(
             'The user asked for a deep check of every claim, so every claim gets one: twelve '
@@ -1098,7 +1202,8 @@ CASES: tuple[Case, ...] = (
             'the eval then answers it (1,000 credits, enough for all twelve) and the checks must '
             'follow; asking for confirmation instead is the cost step the user did not ask for. '
             "Each call passes a row's statement exactly as listed, so the deep check matches its "
-            'quick-check row; "It opened offices" is not a claim anyone can check.'
+            'quick-check row; "It opened offices" is not a claim anyone can check. They go in batches '
+            'of ten: the eval answers each started check, and the remaining two must follow.'
         ),
     ),
     Case(
@@ -1132,6 +1237,146 @@ CASES: tuple[Case, ...] = (
             '`select_claims` with the task_id and the EXACT offered text. Calling `verify_claim` '
             'again would start (and charge) a fresh check of the whole text, and a reworded claim '
             'is refused by the API. Nothing else asserts this tool is ever picked.'
+        ),
+    ),
+    Case(
+        id='audit-own-answer',
+        group='normal_use',
+        history=OWN_ANSWER,
+        prompt='Can you fact-check your answer with Lenz?',
+        expect='assess_claim',
+        expect_args={
+            'claim': lambda v: isinstance(v, str) and ' '.join(v.split()) == ' '.join(_OWN_ANSWER.split()),
+            'claims': _unset,
+        },
+        forbid=('verify_claim',),
+        why=(
+            'Checking its own answer is a text to check: it goes whole and as written, "She" included. '
+            'Lenz finds the claims in it and resolves "she" from the text itself.'
+        ),
+    ),
+    Case(
+        id='doubt-one-sentence-of-own-answer',
+        group='normal_use',
+        history=OWN_ANSWER,
+        prompt='Are you sure about the two sciences part?',
+        expect='assess_claim',
+        expect_args={'claim': _all(_statement('curie', 'two'), _never('warsaw', '1867')), 'claims': _unset},
+        forbid=('verify_claim',),
+        why=(
+            'The user doubts one statement of the answer, so that statement is the claim, standing on '
+            'its own: "she" becomes Marie Curie, because Lenz sees only what is sent. The rest of the '
+            'answer is not part of the question.'
+        ),
+    ),
+    Case(
+        id='deep-check-a-row-in-its-language',
+        group='normal_use',
+        history=QUICK_GERMAN_LOW,
+        prompt='Ja, bitte gründlich prüfen.',
+        expect='verify_claim',
+        expect_args={'claim': _is(_GERMAN_ROW), 'language': _unset},
+        why=(
+            'A quick-check row goes to the deep check exactly as listed, in its own language: '
+            'translating it would change the claim Lenz matches and the language it answers in.'
+        ),
+    ),
+    Case(
+        id='every-claim-on-a-short-balance',
+        group='normal_use',
+        history=TWELVE_ROWS,
+        prompt='Run a deep check on every one of them.',
+        expect=RESTRAINT,
+        at_most=(('verify_claim', 12), ('check_usage', 1), ('get_verification', 40), ('list_verifications', 3)),
+        answers=(
+            ('check_usage', _SHORT_BALANCE),
+            ('verify_claim', real.balance_limited(5)),
+            ('get_verification', real.verification_running_result),
+            ('list_verifications', real.list_recent_result),
+        ),
+        forbid=('assess_claim',),
+        reply=lambda text: 'credit' in text.lower() or 'balance' in text.lower(),
+        why=(
+            'Twelve deep checks on a balance that covers five: the first five start and every later '
+            'call is refused for credits, as the API does. Running them without asking first is '
+            'right (the user asked for every claim); so is checking the balance and running the five '
+            'that matter. What the case judges: no retry loop on a refused call (at most one call '
+            'per claim), and, when the turn ends without a call, a reply that tells the user the '
+            'balance ran out.'
+        ),
+    ),
+    Case(
+        id='a-link-without-its-text',
+        group='normal_use',
+        prompt='Is this article accurate? https://news.example.com/2026/10/rhine-record-low',
+        expect=NONE,
+        reply=lambda text: any(w in text.lower() for w in ('paste', 'text of', 'copy', 'share the')),
+        why=(
+            'Lenz cannot open a link, and the model here has no browsing tool. Sending the bare URL '
+            "checks nothing; the model asks the user for the article's text."
+        ),
+    ),
+    Case(
+        id='more-claims-told-to-the-user',
+        group='normal_use',
+        history=LONG_TEXT_CHECKED[:2],
+        prompt='',
+        expect=RESTRAINT,
+        at_most=(('assess_claim', 1),),
+        forbid=('verify_claim',),
+        reply=lambda text: any(
+            w in text.lower()
+            for w in (
+                '2 more',
+                'two more',
+                'two other',
+                'two further',
+                'rest',
+                'remaining',
+                'not check',
+                "weren't",
+                'not cover',
+                'another two',
+                'two additional',
+                '2 additional',
+            )
+        ),
+        why=(
+            'A long text held more claims than one quick check covers. The user asked for the '
+            "report's claims to be checked, so checking the rest straight away is an answer; "
+            'otherwise the reply must say some were not checked. Reporting the text as checked is the '
+            'bug this guards.'
+        ),
+    ),
+    Case(
+        id='picker-selects-every-claim-when-asked',
+        group='tool_results',
+        history=EVERY_CLAIM_PICKER,
+        prompt='',
+        expect='select_claims',
+        expect_args={
+            'task_id': _is(_EVERY_TASK),
+            'claims': lambda v: isinstance(v, list) and sorted(v) == sorted(_EVERY),
+        },
+        forbid=('verify_claim',),
+        why=(
+            'The user already asked for a deep check of every claim. When the text comes back as '
+            '`needs_input`, the model selects all of them; asking the user to choose again is '
+            'asking a question they already answered.'
+        ),
+    ),
+    Case(
+        id='more-claims-checked-on-request',
+        group='tool_results',
+        history=LONG_TEXT_CHECKED,
+        prompt='Yes, check those too.',
+        expect='assess_claim',
+        expect_args={'claims': lambda v: isinstance(v, list) and v == _LEFT_OVER, 'claim': _unset},
+        forbid=('verify_claim',),
+        why=(
+            'A long text holds more claims than one quick check covers; the result lists the rest '
+            'unchecked in `more_claims`. Checking them means passing those claims as listed, not '
+            'sending the whole text again (which replays the first check) or rewriting them.'
         ),
     ),
     Case(
@@ -1175,7 +1420,7 @@ CASES: tuple[Case, ...] = (
         ),
         prompt='Use Lenz to verify with sources that it also opened an office in Lyon the same year.',
         expect='verify_claim',
-        expect_args={'claim': _says('halden', 'lyon', '2025')},
+        expect_args={'claim': _all(_statement('halden', 'lyon', '2025'), _never('not ', '40%', 'revenue'))},
         forbid=('assess_claim',),
         why=(
             'The call carries the claim and nothing else from the conversation. "It ... the same year" '

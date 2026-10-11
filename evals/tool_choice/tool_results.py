@@ -95,9 +95,105 @@ def assess_row(
     }
 
 
-def assess_result(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """What `assess_claim` returns for these API rows (notes, next_step and all)."""
-    return _run('assess_claim', ('x',), {'assess': (200, {'error': None, 'claims': rows})})
+def assess_result(rows: list[dict[str, Any]], more: list[str] = ()) -> dict[str, Any]:
+    """What `assess_claim` returns for these API rows (notes, next_step and all).
+    `more` are the claims the text held past one quick check, unchecked."""
+    body = {'error': None, 'claims': rows, 'more_claims': list(more)}
+    return _run('assess_claim', ('x',), {'assess': (200, body)})
+
+
+def verification_running_result(arguments: dict[str, Any]) -> dict[str, Any]:
+    """What `get_verification` returns for a check the eval answers: still running."""
+    from lenz_mcp import config
+
+    task_id = str(arguments.get('task_id') or '')
+    with mock.patch.object(config, 'verify_wait_seconds', lambda identity: 0):
+        return _run(
+            'get_verification',
+            (task_id,),
+            {
+                'verify_status': (
+                    200,
+                    {
+                        'status': 'processing',
+                        'progress': {'step': 'research', 'index': 2, 'total': 5, 'elapsed_seconds': 41},
+                    },
+                )
+            },
+        )
+
+
+def list_recent_result(arguments: dict[str, Any]) -> dict[str, Any]:
+    """What `list_verifications` returns while a batch is still running: none finished yet."""
+    return _run(
+        'list_verifications', (), {'list_verifications': (200, {'items': [], 'total': 0, 'page': 1, 'page_size': 10})}
+    )
+
+
+def quota_exhausted_result(arguments: dict[str, Any]) -> dict[str, Any]:
+    """What `verify_claim` returns once the balance no longer covers a deep check."""
+    return _run(
+        'verify_claim', (str(arguments.get('claim') or 'x'),), {'verify': (402, {'cost': 10, 'credits_remaining': 0})}
+    )
+
+
+def balance_limited(started: int):
+    """`verify_claim` answers for a balance that covers `started` deep checks:
+    the first ones start, every later one is refused for credits, as the API
+    does. One closure per attempt, so each attempt starts from a full balance."""
+
+    def factory():
+        count = {'n': 0}
+
+        def answer(arguments: dict[str, Any]) -> dict[str, Any]:
+            count['n'] += 1
+            if count['n'] <= started:
+                return verify_started_result(arguments)
+            return quota_exhausted_result(arguments)
+
+        return answer
+
+    factory.per_attempt = True
+    return factory
+
+
+# The claim behind each task_id `verify_started_result` handed out, so a later
+# `get_verification` on it can return that claim's finished check.
+_STARTED: dict[str, str] = {}
+
+
+def verification_finished_result(arguments: dict[str, Any]) -> dict[str, Any]:
+    """What `get_verification` returns for a check the eval started: finished.
+
+    A real wait outlasts most deep checks, so the first poll usually returns
+    the result; an eval that answered "still running" forever would only show
+    a model waiting on checks that never end.
+    """
+    task_id = str(arguments.get('task_id') or '')
+    claim = _STARTED.get(task_id, 'The claim.')
+    body = verification_body(
+        verification_id=task_id[:8] or 'a0a0a0a0',
+        claim=claim,
+        verdict='True',
+        score=9,
+        confidence='high',
+        key_finding='The public record confirms it.',
+        summary='Independent sources confirm the claim.',
+        rewrite=None,
+        sources=[('registry.example.org', 'Company register', 'The register confirms the claim.')],
+    )
+    return _run('get_verification', (task_id,), {'verify_status': (200, {'status': 'completed', 'result': body})})
+
+
+def verify_started_result(arguments: dict[str, Any]) -> dict[str, Any]:
+    """What `verify_claim` returns for a call the eval answers: the check has
+    started and is still running, with a task_id of its own."""
+    import hashlib
+
+    claim = str(arguments.get('claim') or '')
+    task_id = hashlib.sha256(claim.encode()).hexdigest()[:32]
+    _STARTED[task_id] = claim
+    return verify_running_result(claim, task_id)
 
 
 def verification_body(

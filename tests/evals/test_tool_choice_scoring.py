@@ -772,20 +772,92 @@ def test_a_dropped_negation_or_a_moved_figure_is_named():
     assert any('negations and figures' in note for note in moved)
 
 
-def test_a_deep_check_of_every_claim_is_twelve_calls_on_twelve_claims():
+def _batched(*turns) -> Turn:
+    calls = [Call(name, args) for turn in turns for name, args in turn]
+    return Turn(calls=calls, text='', batches=tuple(tuple(name for name, _ in turn) for turn in turns))
+
+
+def test_a_deep_check_of_every_claim_is_every_listed_row_in_batches_of_ten():
     case = cases.by_id('escalate-all-rows-on-request')
     rows = [r['claim'] for t in case.history if isinstance(t, cases.ToolExchange) for r in t.result['claims']]
     every = [('verify_claim', {'claim': claim}) for claim in rows]
-    assert scoring.judge(case, _turn(*every)) == (True, '')
-    assert scoring.judge(case, _turn(('check_usage', {}), *every)) == (True, '')
+    assert scoring.judge(case, _batched(every[:10], every[10:])) == (True, '')
+    assert scoring.judge(case, _batched([('check_usage', {})], every[:10], every[10:])) == (True, '')
+    assert scoring.judge(case, _batched(every[:6], every[6:])) == (True, '')
+    # All twelve at once is a batch over ten.
+    assert 'batches of at most 10' in scoring.judge(case, _batched(every))[1]
     # Sizing the batch and then stopping (asking to confirm) is not the twelve checks asked for.
-    assert not scoring.judge(case, _turn(('check_usage', {})))[0]
-    assert not scoring.judge(case, _turn(('check_usage', {}), ('check_usage', {})))[0]
-    assert not scoring.judge(case, _turn(*every[:2]))[0]
+    assert not scoring.judge(case, _batched([('check_usage', {})]))[0]
+    assert not scoring.judge(case, _batched([('check_usage', {})], [('check_usage', {})]))[0]
+    assert not scoring.judge(case, _batched(every[:10]))[0]
+    assert not scoring.judge(case, _batched(every[:10], [every[0], every[1]]))[0], 'the same claim twice'
+    assert not scoring.judge(case, _batched(every[:10], [every[10], ('verify_claim', {'claim': 'It lists.'})]))[0]
+    # Exact means as listed: a reworded row is not the row.
+    reworded = ('verify_claim', {'claim': rows[11].replace('Halden Systems is', 'Halden is')})
+    assert not scoring.judge(case, _batched(every[:10], [every[10], reworded]))[0]
+    assert not scoring.judge(case, _batched([('assess_claim', {'claim': rows[0]})], every[:10], every[10:]))[0]
+
+
+def test_the_eval_answers_a_batch_and_judges_every_turn_after_it():
+    from evals.tool_choice import __main__ as runner
+
+    case = cases.by_id('escalate-all-rows-on-request')
+    rows = [r['claim'] for t in case.history if isinstance(t, cases.ToolExchange) for r in t.result['claims']]
+    plan = iter(
+        [
+            _turn(*[('verify_claim', {'claim': c}) for c in rows[:10]]),
+            _turn(*[('verify_claim', {'claim': c}) for c in rows[10:]]),
+            Turn(calls=[], text='All twelve deep checks are running.'),
+        ]
+    )
+    seen = []
+
+    def ask(history, prompt, *, model, with_instructions):
+        seen.append((history, prompt))
+        return next(plan)
+
+    first = _turn(('check_usage', {}))
+    turn = runner._answer_and_continue(case, first, ask, model='m', with_instructions=True)
+    assert len(seen) == 3
+    history, prompt = seen[0]
+    assert prompt == ''
+    assert history[-2] == ('user', case.prompt)
+    assert history[-1].name == 'check_usage' and history[-1].result['credits_remaining'] == 1000
+    # Each started deep check is answered with a running check of its own.
+    started = [t for t in seen[1][0] if isinstance(t, cases.ToolExchange) and t.name == 'verify_claim']
+    assert len(started) == 10 and len({t.result['task_id'] for t in started}) == 10
+    assert turn.batches == (('check_usage',), ('verify_claim',) * 10, ('verify_claim',) * 2, ())
+    assert scoring.judge(case, turn) == (True, '')
+
+    # A model that asks to confirm after seeing the balance has not done what was asked.
+    stops = runner._answer_and_continue(case, first, lambda *a, **k: _turn(), model='m', with_instructions=True)
+    assert not scoring.judge(case, stops)[0]
+
+    # A turn with a call the case does not answer is judged as it came: no second turn.
+    seen.clear()
+    plain = _turn(('assess_claim', {'claim': rows[0]}))
+    assert runner._answer_and_continue(case, plain, ask, model='m', with_instructions=True) is plain
+    assert not seen
+
+
+def test_the_picker_case_wants_every_offered_claim():
+    case = cases.by_id('picker-selects-every-claim-when-asked')
+    exchange = next(t for t in case.history if isinstance(t, cases.ToolExchange))
+    offered = [line.split('. ', 1)[1] for line in exchange.result['message'].splitlines()[1:]]
+    task_id = exchange.result['task_id']
+    assert scoring.judge(case, _turn(('select_claims', {'task_id': task_id, 'claims': offered[::-1]}))) == (True, '')
+    assert not scoring.judge(case, _turn(('select_claims', {'task_id': task_id, 'claims': offered[:1]})))[0]
     assert not scoring.judge(case, _turn())[0]
-    assert not scoring.judge(case, _turn(*every[:11], every[0]))[0], 'the same claim twice is not twelve claims'
-    assert not scoring.judge(case, _turn(*every[:11], ('verify_claim', {'claim': 'It lists on the exchange.'})))[0]
-    assert not scoring.judge(case, _turn(('assess_claim', {'claim': rows[0]}), *every))[0]
+
+
+def test_the_rest_of_a_long_text_is_checked_as_listed():
+    case = cases.by_id('more-claims-checked-on-request')
+    exchange = next(t for t in case.history if isinstance(t, cases.ToolExchange))
+    more = exchange.result['more_claims']
+    assert exchange.result['more_claims_note']
+    assert scoring.judge(case, _turn(('assess_claim', {'claims': more}))) == (True, '')
+    assert not scoring.judge(case, _turn(('assess_claim', {'claim': exchange.arguments['claim']})))[0]
+    assert not scoring.judge(case, _turn(('assess_claim', {'claims': [m.lower() for m in more]})))[0]
 
 
 def test_the_next_batch_is_the_citation_the_first_check_left():
@@ -801,33 +873,23 @@ def test_the_next_batch_is_the_citation_the_first_check_left():
     assert not scoring.judge(case, _turn(('check_citations', {'pairs': [linked]})))[0]
 
 
-def test_a_balance_check_is_answered_and_the_next_turn_judged_with_it():
-    from evals.tool_choice import __main__ as runner
+def test_a_short_balance_starts_the_first_checks_and_refuses_the_rest():
+    from evals.tool_choice import tool_results as real
 
-    case = cases.by_id('escalate-all-rows-on-request')
-    rows = [r['claim'] for t in case.history if isinstance(t, cases.ToolExchange) for r in t.result['claims']]
-    seen = []
+    answer = real.balance_limited(2)()
+    statuses = [answer({'claim': f'Claim {i}.'})['status'] for i in range(4)]
+    assert statuses[:2] == ['submitted', 'submitted']
+    assert statuses[2:] == ['quota_exhausted', 'quota_exhausted']
+    # A fresh attempt starts from the full balance again.
+    assert real.balance_limited(2)()({'claim': 'Claim 9.'})['status'] == 'submitted'
 
-    def ask(history, prompt, *, model, with_instructions):
-        seen.append((history, prompt))
-        return _turn(*[('verify_claim', {'claim': claim}) for claim in rows])
 
-    turn = runner._answer_and_continue(case, _turn(('check_usage', {})), ask, model='m', with_instructions=True)
-    ((history, prompt),) = seen
-    assert prompt == ''
-    assert history[-2] == ('user', case.prompt)
-    assert history[-1].name == 'check_usage' and history[-1].result['credits_remaining'] == 1000
-    assert [c.name for c in turn.calls] == ['check_usage'] + ['verify_claim'] * 12
-    assert scoring.judge(case, turn) == (True, '')
-
-    # A model that asks to confirm after seeing the balance has not done what was asked.
-    stops = runner._answer_and_continue(
-        case, _turn(('check_usage', {})), lambda *a, **k: _turn(), model='m', with_instructions=True
-    )
-    assert not scoring.judge(case, stops)[0]
-
-    # Anything else is judged as it came: no second turn.
-    seen.clear()
-    first = _turn(('verify_claim', {'claim': rows[0]}))
-    assert runner._answer_and_continue(case, first, ask, model='m', with_instructions=True) is first
-    assert not seen
+def test_a_restraint_case_judges_the_reply_only_when_no_call_did_the_work():
+    case = cases.by_id('more-claims-told-to-the-user')
+    exchange = next(t for t in case.history if isinstance(t, cases.ToolExchange))
+    more = exchange.result['more_claims']
+    assert scoring.judge(case, _turn(('assess_claim', {'claims': more}))) == (True, '')
+    told = Turn(calls=[], text='The report holds two more claims that were not checked.')
+    assert scoring.judge(case, told) == (True, '')
+    silent = Turn(calls=[], text='All three claims check out.')
+    assert not scoring.judge(case, silent)[0]

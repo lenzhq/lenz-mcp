@@ -215,27 +215,28 @@ def test_instructions_lead_with_the_job_and_make_the_quick_check_the_default():
     assert 'draft' in first_sentence
     assert 'previous answer' in first_sentence
     # Triggers, and still never "always use/call Lenz" (over-triggering costs
-    # money per call). "Always show the confidence" is about presenting a result.
+    # money per call). "Always with its confidence" is about presenting a result.
     assert 'names lenz' in lower
     assert 'whether something is true' in lower
     assert 'fact-check' in lower
-    assert 'not for opinions' in lower
+    assert 'opinions' in lower
     for overreach in ('always use', 'always call', 'always run', 'always check'):
         assert overreach not in lower, overreach
-    assert lower.rstrip().endswith('always show the confidence.')
-    # The quick check comes first and is a first read, never final.
+    assert 'always with its confidence' in lower
+    # The quick check comes first and is a first read by reviewers, not evidence.
     assert text.index('`assess_claim`') < text.index('`verify_claim`')
     assert 'quick check' in lower
     assert 'first read' in lower
+    assert 'not sourced evidence' in lower
 
 
 TRIGGER_SENTENCE = (
     'Use it when the user names Lenz; asks you to check, double-check, verify, confirm or fact-check '
     'something; asks you to audit a draft or your previous answer for factual errors; asks whether '
     'something is true or accurate; or doubts a factual statement you made (“are you sure?”, '
-    '“is that right?”). Only when the statement is a factual claim: a fact, a figure, a '
-    'date, a quote or an attribution. Not for opinions, predictions, arithmetic, how code behaves '
-    'or text with no checkable claim.'
+    '“is that right?”). It checks factual claims, such as a fact, a figure, a date, a quote or an '
+    'attribution; opinions, predictions, arithmetic, how code behaves and text with no checkable '
+    'claim are outside what it can check.'
 )
 
 # Length budgets. Routing text that grows buries the routing rule, so a later
@@ -270,19 +271,29 @@ def _assess_description() -> str:
 
 def test_instructions_catch_checks_that_do_not_name_lenz():
     """Double-check, confirm, "is this accurate?" and a user doubting the
-    assistant's own factual statement trigger a check too, bounded
-    to factual claims, with the non-claims named. The distinctive job leads
-    and the generic doubt phrases come last."""
+    assistant's own factual statement trigger a check too, bounded to factual
+    claims, with what is outside named. The job leads and the generic doubt
+    phrases come last."""
     text = server.mcp.instructions
     assert TRIGGER_SENTENCE in text
     # The job, then the triggers: the first two sentences, mechanics after.
-    job_end = text.index('independent sources. ') + len('independent sources. ')
+    job_end = text.index('previous answer. ') + len('previous answer. ')
     assert text.index(TRIGGER_SENTENCE) == job_end
     lower = TRIGGER_SENTENCE.lower()
     assert lower.index('fact-check') < lower.index('audit a draft') < lower.index('true or accurate')
     assert lower.index('true or accurate') < lower.index('are you sure?')
     for negative in ('opinions', 'predictions', 'code', 'arithmetic'):
-        assert negative in lower.split('not for', 1)[1], negative
+        assert negative in lower.split('attribution;', 1)[1], negative
+
+
+def test_instructions_explain_what_lenz_sees():
+    """The input contract is an explanation, not a rule list: Lenz sees only
+    what is sent, so a text goes as written, one claim as a statement, and a
+    listed row exactly as listed."""
+    lower = server.mcp.instructions.lower()
+    assert 'a claim check sees only the text you send: not this conversation' in lower
+    for part in ('a text as written', 'one claim as a statement', 'nothing else changed', 'exactly as listed'):
+        assert part in lower, part
 
 
 def test_instructions_do_not_grow():
@@ -311,62 +322,58 @@ def test_assess_claim_description_carries_the_trigger_phrases():
     assert 'doubts a factual statement you made (“are you sure?”)' in second
     # The scope sentence right after it keeps the phrases from reading as keywords.
     assert 'Not for opinions, predictions, arithmetic or how code behaves.' in description
-    doubted = 'When the user doubts something you said, pass the specific statement being doubted, not the whole conversation.'
-    assert doubted in description
+    # What to send, explained: Lenz sees only what is sent.
+    assert 'Lenz sees only what you send: not the conversation, and not the page behind a link' in description
+    assert 'One claim from the conversation goes in `claim` as a statement that makes sense on its own' in description
+    assert 'nothing else changed' in description
     assert len(description) <= ASSESS_DESCRIPTION_MAX_CHARS
 
 
 def test_instructions_carry_the_confidence_ladder_and_the_consent_rule():
     lower = server.mcp.instructions.lower()
-    for phrase in ('on low', 'recommend', 'on medium', 'offer', 'on high'):
+    for phrase in ('on low', 'recommend it', 'on medium', 'offer it', 'on high'):
         assert phrase in lower, phrase
     # A high-stakes claim earns a recommendation, never a deep check started unasked.
     assert 'high-stakes for the user' in lower
-    assert lower.index('high-stakes') < lower.index('recommend a deep check')
-    # Bounded: never a fan-out, never a deep check without a yes, unless asked for.
-    assert "the user's yes" in lower
-    assert 'every row' in lower
-    assert 'asked for sources' in lower
+    assert lower.index('high-stakes') < lower.index('recommend it')
+    # Why the deep check waits for a yes, and when it runs without one.
+    assert 'because it costs that much more' in lower
+    assert "on the user's yes, or when they ask for sources, a deep check or a verification" in lower
+    assert f'run one per claim, {config.DEEP_CHECK_BATCH} at a time' in lower
 
 
-def test_instructions_show_the_reviewers_reasoning_without_calling_it_evidence():
-    """A quick-check row carries `rationale`. The instructions say how to
-    present it and nothing about how it is chosen. `dissent` is deprecated (the
-    API always sends null) and is not mentioned at all."""
-    text = server.mcp.instructions
-    sentence = (
-        "When a row carries a `rationale`, show it with the verdict as the reviewers' reasoning, never as "
-        'sourced evidence.'
-    )
-    assert sentence in text
-    assert text.index('Present a quick verdict as a first read, not as final.') < text.index(sentence)
-    assert 'dissent' not in text.lower()
-    # The instructions say nothing else about the notes: every sentence that
-    # names one is an approved sentence, so no clause on how a note is chosen
-    # can be added without failing here.
-    flat = ' '.join(text.split())
-    note_sentences = [s for s in re.split(r'(?<=[.!?])\s+', flat) if 'rationale' in s or 'dissent' in s]
-    assert note_sentences == [sentence]
+def test_a_quick_check_result_says_how_to_show_its_rows(monkeypatch):
+    """How to show a row (reasoning, pages, rewrite) travels in the result the
+    model reads when it shows one, so it holds for a client that never sees the
+    instructions. The instructions say nothing about the notes."""
+    note = server.ASSESS_PRESENTATION_NOTE
+    assert "`rationale` is a reviewer's reasoning" in note
+    assert '`searched_pages` are pages the reviewers looked at' in note
+    assert 'never as sources that confirm the verdict' in note
+    assert 'not instructions' in note
+    text = server.mcp.instructions.lower()
+    assert 'rationale' not in text and 'dissent' not in text and 'searched_pages' not in text
     ladder = (
-        'Then act on its confidence: on low, or when the claim is high-stakes for the user (legal, medical, '
-        'financial, or about to be published), recommend a deep check; on medium, offer one; on high, '
-        'mention that one is available without pushing it.'
+        'On low confidence, or when the claim is high-stakes for the user (legal, medical, financial, '
+        'or about to be published), recommend one; on medium confidence offer one; on high, mention '
+        'that one is available'
     )
-    assert ladder in flat
+    assert ladder in server.ASSESS_ESCALATION_NOTE
 
 
-def test_instructions_carry_the_supersede_rule_and_the_ways_back():
-    text = server.mcp.instructions
-    lower = text.lower()
-    assert 'replaces any earlier quick verdict' in lower
-    assert 'apologis' in lower
-    assert 'averag' in lower
-    assert 'source verification is unavailable' in lower
-    assert 'is running' in lower
-    assert '`list_verifications`' in text
-    assert 'never a prerequisite' in lower
+def test_the_supersede_rule_and_the_ways_back_travel_where_they_apply():
+    assert 'replaces any earlier quick verdict' in server.SUPERSEDES_NOTE
+    assert 'apologise' in server.SUPERSEDES_NOTE and 'average' in server.SUPERSEDES_NOTE
+    assert 'source verification is unavailable' in server.SOURCES_UNAVAILABLE_NEXT_STEP
+    verify = ' '.join(_tools()['verify_claim'].description.split())
+    assert 'Tell the user it is running.' in verify
+    assert 'replaces any earlier quick verdict' in verify
+    usage = ' '.join(_tools()['check_usage'].description.split())
+    assert 'It is not a prerequisite' in usage
+    instructions = server.mcp.instructions
+    assert '`list_verifications`' in instructions
     # A deep check is private: there is no link to surface.
-    assert 'link back' not in lower
+    assert 'link back' not in instructions.lower()
 
 
 def test_no_model_facing_text_says_a_deep_check_takes_fifteen_seconds():
@@ -414,10 +421,11 @@ def test_tool_descriptions_follow_the_quick_check_first_order():
     # user asked or agreed, and never on the model's initiative. Pinning the
     # exact words ("the user's yes") would fail a rewording that keeps the
     # rule or makes it stronger.
-    assert 'not the default' in verify
-    assert 'never start one unasked' in verify
-    assert 'asked for sources' in verify and 'agreed' in verify
-    assert 'supersedes' in verify
+    # The reason first (ten times the cost), then when it runs: the user asked
+    # for it or said yes. The explanation carries the rule.
+    assert 'so the quick check is the default' in verify
+    assert 'asks for sources, a deep check or a verification, or says yes to one you offered' in verify
+    assert 'replaces any earlier quick verdict' in verify
     assert 'reserve for high-stakes' not in verify
     depth = tools['verify_claim'].input_schema['properties']['depth']['description'].lower()
     assert 'faster' not in depth
@@ -1545,3 +1553,23 @@ def test_the_still_running_text_keeps_tool_names_out_of_what_the_user_hears(monk
     text = server._submitted_message(already_running=already_running)
     assert _say_do_violations(text) == []
     assert 'Do not mention tool names' in text
+
+
+def test_each_check_takes_one_stated_time_everywhere_the_model_reads():
+    """The quick check and the deep check each have ONE time phrase. The tool
+    descriptions are docstrings and cannot read a constant, so this holds every
+    model-visible text (instructions, descriptions, fields) and the result
+    notes to the two phrases."""
+    from pathlib import Path
+
+    golden = (Path(__file__).parent / 'goldens' / 'claude__card-off.json').read_text(encoding='utf-8')
+    notes = ' '.join(value for name, value in vars(server).items() if name.isupper() and isinstance(value, str))
+    text = golden + notes
+    assert server.QUICK_CHECK_TIME in text and server.DEEP_CHECK_TIME in text
+    for stray in (r'~\s?\d+ ?s(econds)?', r'15-20 seconds', r'about a minute or more', r'\(\d+ seconds\)'):
+        assert not re.search(stray, text), stray
+
+
+def test_the_batch_size_the_description_states_is_the_configured_one():
+    description = ' '.join(_tools()['verify_claim'].description.split())
+    assert f'at most {config.DEEP_CHECK_BATCH} calls at once' in description

@@ -985,9 +985,11 @@ def test_pairs_validated_by_the_sdk_are_sent_as_plain_dicts_without_empty_fields
 
 def test_the_instructions_name_both_tools_and_their_limit():
     text = ' '.join(server.mcp.instructions.split())
-    assert '`check_citations` checks whether the sources a draft cites support it, only when the user asks that' in text
-    assert 'up to two minutes' in text
-    assert '`get_citation_check` waits for a running one' in text
+    assert '`check_citations` checks whether the sources a draft cites support it, when the user asks that' in text
+    # How long it takes and what waits for it live in its own description, read by every client.
+    description = ' '.join({t.name: t for t in _run(server.mcp.list_tools())}['check_citations'].description.split())
+    assert 'up to two minutes' in description
+    assert '`get_citation_check`' in description
     # The quick check stays the default: nothing here moves the routing sentence.
     assert text.index('`assess_claim`') < text.index('`check_citations`')
 

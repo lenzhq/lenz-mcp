@@ -275,6 +275,36 @@ _NEW_ESCALATION_CLAUSE = 'on medium confidence offer one;'
 # longer says it shows no sources.
 _OLD_FIRST_READ = 'This is a quick check: a first read that shows no sources.'
 _NEW_FIRST_READ = 'This is a quick check: a first read.'
+# A user who asks for a deep check of every claim gets one per claim: the note
+# no longer limits a list to two claims when the user asked for more, and says
+# that an explicit request starts one.
+_OLD_LIST_CLAUSE = (
+    'on a list, only for the one or two claims that matter. Do not mention tool names or credits to the '
+    "user. Never start one without the user's yes. The tool is `verify_claim`."
+)
+_NEW_LIST_CLAUSE = (
+    'on a list, for the one or two claims that matter, unless the user asks for more. Do not mention tool '
+    "names or credits to the user. Start one on the user's yes, or when they asked for a deep check, "
+    'sources or a verification. The tool is `verify_claim`.'
+)
+# Explanation first (plan mcp-model-view phase 3/4): the escalation ladder
+# names the high-stakes case and the high-confidence mention, which the
+# instructions alone carried before; a quick check says how to show a row
+# (`presentation`); a deep check that failed for an outage says what to tell
+# the user (`next_step`).
+_OLD_LADDER = 'On low confidence recommend one to the user; on medium confidence offer one; on a list,'
+_NEW_LADDER = (
+    'On low confidence, or when the claim is high-stakes for the user (legal, medical, financial, or about '
+    'to be published), recommend one; on medium confidence offer one; on high, mention that one is '
+    'available; on a list,'
+)
+
+# The picker no longer asks again when the user already asked for every claim.
+_OLD_PICKER_LEAD = (
+    'The text contains several claims and each verification checks one. Show the user '
+    'this list and ask which to check (or choose the one that matters to them), then call '
+    'select_claims with this task_id and the exact text of the chosen claim(s):'
+)
 _OLD_NOTES_NOTE = (
     " `rationale` is the reasoning of a reviewer who agrees with the panel's verdict; `dissent`, when "
     "set, is the reasoning of the reviewer farthest from it. Both are reviewers' notes, not checked "
@@ -305,7 +335,17 @@ def _since_the_oracle(value: Any) -> Any:
     note = out.get('confidence_note')
     if isinstance(note, str):
         note = note.replace(_OLD_ESCALATION_CLAUSE, _NEW_ESCALATION_CLAUSE).replace(_OLD_FIRST_READ, _NEW_FIRST_READ)
+        note = note.replace(_OLD_LIST_CLAUSE, _NEW_LIST_CLAUSE).replace(_OLD_LADDER, _NEW_LADDER)
         out['confidence_note'] = note.replace(_OLD_NOTES_NOTE, server.ASSESS_NOTES_NOTE)
+    if isinstance(out.get('message'), str) and out['message'].startswith(_OLD_PICKER_LEAD):
+        out['message'] = server._needs_input_message({}) + out['message'][len(_OLD_PICKER_LEAD) :]
+    if out.get('source') == 'Lenz fast fact-check (3-model panel)':
+        out['presentation'] = server.ASSESS_PRESENTATION_NOTE
+    if out.get('status') == 'failed' and out.get('failure_class') == 'upstream_unavailable':
+        out['next_step'] = server.SOURCES_UNAVAILABLE_NEXT_STEP
+    # An out-of-credits result says what happened to checks already started.
+    if out.get('status') == 'quota_exhausted':
+        out['next_step'] = server.QUOTA_NEXT_STEP
     return out
 
 
@@ -320,6 +360,10 @@ def test_the_oracle_changes_still_apply():
     assert _NEW_ESCALATION_CLAUSE in server.ASSESS_ESCALATION_NOTE
     assert json.dumps(_OLD_PRESENTATION_NOTE, ensure_ascii=False)[1:-1] in raw
     assert server.PRESENTATION_NOTE.startswith(_OLD_PRESENTATION_NOTE[:-1])
+    assert _OLD_LIST_CLAUSE in raw
+    assert _OLD_LADDER in raw.replace(_OLD_ESCALATION_CLAUSE, _NEW_ESCALATION_CLAUSE)
+    assert _NEW_LADDER in server.ASSESS_ESCALATION_NOTE
+    assert _NEW_LIST_CLAUSE in server.ASSESS_ESCALATION_NOTE
 
 
 def _output(scenario: str, shape: str) -> Any:
