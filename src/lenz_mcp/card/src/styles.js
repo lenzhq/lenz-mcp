@@ -34,7 +34,7 @@ export const CSS = `
   --lz-meta: #635E59;
   --lz-hair: #E8E4DD;
   --lz-true: #14783A;
-  --lz-mostly-true: #8F5706;
+  --lz-mostly-true: #806200;
   --lz-mixed: #635E59;
   --lz-mostly-false: #B23B0B;
   --lz-false: #B91C1C;
