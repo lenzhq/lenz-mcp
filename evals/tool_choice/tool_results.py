@@ -87,8 +87,7 @@ def assess_row(
         'language': 'en',
         'rationale': rationale or None,
         'confidence': confidence,
-        'error_code': None,
-        'candidate_claims': [],
+        'failure_code': None,
         'verification_url': None,
         'identified_claims': [],
         'suggested_rewrite': rewrite or None,
@@ -98,7 +97,7 @@ def assess_row(
 def assess_result(rows: list[dict[str, Any]], more: list[str] = ()) -> dict[str, Any]:
     """What `assess_claim` returns for these API rows (notes, next_step and all).
     `more` are the claims the text held past one quick check, unchecked."""
-    body = {'error': None, 'claims': rows, 'more_claims': list(more)}
+    body = {'failure': None, 'claims': rows, 'more_claims': list(more)}
     return _run('assess_claim', ('x',), {'assess': (200, body)})
 
 
@@ -277,7 +276,7 @@ def verify_needs_input_result(claim: str, task_id: str, offered: list[str]) -> d
             'verify': (202, {'task_id': task_id}),
             'verify_status': (
                 200,
-                {'status': 'needs_input', 'reason': 'multi_claim', 'claims': [{'text': text} for text in offered]},
+                {'status': 'needs_input', 'reason': 'multi_claim', 'claims': [{'claim': text} for text in offered]},
             ),
         },
     )
