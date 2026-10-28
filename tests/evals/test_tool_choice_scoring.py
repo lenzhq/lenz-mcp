@@ -893,3 +893,42 @@ def test_a_restraint_case_judges_the_reply_only_when_no_call_did_the_work():
     assert scoring.judge(case, told) == (True, '')
     silent = Turn(calls=[], text='All three claims check out.')
     assert not scoring.judge(case, silent)[0]
+
+
+def test_fan_out_cases_accept_batch_claims_list_and_enforce_batch_cap():
+    """Models may satisfy multi-claim deep-check cases either via 1-claim-per-call
+    fan-out or via `verify_claim(claims=[...])` in batches of up to 10."""
+    case = cases.by_id('escalate-all-rows-on-request')
+    rows = [r['claim'] for t in case.history if isinstance(t, cases.ToolExchange) for r in t.result['claims']]
+
+    # Two batch calls of 10 + 2 claims across two turns pass.
+    batched = Turn(
+        calls=[
+            Call('verify_claim', {'claims': rows[:10]}),
+            Call('verify_claim', {'claims': rows[10:]}),
+        ],
+        text='Running all twelve deep checks.',
+        batches=(('verify_claim',), ('verify_claim',)),
+    )
+    assert scoring.judge(case, batched) == (True, '')
+
+    # Passing >10 claims in a single verify_claim(claims=...) call is refused.
+    over_limit = Turn(
+        calls=[Call('verify_claim', {'claims': rows})],
+        text='Running.',
+        batches=(('verify_claim',),),
+    )
+    ok, why = scoring.judge(case, over_limit)
+    assert not ok and 'server would refuse' in why
+
+    # Two batch calls in the SAME turn totaling >10 claims violate the per-turn batch cap.
+    same_turn_over_cap = Turn(
+        calls=[
+            Call('verify_claim', {'claims': rows[:6]}),
+            Call('verify_claim', {'claims': rows[6:]}),
+        ],
+        text='Running.',
+        batches=(('verify_claim', 'verify_claim'),),
+    )
+    ok, why = scoring.judge(case, same_turn_over_cap)
+    assert not ok and 'batches of at most 10' in why

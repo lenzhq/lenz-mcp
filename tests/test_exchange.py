@@ -589,6 +589,36 @@ def test_a_failure_while_select_waits_keeps_the_new_task_id(lenz):
     assert 'get_verification' in out['message']
 
 
+def test_parallel_401s_on_shared_credential_renew_once_and_all_receive_new_token(lenz):
+    """When asyncio.gather fans out N requests sharing one CallCredential and the
+    pinned token is revoked, the first 401 renews once and the remaining N-1
+    concurrent 401s receive the newly exchanged token instead of None."""
+    cred = exchange.CallCredential(SUBJECT, frozenset({'verify'}))
+    initial = _run(cred.header())
+    assert initial == 'Bearer lat_0000'
+    assert lenz.exchange_count() == 1
+
+    # Both concurrent requests fail with 401 on the old header (`initial`).
+    lenz.reject_tokens.add('lat_0000')
+
+    async def _fan_out():
+        return await asyncio.gather(
+            client.verify_status(cred, task_id='task-1'),
+            client.verify_status(cred, task_id='task-1'),
+            client.verify_status(cred, task_id='task-1'),
+        )
+
+    resps = _run(_fan_out())
+    assert [r.status for r in resps] == [200, 200, 200]
+    assert lenz.exchange_count() == 2
+
+    # If the newly exchanged token ALSO gets 401, a second renewal is refused.
+    lenz.reject_tokens.add('lat_0001')
+    second_fail = _run(client.verify_status(cred, task_id='task-1'))
+    assert second_fail.status == 401
+    assert lenz.exchange_count() == 2
+
+
 # ── the cache ────────────────────────────────────────────────────────
 
 
@@ -689,3 +719,19 @@ def test_an_api_key_caller_never_exchanges(lenz, monkeypatch):
     assert out['status'] == 'ok'
     assert lenz.exchange_count() == 0
     assert lenz.api_calls[0][2] == 'Bearer lenz_' + 'a' * 32
+
+
+def test_renew_does_not_short_circuit_to_an_expired_token(lenz):
+    """When a renewed token has itself expired by the time a second 401 arrives,
+    `renew()` returns `None` instead of handing back the expired token."""
+    credential = exchange.CallCredential(SUBJECT, exchange.scopes_for('verify_claim'))
+    first = _run(credential.header())
+    second = _run(credential.renew(first))
+    assert second is not None and second != first
+    # Concurrent caller with the original failed header receives the fresh token.
+    assert _run(credential.renew(first)) == second
+    # Once the renewed token has expired, even a mismatched failed_header will not return it.
+    lenz.now += 10_000
+    assert _run(credential.renew(first)) is None
+    # And a second 401 on the renewed token itself returns None (at most one renewal per call).
+    assert _run(credential.renew(second)) is None
