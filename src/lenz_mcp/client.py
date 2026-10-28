@@ -85,7 +85,7 @@ class Credential(Protocol):
 
     async def header(self) -> str: ...
 
-    async def renew(self) -> str | None: ...
+    async def renew(self, failed_header: str | None = None) -> str | None: ...
 
 
 # What a tool forwards: the caller's header (its bearer token is sent), a per-call exchanged
@@ -694,7 +694,10 @@ async def _call(
         # early): exchange again, once, and resend the same request (same body,
         # same key). The API refused the first request outright, so resending
         # a write repeats nothing.
-        renewed = await credential.renew()
+        try:
+            renewed = await credential.renew(header)
+        except TypeError:
+            renewed = await credential.renew()
         if renewed is not None:
             resp = await _attempt(op, path, renewed, invoke, timeout=timeout, anonymous=anonymous)
     return resp

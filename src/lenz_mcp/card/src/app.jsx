@@ -1067,6 +1067,152 @@ function PickedRow({ index, pick, host, announce, registerCompleted, reportState
   );
 }
 
+function DeepBatchCard({ items, host, announce }) {
+  const [settled, setSettled] = useState(() => {
+    const init = {};
+    items.forEach((it, i) => {
+      if (it.result || (it.status !== 'submitted' && it.status !== 'processing') || !it.taskId) {
+        init[i] = true;
+      }
+    });
+    return init;
+  });
+  const [checked, setChecked] = useState(() => {
+    const init = {};
+    items.forEach((it, i) => {
+      if (it.result) init[i] = true;
+    });
+    return init;
+  });
+  const stopped = items.filter((_, i) => settled[i]).length;
+  const verdicts = items.filter((_, i) => checked[i]).length;
+  const running = stopped < items.length;
+  const [openIdx, setOpenIdx] = useState(-1);
+
+  return (
+    <div class="lz">
+      <p class="lz-eyebrow">{copy.DEEP_EYEBROW}</p>
+      <h1 class="lz-claim" tabIndex={-1}>
+        {running ? copy.pickerRunningHeading(items.length) : copy.pickerDoneHeading(verdicts, items.length)}
+      </h1>
+      <div class="lz-region lz-rows-region">
+        <ol class="lz-list lz-rows">
+          {items.map((item, i) => (
+            <DeepBatchRow
+              key={item.taskId || `${i}-${item.claim}`}
+              index={i}
+              item={item}
+              host={host}
+              announce={announce}
+              open={openIdx === i}
+              onToggle={() => setOpenIdx(openIdx === i ? -1 : i)}
+              onSettled={(gotVerdict) => {
+                setSettled((prev) => (prev[i] ? prev : { ...prev, [i]: true }));
+                if (gotVerdict) setChecked((prev) => (prev[i] ? prev : { ...prev, [i]: true }));
+              }}
+            />
+          ))}
+        </ol>
+      </div>
+      {running ? <p class="lz-note">{copy.USUALLY}</p> : null}
+      {running ? null : <Footer right={copy.DEEP_ROWS_FOOTER} />}
+    </div>
+  );
+}
+
+function DeepBatchRow({ index, item, host, announce, open, onToggle, onSettled }) {
+  const isRunningInitial = !item.result && (item.status === 'submitted' || item.status === 'processing') && !!item.taskId;
+  const row = useMemo(() => ({ claim: item.claim, verdict: '' }), [item.claim]);
+  const label = copy.rowLabel(index + 1);
+  // Model-initiated batch check: registerCompleted and store are null so the card
+  // neither writes to storage nor pushes duplicate context to the model.
+  const { state, adopt } = useDeepCheck({
+    row,
+    host,
+    announce,
+    registerCompleted: null,
+    label,
+    store: null,
+    checkKey: item.taskId || `batch-${index}`,
+    order: index,
+  });
+  const [full, setFull] = useState(false);
+  const started = useRef(false);
+  const heading = useRef(null);
+  const panelId = `lz-batch-${index}`;
+
+  useEffect(() => {
+    if (!isRunningInitial || started.current) return;
+    started.current = true;
+    adopt(item.taskId, { stage: item.stage, index: item.index, total: item.total, elapsed: item.elapsed });
+  }, [isRunningInitial, item.taskId]);
+
+  const polledResult = state.kind === 'completed' ? deepResult(state.result) : null;
+  const result = item.result || polledResult;
+  const ended = !result && (!isRunningInitial || TERMINAL.has(state.kind));
+
+  useEffect(() => {
+    if (result || ended) onSettled(!!result);
+  }, [!!result, ended]);
+  useEffect(() => {
+    if (!open) setFull(false);
+  }, [open]);
+
+  const claimLabel = item.claim || (result && result.claim) || copy.rowLabel(index + 1);
+
+  return (
+    <li>
+      <span class="num">{index + 1}</span>
+      <div>
+        <button type="button" class="lz-row-head" aria-expanded={open} aria-controls={panelId} onClick={onToggle}>
+          <span class="row-claim">{claimLabel}</span>
+          {result ? (
+            <>
+              <span class="row-line">
+                <span class={`row-verdict v-${verdictKey(result.verdict)}`}>{result.verdict}</span>
+                {result.score != null ? <span class="lz-meta row-score">{`${result.score}/10`}</span> : null}
+              </span>
+              <span class="lz-meta row-meta">
+                <span class="lz-sr"> · </span>
+                {copy.rowSources(result.sourcesTotal)}
+              </span>
+            </>
+          ) : ended ? (
+            <span class="lz-meta row-meta">{copy.ROW_DID_NOT_FINISH}</span>
+          ) : (
+            <span class="lz-meta row-meta">
+              {state.stage ? copy.stepLine(state.stage, state.index, state.total) : copy.RUNNING_HEADING}
+            </span>
+          )}
+        </button>
+        {open ? (
+          <div class="lz-row-panel" id={panelId}>
+            {result ? (
+              <>
+                <p class="lz-meta lz-conf">{copy.deepConfidence(result.confidence)}</p>
+                <div class="lz-actions">
+                  <button type="button" class="lz-link" aria-expanded={full} onClick={() => setFull(!full)}>
+                    {full ? copy.HIDE_FULL_CHECK : copy.SHOW_FULL_CHECK}
+                  </button>
+                </div>
+                {full ? <DeepResult result={result} host={host} compact /> : null}
+              </>
+            ) : ended ? (
+              <NotFinished
+                state={isRunningInitial ? state : { kind: 'failed', failureClass: item.failureClass }}
+                onRetry={null}
+                focusRef={heading}
+              />
+            ) : (
+              <Running state={state} headingRef={heading} first note={false} />
+            )}
+          </div>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
 export function App({ host, payload, announce, registerCompleted, reportState }) {
   const route = routePayload(payload);
   switch (route.view) {
@@ -1087,6 +1233,8 @@ export function App({ host, payload, announce, registerCompleted, reportState })
     case 'deep':
     case 'deep-running':
       return <DeepCard key={route.taskId || (route.result && route.result.verificationId)} route={route} host={host} announce={announce} />;
+    case 'deep-batch':
+      return <DeepBatchCard items={route.items} host={host} announce={announce} />;
     case 'picker':
       return (
         <Picker

@@ -1338,7 +1338,12 @@ def _verify_wait_seconds() -> float:
 
 
 async def _await_verification(
-    ctx: Context, task_id: str, *, started_at: float | None = None, tool: str = ''
+    ctx: Context,
+    task_id: str,
+    *,
+    started_at: float | None = None,
+    tool: str = '',
+    log_exhausted: bool = True,
 ) -> dict[str, Any]:
     """Poll a run server-side until it leaves ``processing`` or the wait budget ends.
 
@@ -1386,7 +1391,8 @@ async def _await_verification(
             # emitted here rather than at each caller's still-running message:
             # `verify_claim` is the call whose wait matters most, and it is not
             # one of the callers that writes such a message.
-            _note_wait_exhausted(wait, tool)
+            if log_exhausted:
+                _note_wait_exhausted(wait, tool)
             return out
         await _sleep(min(config.VERIFY_POLL_INTERVAL, remaining))
 
@@ -1445,6 +1451,106 @@ def _verify_outcome(
     return {'status': out.get('status'), 'task_id': task_id, **rest}
 
 
+_HOISTED_BATCH_KEYS = ('confidence_note', 'presentation', 'supersedes', 'source', 'card_note')
+
+
+def _batch_verify_message(
+    *,
+    tool: str,
+    total: int,
+    completed_count: int,
+    pending_count: int,
+    partial: bool,
+    unstarted_count: int,
+) -> str:
+    """Summary message for a multi-claim deep-check envelope (say/do split, no duration numbers)."""
+    if pending_count > 0:
+        if tool == 'get_verification':
+            lead = (
+                f'{pending_count} of {total} verification(s) still running ({completed_count} completed). '
+                'Tell the user which checks finished and that the rest are still running. '
+                'Do not mention tool names to the user. '
+                'Call `get_verification` again with `task_ids` set to `pending_task_ids`.'
+            )
+        else:
+            lead = (
+                f'Started {total} verification(s). Call `get_verification` with each task_id '
+                '(or pass `pending_task_ids` as `task_ids`) — '
+                'it waits for the check and returns the verdict when it finishes.'
+            )
+    else:
+        lead = f'Completed {completed_count} of {total} verification(s).'
+
+    if partial:
+        if unstarted_count > 0:
+            lead += (
+                f' Not enough Lenz credits to start the remaining {unstarted_count} claim(s) in '
+                '`unstarted_claims`; tell the user which claims were not started and why.'
+            )
+        else:
+            lead += ' Some selections were not started — retry the missing ones.'
+    return lead
+
+
+def _batch_verify_envelope(
+    items: list[dict[str, Any]],
+    *,
+    tool: str,
+    partial: bool = False,
+    unstarted: list[str] | None = None,
+) -> dict[str, Any]:
+    """Wrap multiple deep-check outcomes in a single envelope with hoisted notes."""
+    cleaned_items: list[dict[str, Any]] = []
+    any_completed = False
+    hoisted_card_note = ''
+    for item in items:
+        if item.get('status') == 'completed':
+            any_completed = True
+        if isinstance(item.get('card_note'), str) and item['card_note']:
+            hoisted_card_note = item['card_note']
+        cleaned = {k: v for k, v in item.items() if k not in _HOISTED_BATCH_KEYS}
+        cleaned_items.append(cleaned)
+
+    pending_task_ids = [
+        str(it['task_id'])
+        for it in cleaned_items
+        if it.get('status') in ('submitted', 'processing') and isinstance(it.get('task_id'), str) and it['task_id']
+    ]
+    completed_count = sum(1 for it in cleaned_items if it.get('status') == 'completed')
+
+    if partial:
+        status = 'partial'
+    elif pending_task_ids:
+        status = 'processing' if tool == 'get_verification' else 'submitted'
+    elif any_completed:
+        status = 'completed'
+    else:
+        statuses = {str(it.get('status') or '') for it in cleaned_items if it.get('status')}
+        status = next(iter(statuses)) if len(statuses) == 1 else 'completed'
+
+    out: dict[str, Any] = {'status': status, 'items': cleaned_items}
+    if pending_task_ids:
+        out['pending_task_ids'] = pending_task_ids
+    if unstarted:
+        out['unstarted_claims'] = list(unstarted)
+    out['message'] = _batch_verify_message(
+        tool=tool,
+        total=len(cleaned_items),
+        completed_count=completed_count,
+        pending_count=len(pending_task_ids),
+        partial=partial,
+        unstarted_count=len(unstarted or []),
+    )
+    if any_completed:
+        out['confidence_note'] = CONFIDENCE_NOTE
+        out['presentation'] = PRESENTATION_NOTE
+        out['supersedes'] = SUPERSEDES_NOTE
+        out['source'] = 'Lenz deep fact-check'
+    if hoisted_card_note:
+        out['card_note'] = hoisted_card_note
+    return out
+
+
 @_tool(
     title='Deep fact-check',
     # idempotentHint=False: the same claim sent again inside the 24-hour replay window
@@ -1462,11 +1568,12 @@ async def verify_claim(
                 'ONE claim, as a statement that makes sense on its own: Lenz sees only this text, not the '
                 'conversation, so bring in what the conversation says it refers to and change nothing else. '
                 'A claim a quick check listed goes exactly as listed, so the deep check '
-                "matches it; otherwise use the user's own words and language, not translated."
+                "matches it; otherwise use the user's own words and language, not translated. "
+                'Leave empty when passing `claims`.'
             )
         ),
-    ],
-    ctx: Context,
+    ] = '',
+    ctx: Context = None,  # type: ignore[assignment]
     language: Annotated[
         LanguageCode,
         Field(description=LANGUAGE_FIELD_DESCRIPTION),
@@ -1485,20 +1592,30 @@ async def verify_claim(
             )
         ),
     ] = 'standard',
+    claims: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                f'Up to {config.DEEP_CHECK_BATCH} claims to deep-check in parallel in one call, each a standalone '
+                'statement or a claim a quick check listed, exactly as listed. Mutually exclusive with `claim`.'
+            )
+        ),
+    ] = None,
 ) -> dict[str, Any]:
-    """Run the deep check on ONE claim against independent sources and return a verdict with a
-    1–10 score (or No Public Record when nothing public records the claim), the key finding,
-    warnings and the main sources (about a minute or two).
+    """Run the deep check on ONE claim (or up to 10 in `claims` in parallel) against independent
+    sources and return a verdict with a 1–10 score (or No Public Record when nothing public records
+    the claim), the key finding, warnings and the main sources (about a minute or two).
 
 
     It costs 10 credits against 1 for `assess_claim` (`depth="low"` costs 5;
     `check_usage` has the live prices), so the quick check is the default and
     a plain "check this" is `assess_claim`. Run the deep check when the user asks
     for sources, a deep check or a verification, or says yes to one you
-    offered. When they ask for several or all claims, run one per claim, at
-    most 10 calls at once. Checks continue on their own once submitted, so
-    submit every requested claim before calling `get_verification` to wait
-    on any of them, and report results as they arrive, without asking again. Tell the user it is
+    offered. When they ask for several or all claims, pass up to 10 in `claims`
+    in one call, or run one per claim, at most 10 calls at once. Checks continue
+    on their own once submitted, so submit every requested claim before calling
+    `get_verification` to wait on any of them, and report results as they
+    arrive, without asking again. Tell the user it is
     running. It waits and returns `status: completed` when the check finishes
     in time; otherwise `status: submitted` with a `task_id` for
     `get_verification`, which waits again. A text with several claims returns
@@ -1510,7 +1627,111 @@ async def verify_claim(
     started_at = time.monotonic()  # the wait budget covers the submission too
     authorization = _authorization(ctx)  # gate enforced by @requires_auth
 
-    resp = await client.verify(authorization, text=claim, language=language, depth=depth)
+    raw_items = [c.strip() for c in (claims or []) if isinstance(c, str) and c.strip()]
+    items = list(dict.fromkeys(raw_items))
+    text = (claim or '').strip()
+    if items and text:
+        return {'status': 'error', 'message': 'Pass either `claim` (one text) or `claims` (a list), not both.'}
+    if not items and not text:
+        return {'status': 'error', 'message': 'Pass a `claim` to check, or a `claims` list.'}
+    if len(items) > config.DEEP_CHECK_BATCH:
+        return {
+            'status': 'invalid_request',
+            'message': f'Pass at most {config.DEEP_CHECK_BATCH} claims in `claims` at a time.',
+        }
+    if len(items) == 1:
+        text = items[0]
+        items = []
+
+    if items:
+        to_start = items
+        unstarted: list[str] = []
+        partial = False
+        usage_resp = await client.me_usage(authorization)
+        if usage_resp.ok and isinstance(usage_resp.data, dict):
+            raw_credits = usage_resp.data.get('credits')
+            credits = raw_credits if isinstance(raw_credits, dict) else {}
+            raw_costs = usage_resp.data.get('costs')
+            costs = raw_costs if isinstance(raw_costs, dict) else {}
+            raw_opts = usage_resp.data.get('cost_options')
+            opts = raw_opts if isinstance(raw_opts, dict) else {}
+            raw_verify_opts = opts.get('verify')
+            verify_opts = raw_verify_opts if isinstance(raw_verify_opts, dict) else {}
+            raw_depth_opts = verify_opts.get('depth')
+            depth_opts = raw_depth_opts if isinstance(raw_depth_opts, dict) else {}
+            unit_cost = depth_opts.get('low') if depth == 'low' else costs.get('verify')
+            if not isinstance(unit_cost, int) or unit_cost <= 0:
+                unit_cost = costs.get('verify')
+            remaining = credits.get('remaining')
+            if (
+                credits.get('resets_at') is not None
+                and isinstance(remaining, int)
+                and isinstance(unit_cost, int)
+                and unit_cost > 0
+            ):
+                affordable = remaining // unit_cost
+                if affordable <= 0:
+                    return _quota_exhausted({'cost': unit_cost, 'credits_remaining': remaining})
+                if affordable < len(items):
+                    to_start = items[:affordable]
+                    unstarted = items[affordable:]
+                    partial = True
+
+        resps = await asyncio.gather(
+            *(client.verify(authorization, text=c, language=language, depth=depth) for c in to_start)
+        )
+        started_runs: list[tuple[int, str, str, bool]] = []
+        by_index: dict[int, dict[str, Any]] = {}
+        first_err_resp: client.ApiResponse | None = None
+        for idx, (c, resp) in enumerate(zip(to_start, resps, strict=True)):
+            already_running = resp.status == 409 and bool(resp.data.get('task_id'))
+            if already_running or resp.ok:
+                tid = resp.data.get('task_id') or resp.data.get('id')
+                if tid:
+                    started_runs.append((idx, str(tid), c, already_running))
+                else:
+                    by_index[idx] = {
+                        'status': 'error',
+                        'claim': c,
+                        'message': 'The Lenz API did not return a task id.',
+                    }
+            elif resp.status == 402 or (resp.status == 403 and resp.data.get('code') in _QUOTA_CODES):
+                partial = True
+                unstarted.append(c)
+                if first_err_resp is None:
+                    first_err_resp = resp
+            else:
+                if first_err_resp is None:
+                    first_err_resp = resp
+                err = _error_result(resp)
+                err['claim'] = c
+                by_index[idx] = err
+
+        if not started_runs and not by_index and first_err_resp is not None:
+            return _error_result(first_err_resp)
+        if not started_runs and len(by_index) == len(to_start) and first_err_resp is not None and not partial:
+            # Every submission failed before starting a task (e.g., 401/503/429).
+            return _error_result(first_err_resp)
+
+        if started_runs:
+            awaited_list = await asyncio.gather(
+                *(
+                    _await_verification(ctx, tid, started_at=started_at, tool='verify_claim', log_exhausted=False)
+                    for _, tid, _, _ in started_runs
+                )
+            )
+            if any(a.get('status') == 'processing' for a in awaited_list):
+                _note_wait_exhausted(_verify_wait_seconds(), 'verify_claim')
+            for (idx, tid, c, already_running), awaited in zip(started_runs, awaited_list, strict=True):
+                shaped = _verify_outcome(awaited, tid, already_running=already_running, depth=depth, claim=c)
+                if not shaped.get('claim'):
+                    shaped['claim'] = c
+                by_index[idx] = shaped
+
+        ordered_items = [by_index[idx] for idx in sorted(by_index)]
+        return _batch_verify_envelope(ordered_items, tool='verify_claim', partial=partial, unstarted=unstarted)
+
+    resp = await client.verify(authorization, text=text, language=language, depth=depth)
 
     # 409: an identical verify (same idempotency key) is already running — the
     # API returns its in-flight task_id. Wait on the existing run instead of
@@ -1527,7 +1748,7 @@ async def verify_claim(
     # client's wait: in Claude most runs, elsewhere a cache hit,
     # needs_input or a short run (config, VERIFY_WAIT_SECONDS_BY_USER_AGENT).
     out = await _await_verification(ctx, task_id, started_at=started_at, tool='verify_claim')
-    return _verify_outcome(out, task_id, already_running=already_running, depth=depth, claim=claim)
+    return _verify_outcome(out, task_id, already_running=already_running, depth=depth, claim=text)
 
 
 @_tool(
@@ -1572,8 +1793,7 @@ async def select_claims(
     texts, exactly as listed. Each selected claim starts its own deep
     verification. With ONE claim selected this waits for the check and
     returns its result like `get_verification` (with the new `task_id`);
-    with several it returns one `task_id` per claim to pass to
-    `get_verification`.
+    with several it returns their new `task_id`s to pass to `get_verification`.
     """
     started_at = time.monotonic()  # the wait budget covers the selection too
     authorization = _authorization(ctx)  # gate enforced by @requires_auth
@@ -1600,18 +1820,19 @@ async def select_claims(
         out['batch_id'] = resp.data.get('batch_id')
         return out
 
-    out = {
+    msg = (
+        f'Started {len(started)} verification(s). Call get_verification with each task_id — '
+        'it waits for the check and returns the verdict when it finishes.'
+    )
+    if partial:
+        msg += ' Some selections were not started — retry the missing ones.'
+
+    return {
         'status': 'partial' if partial else 'submitted',
         'batch_id': resp.data.get('batch_id'),
         'claims': started,
-        'message': (
-            f'Started {len(started)} verification(s). Call get_verification with each task_id — '
-            'it waits for the check and returns the verdict when it finishes.'
-        ),
+        'message': msg,
     }
-    if partial:
-        out['message'] += ' Some selections were not started — retry the missing ones.'
-    return out
 
 
 def _needs_input_message(data: dict[str, Any]) -> str:
@@ -1686,6 +1907,45 @@ async def _verification_result(
     return {'status': 'error', 'message': 'Unexpected verification status.'}
 
 
+async def _one_verification(
+    ctx: Context,
+    authorization: client.Authorization,
+    ident: str,
+    *,
+    started_at: float,
+    log_exhausted: bool,
+) -> dict[str, Any]:
+    """Wait on a task_id or fetch a completed 8-hex verification_id."""
+    if _VERIFICATION_ID_RE.match(ident):
+        resp = await client.verification_detail(authorization, verification_id=ident)
+        if resp.status == 404:
+            return {
+                'status': 'not_found',
+                'task_id': ident,
+                'message': (
+                    f'No completed verification with id {ident} is readable with this key. Pass the '
+                    'task_id from verify_claim to wait for a running check, or the verification_id '
+                    'of a completed one.'
+                ),
+            }
+        if not resp.ok:
+            err = _error_result(resp)
+            err['task_id'] = ident
+            return err
+        done = _completed_result(resp.data)
+        done['task_id'] = ident
+        return done
+    out = await _await_verification(
+        ctx, ident, started_at=started_at, tool='get_verification', log_exhausted=log_exhausted
+    )
+    if out.get('status') == 'processing':
+        out['task_id'] = ident
+        out['message'] = STILL_RUNNING_AFTER_WAIT.format(seconds=int(_verify_wait_seconds()))
+    elif 'task_id' not in out:
+        out['task_id'] = ident
+    return out
+
+
 @_tool(
     title='Get deep fact-check result',
     annotations=ToolAnnotations(
@@ -1707,14 +1967,25 @@ async def get_verification(
         Field(
             description=(
                 'The task_id returned by verify_claim or select_claims (waits for the running check), '
-                'or the 8-character verification_id of a completed result (fetches it).'
+                'or the 8-character verification_id of a completed result (fetches it). '
+                'Leave empty when passing `task_ids`.'
             )
         ),
-    ],
-    ctx: Context,
+    ] = '',
+    ctx: Context = None,  # type: ignore[assignment]
+    task_ids: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                f'Up to {config.ASSESS_MAX_CLAIMS} task_ids or verification_ids to wait on or fetch in parallel in '
+                'one call. Mutually exclusive with `task_id`.'
+            )
+        ),
+    ] = None,
 ) -> dict[str, Any]:
     """Get the result of a deep check that is running or already finished: wait for a
-    running check by `task_id`, or fetch a completed one by `verification_id`.
+    running check by `task_id` (or several in parallel via `task_ids`), or fetch a completed
+    one by `verification_id`.
 
     With a `task_id` (from `verify_claim` or `select_claims`) this waits for
     the run to finish and returns `status: completed` with the
@@ -1734,8 +2005,37 @@ async def get_verification(
     started_at = time.monotonic()  # the wait budget covers the whole call
     authorization = _authorization(ctx)
     ident = (task_id or '').strip()
-    if not _sendable_id(ident):
-        return _unsendable_id('task_id', 'verify_claim or select_claims')
+    if task_ids is None:
+        if not _sendable_id(ident):
+            return _unsendable_id('task_id', 'verify_claim or select_claims')
+        ids: list[str] = []
+    else:
+        raw_ids = [i.strip() for i in task_ids if isinstance(i, str) and i.strip()]
+        ids = list(dict.fromkeys(raw_ids))
+        if ids and ident:
+            return {'status': 'error', 'message': 'Pass either `task_id` (one id) or `task_ids` (a list), not both.'}
+        if not ids:
+            return {'status': 'invalid_request', 'message': 'Pass a `task_id` or a `task_ids` list.'}
+        if len(ids) > config.ASSESS_MAX_CLAIMS:
+            return {
+                'status': 'invalid_request',
+                'message': f'Pass at most {config.ASSESS_MAX_CLAIMS} ids in `task_ids` at a time.',
+            }
+        for candidate in ids:
+            if not _sendable_id(candidate):
+                return _unsendable_id('task_id', 'verify_claim or select_claims')
+        if len(ids) == 1:
+            ident = ids[0]
+            ids = []
+
+    if ids:
+        results = await asyncio.gather(
+            *(_one_verification(ctx, authorization, i, started_at=started_at, log_exhausted=False) for i in ids)
+        )
+        if any(r.get('status') == 'processing' for r in results):
+            _note_wait_exhausted(_verify_wait_seconds(), 'get_verification')
+        return _batch_verify_envelope(list(results), tool='get_verification')
+
     # Two ids, told apart by shape: an 8-hex verification_id names a stored
     # result, anything else is a run to wait on. The SDK's
     # `verifications.get(verification_id)` and this tool's name collide — a

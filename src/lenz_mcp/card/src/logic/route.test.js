@@ -432,3 +432,36 @@ test('a quick No Public Record row says what it is, and says it is a quick searc
   assert.equal(copy.NO_RECORD_QUICK, 'A quick search found no public record that would show this.');
   assert.doesNotMatch(copy.NO_RECORD_QUICK, /false|error|unverified/i);
 });
+
+test('a batch deep-check envelope routes to deep-batch with completed results and running rows', () => {
+  const route = routePayload({
+    status: 'submitted',
+    items: [
+      {
+        status: 'completed',
+        verification_id: 'abcd1234',
+        claim: 'First claim.',
+        verdict: 'True',
+        lenz_score: 9,
+        confidence: 'high',
+      },
+      {
+        status: 'submitted',
+        task_id: 'task-2',
+        claim: 'Second claim.',
+        step: 'research',
+        index: 2,
+        total: 5,
+      },
+    ],
+  });
+  assert.equal(route.view, 'deep-batch');
+  assert.equal(route.items.length, 2);
+  assert.equal(route.items[0].status, 'completed');
+  assert.equal(route.items[0].result.verificationId, 'abcd1234');
+  assert.equal(route.items[1].status, 'submitted');
+  assert.equal(route.items[1].taskId, 'task-2');
+  assert.equal(route.items[1].stage, 'Finding sources');
+  assert.equal(modelRanIt({ status: 'partial', items: [] }), true);
+});
+

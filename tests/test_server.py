@@ -2489,3 +2489,168 @@ def test_an_out_of_credits_result_says_what_happened_to_the_rest():
     out = server._quota_exhausted({'cost': 10, 'credits_remaining': 3})
     assert out['next_step'] == server.QUOTA_NEXT_STEP
     assert 'already started keeps running' in out['next_step']
+
+
+# ── batch verify_claim(claims=...) & get_verification(task_ids=...) ───
+
+
+def test_verify_claim_batch_submits_and_awaits_in_parallel(monkeypatch):
+    """Passing `claims` submits all claims in parallel, waits on their task_ids
+    under one shared budget, and wraps the results in `items` with hoisted notes."""
+    submitted_texts = []
+
+    async def _fake_verify(_auth, *, text, language='', depth='standard'):
+        submitted_texts.append((text, depth))
+        idx = len(submitted_texts)
+        return ApiResponse(status=202, data={'task_id': f'task-{idx}', 'status': 'queued'})
+
+    async def _fake_status(_auth, *, task_id):
+        if task_id == 'task-1':
+            return _COMPLETED
+        return _PROCESSING
+
+    monkeypatch.setattr(client, 'verify', _fake_verify)
+    monkeypatch.setattr(client, 'verify_status', _fake_status)
+    _patch_api(
+        monkeypatch,
+        'me_usage',
+        ApiResponse(
+            status=200,
+            data={
+                'plan': 'pro',
+                'credits': {'remaining': 100, 'limit': 500, 'resets_at': '2026-11-01T00:00:00Z'},
+                'costs': {'verify': 10, 'verify_fast': 5},
+            },
+        ),
+    )
+
+    out = _run(server.verify_claim(ctx=_ctx(), claims=['Claim one.', 'Claim two.', 'Claim one.']))
+    assert [t for t, _ in submitted_texts] == ['Claim one.', 'Claim two.']
+    assert out['status'] == 'submitted'
+    assert out['pending_task_ids'] == ['task-2']
+    assert len(out['items']) == 2
+    assert out['items'][0]['status'] == 'completed'
+    assert out['items'][0]['claim'] == 'big claim'
+    assert 'confidence_note' not in out['items'][0]
+    assert out['items'][1]['status'] == 'submitted'
+    assert out['items'][1]['claim'] == 'Claim two.'
+    assert out['items'][1]['task_id'] == 'task-2'
+    assert out['confidence_note'] == server.CONFIDENCE_NOTE
+    assert out['presentation'] == server.PRESENTATION_NOTE
+    assert out['supersedes'] == server.SUPERSEDES_NOTE
+
+
+def test_verify_claim_batch_validation_and_single_item_unwrapping(monkeypatch):
+    """`claim` and `claims` are mutually exclusive; >10 claims returns `invalid_request`;
+    a 1-item `claims` list unwraps to the single-claim path."""
+    both = _run(server.verify_claim('one', _ctx(), claims=['two']))
+    assert both['status'] == 'error'
+    assert 'not both' in both['message']
+
+    empty = _run(server.verify_claim('', _ctx(), claims=['  ', '']))
+    assert empty['status'] == 'error'
+
+    too_many = _run(server.verify_claim('', _ctx(), claims=[f'Claim {i}.' for i in range(config.DEEP_CHECK_BATCH + 1)]))
+    assert too_many['status'] == 'invalid_request'
+    assert str(config.DEEP_CHECK_BATCH) in too_many['message']
+
+    _patch_api(monkeypatch, 'verify', ApiResponse(status=202, data={'task_id': 'task-single', 'status': 'queued'}))
+    _status_sequence(monkeypatch, _COMPLETED)
+    single = _run(server.verify_claim('', _ctx(), claims=['Only one.']))
+    assert single['status'] == 'completed'
+    assert single['task_id'] == 'task-single'
+    assert 'items' not in single
+
+
+def test_verify_claim_batch_caps_to_affordable_credits_and_handles_unlimited(monkeypatch):
+    """Upfront `me_usage` check caps batch submissions when credits are short,
+    returns `quota_exhausted` when 0 are affordable, and does not cap unlimited pools."""
+    _patch_api(
+        monkeypatch,
+        'me_usage',
+        ApiResponse(
+            status=200,
+            data={
+                'plan': 'free',
+                'credits': {'remaining': 4, 'limit': 50, 'resets_at': '2026-11-01T00:00:00Z'},
+                'costs': {'verify': 10, 'verify_fast': 5},
+            },
+        ),
+    )
+    zero_out = _run(server.verify_claim(ctx=_ctx(), claims=['A.', 'B.']))
+    assert zero_out['status'] == 'quota_exhausted'
+    assert 'has 4' in zero_out['message']
+
+    # 15 credits remaining -> 1 standard check (cost 10) started, 1 unstarted (`partial`).
+    _patch_api(
+        monkeypatch,
+        'me_usage',
+        ApiResponse(
+            status=200,
+            data={
+                'plan': 'free',
+                'credits': {'remaining': 15, 'limit': 50, 'resets_at': '2026-11-01T00:00:00Z'},
+                'costs': {'verify': 10, 'verify_fast': 5},
+            },
+        ),
+    )
+    _patch_api(monkeypatch, 'verify', ApiResponse(status=202, data={'task_id': 'task-1', 'status': 'queued'}))
+    _status_sequence(monkeypatch, _COMPLETED)
+    partial_out = _run(server.verify_claim(ctx=_ctx(), claims=['A.', 'B.']))
+    assert partial_out['status'] == 'partial'
+    assert partial_out['unstarted_claims'] == ['B.']
+    assert len(partial_out['items']) == 1
+    assert partial_out['items'][0]['status'] == 'completed'
+
+    # An account whose usage payload does not state a reset window (`credits` without `resets_at`) is not capped.
+    _patch_api(
+        monkeypatch,
+        'me_usage',
+        ApiResponse(
+            status=200,
+            data={
+                'plan': 'enterprise',
+                'credits': {'remaining': 0, 'limit': 0},
+                'costs': {'verify': 10, 'verify_fast': 5},
+            },
+        ),
+    )
+    _status_sequence(monkeypatch, _COMPLETED, _COMPLETED)
+    unlimited_out = _run(server.verify_claim(ctx=_ctx(), claims=['A.', 'B.']))
+    assert unlimited_out['status'] == 'completed'
+    assert len(unlimited_out['items']) == 2
+
+
+def test_get_verification_batch_waits_and_fetches_in_parallel(monkeypatch):
+    """`get_verification(task_ids=...)` waits on running task_ids and fetches 8-hex
+    verification_ids in parallel in one call."""
+
+    async def _fake_status(_auth, *, task_id):
+        if task_id == 'task-done':
+            return _COMPLETED
+        return _PROCESSING
+
+    monkeypatch.setattr(client, 'verify_status', _fake_status)
+    _patch_api(
+        monkeypatch,
+        'verification_detail',
+        ApiResponse(status=200, data={'verification_id': 'ab12cd34', 'verdict': 'True', 'claim': 'Stored.'}),
+    )
+
+    out = _run(server.get_verification(ctx=_ctx(), task_ids=['task-done', 'task-run', 'ab12cd34', 'task-done']))
+    assert out['status'] == 'processing'
+    assert out['pending_task_ids'] == ['task-run']
+    assert [it['status'] for it in out['items']] == ['completed', 'processing', 'completed']
+    assert out['items'][2]['verification_id'] == 'ab12cd34'
+
+    # Validation: mutual exclusion, empty list, >12 limit, single-element unwrap.
+    assert _run(server.get_verification('t1', _ctx(), task_ids=['t2']))['status'] == 'error'
+    assert _run(server.get_verification('', _ctx(), task_ids=[]))['status'] == 'invalid_request'
+    too_many = _run(
+        server.get_verification('', _ctx(), task_ids=[f'task-{i}' for i in range(config.ASSESS_MAX_CLAIMS + 1)])
+    )
+    assert too_many['status'] == 'invalid_request'
+
+    single = _run(server.get_verification('', _ctx(), task_ids=['ab12cd34']))
+    assert single['status'] == 'completed'
+    assert 'items' not in single

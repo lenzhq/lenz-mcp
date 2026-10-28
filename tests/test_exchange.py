@@ -589,6 +589,36 @@ def test_a_failure_while_select_waits_keeps_the_new_task_id(lenz):
     assert 'get_verification' in out['message']
 
 
+def test_parallel_401s_on_shared_credential_renew_once_and_all_receive_new_token(lenz):
+    """When asyncio.gather fans out N requests sharing one CallCredential and the
+    pinned token is revoked, the first 401 renews once and the remaining N-1
+    concurrent 401s receive the newly exchanged token instead of None."""
+    cred = exchange.CallCredential(SUBJECT, frozenset({'verify'}))
+    initial = _run(cred.header())
+    assert initial == 'Bearer lat_0000'
+    assert lenz.exchange_count() == 1
+
+    # Both concurrent requests fail with 401 on the old header (`initial`).
+    lenz.reject_tokens.add('lat_0000')
+
+    async def _fan_out():
+        return await asyncio.gather(
+            client.verify_status(cred, task_id='task-1'),
+            client.verify_status(cred, task_id='task-1'),
+            client.verify_status(cred, task_id='task-1'),
+        )
+
+    resps = _run(_fan_out())
+    assert [r.status for r in resps] == [200, 200, 200]
+    assert lenz.exchange_count() == 2
+
+    # If the newly exchanged token ALSO gets 401, a second renewal is refused.
+    lenz.reject_tokens.add('lat_0001')
+    second_fail = _run(client.verify_status(cred, task_id='task-1'))
+    assert second_fail.status == 401
+    assert lenz.exchange_count() == 2
+
+
 # ── the cache ────────────────────────────────────────────────────────
 
 

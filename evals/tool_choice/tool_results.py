@@ -105,6 +105,23 @@ def verification_running_result(arguments: dict[str, Any]) -> dict[str, Any]:
     """What `get_verification` returns for a check the eval answers: still running."""
     from lenz_mcp import config
 
+    raw_ids = arguments.get('task_ids')
+    if isinstance(raw_ids, list) and raw_ids:
+        with mock.patch.object(config, 'verify_wait_seconds', lambda identity: 0):
+            return _run(
+                'get_verification',
+                ('',),
+                {
+                    'verify_status': (
+                        200,
+                        {
+                            'status': 'processing',
+                            'progress': {'step': 'research', 'index': 2, 'total': 5, 'elapsed_seconds': 41},
+                        },
+                    )
+                },
+                task_ids=[str(i) for i in raw_ids],
+            )
     task_id = str(arguments.get('task_id') or '')
     with mock.patch.object(config, 'verify_wait_seconds', lambda identity: 0):
         return _run(
@@ -145,6 +162,18 @@ def balance_limited(started: int):
         count = {'n': 0}
 
         def answer(arguments: dict[str, Any]) -> dict[str, Any]:
+            raw_claims = arguments.get('claims')
+            if isinstance(raw_claims, list) and raw_claims:
+                remaining_slots = max(0, started - count['n'])
+                count['n'] += len(raw_claims)
+                if remaining_slots <= 0:
+                    return quota_exhausted_result(arguments)
+                return verify_started_result(
+                    {'claims': [str(c) for c in raw_claims[:remaining_slots]]},
+                    unstarted=[str(c) for c in raw_claims[remaining_slots:]]
+                    if remaining_slots < len(raw_claims)
+                    else None,
+                )
             count['n'] += 1
             if count['n'] <= started:
                 return verify_started_result(arguments)
@@ -168,6 +197,12 @@ def verification_finished_result(arguments: dict[str, Any]) -> dict[str, Any]:
     the result; an eval that answered "still running" forever would only show
     a model waiting on checks that never end.
     """
+    raw_ids = arguments.get('task_ids')
+    if isinstance(raw_ids, list) and raw_ids:
+        from lenz_mcp import server
+
+        items = [verification_finished_result({'task_id': str(tid)}) for tid in raw_ids]
+        return server._batch_verify_envelope(items, tool='get_verification')
     task_id = str(arguments.get('task_id') or '')
     claim = _STARTED.get(task_id, 'The claim.')
     body = verification_body(
@@ -184,11 +219,24 @@ def verification_finished_result(arguments: dict[str, Any]) -> dict[str, Any]:
     return _run('get_verification', (task_id,), {'verify_status': (200, {'status': 'completed', 'result': body})})
 
 
-def verify_started_result(arguments: dict[str, Any]) -> dict[str, Any]:
+def verify_started_result(arguments: dict[str, Any], *, unstarted: list[str] | None = None) -> dict[str, Any]:
     """What `verify_claim` returns for a call the eval answers: the check has
     started and is still running, with a task_id of its own."""
     import hashlib
 
+    raw_claims = arguments.get('claims')
+    if isinstance(raw_claims, list) and raw_claims:
+        from lenz_mcp import server
+
+        items = [verify_started_result({'claim': str(c)}) for c in raw_claims]
+        if len(items) == 1 and not unstarted:
+            return items[0]
+        return server._batch_verify_envelope(
+            items,
+            tool='verify_claim',
+            partial=bool(unstarted),
+            unstarted=unstarted,
+        )
     claim = str(arguments.get('claim') or '')
     task_id = hashlib.sha256(claim.encode()).hexdigest()[:32]
     _STARTED[task_id] = claim

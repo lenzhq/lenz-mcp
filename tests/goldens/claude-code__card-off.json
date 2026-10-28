@@ -4,7 +4,7 @@
     "mimeTypes": [
       "text/html;profile=mcp-app"
     ],
-    "uri": "ui://lenz/card-v9"
+    "uri": "ui://lenz/card-v10"
   },
   "client": "claude-code",
   "declares_mcp_apps": false,
@@ -353,18 +353,32 @@
         "readOnlyHint": true,
         "title": "Get deep fact-check result"
       },
-      "description": "Get the result of a deep check that is running or already finished: wait for a running check by `task_id`, or fetch a completed one by `verification_id`.\n\nWith a `task_id` (from `verify_claim` or `select_claims`) this waits for the run to finish and returns `status: completed` with the verdict, the 1–10 Lenz score (or No Public Record, with no score, when nothing public records the claim), confidence, key finding, executive summary, top sources, a `suggested_rewrite` when the claim can be corrected (not verified itself: a suggestion to review, never a checked fact), the `depth` the verdict was produced at and the `verification_id` — pass that to `ask_followup` for a grounded follow-up. If the check needs a decision (the text holds several claims) it returns `status: needs_input` with the options. Still `processing` after the wait means tell the user it is still running and call again; `list_verifications` finds it later if the conversation moves on. A completed result replaces any earlier quick verdict on the same claim; its `supersedes` and `presentation` say how to tell the user. With an 8-character `verification_id` it returns the stored result immediately.",
+      "description": "Get the result of a deep check that is running or already finished: wait for a running check by `task_id` (or several in parallel via `task_ids`), or fetch a completed one by `verification_id`.\n\nWith a `task_id` (from `verify_claim` or `select_claims`) this waits for the run to finish and returns `status: completed` with the verdict, the 1–10 Lenz score (or No Public Record, with no score, when nothing public records the claim), confidence, key finding, executive summary, top sources, a `suggested_rewrite` when the claim can be corrected (not verified itself: a suggestion to review, never a checked fact), the `depth` the verdict was produced at and the `verification_id` — pass that to `ask_followup` for a grounded follow-up. If the check needs a decision (the text holds several claims) it returns `status: needs_input` with the options. Still `processing` after the wait means tell the user it is still running and call again; `list_verifications` finds it later if the conversation moves on. A completed result replaces any earlier quick verdict on the same claim; its `supersedes` and `presentation` say how to tell the user. With an 8-character `verification_id` it returns the stored result immediately.",
       "inputSchema": {
         "properties": {
           "task_id": {
-            "description": "The task_id returned by verify_claim or select_claims (waits for the running check), or the 8-character verification_id of a completed result (fetches it).",
+            "default": "",
+            "description": "The task_id returned by verify_claim or select_claims (waits for the running check), or the 8-character verification_id of a completed result (fetches it). Leave empty when passing `task_ids`.",
             "title": "Task Id",
             "type": "string"
+          },
+          "task_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Up to 20 task_ids or verification_ids to wait on or fetch in parallel in one call. Mutually exclusive with `task_id`.",
+            "title": "Task Ids"
           }
         },
-        "required": [
-          "task_id"
-        ],
         "title": "get_verificationArguments",
         "type": "object"
       },
@@ -410,7 +424,7 @@
         "readOnlyHint": false,
         "title": "Choose which claims to check"
       },
-      "description": "Run a deep check on the claims the user picks when a text holds several (this resolves a `needs_input` verification).\n\nWhen `verify_claim` or `get_verification` returns `status: needs_input` with reason `multi_claim`, call this with that `task_id` and a `claims` list of one or more of the offered claim texts, exactly as listed. Each selected claim starts its own deep verification. With ONE claim selected this waits for the check and returns its result like `get_verification` (with the new `task_id`); with several it returns one `task_id` per claim to pass to `get_verification`.",
+      "description": "Run a deep check on the claims the user picks when a text holds several (this resolves a `needs_input` verification).\n\nWhen `verify_claim` or `get_verification` returns `status: needs_input` with reason `multi_claim`, call this with that `task_id` and a `claims` list of one or more of the offered claim texts, exactly as listed. Each selected claim starts its own deep verification. With ONE claim selected this waits for the check and returns its result like `get_verification` (with the new `task_id`); with several it returns their new `task_id`s to pass to `get_verification`.",
       "inputSchema": {
         "properties": {
           "claims": {
@@ -452,13 +466,30 @@
         "readOnlyHint": false,
         "title": "Deep fact-check"
       },
-      "description": "Run the deep check on ONE claim against independent sources and return a verdict with a 1–10 score (or No Public Record when nothing public records the claim), the key finding, warnings and the main sources (about a minute or two).\n\nIt costs 10 credits against 1 for `assess_claim` (`depth=\"low\"` costs 5; `check_usage` has the live prices), so the quick check is the default and a plain \"check this\" is `assess_claim`. Run the deep check when the user asks for sources, a deep check or a verification, or says yes to one you offered. When they ask for several or all claims, run one per claim, at most 10 calls at once. Checks continue on their own once submitted, so submit every requested claim before calling `get_verification` to wait on any of them, and report results as they arrive, without asking again. Tell the user it is running. It waits and returns `status: completed` when the check finishes in time; otherwise `status: submitted` with a `task_id` for `get_verification`, which waits again. A text with several claims returns `status: needs_input` with the list: call `select_claims` with the chosen claims' exact text. A completed result replaces any earlier quick verdict on the claim and says how to present it; its `suggested_rewrite` is an unchecked suggestion.",
+      "description": "Run the deep check on ONE claim (or up to 10 in `claims` in parallel) against independent sources and return a verdict with a 1–10 score (or No Public Record when nothing public records the claim), the key finding, warnings and the main sources (about a minute or two).\n\nIt costs 10 credits against 1 for `assess_claim` (`depth=\"low\"` costs 5; `check_usage` has the live prices), so the quick check is the default and a plain \"check this\" is `assess_claim`. Run the deep check when the user asks for sources, a deep check or a verification, or says yes to one you offered. When they ask for several or all claims, pass up to 10 in `claims` in one call, or run one per claim, at most 10 calls at once. Checks continue on their own once submitted, so submit every requested claim before calling `get_verification` to wait on any of them, and report results as they arrive, without asking again. Tell the user it is running. It waits and returns `status: completed` when the check finishes in time; otherwise `status: submitted` with a `task_id` for `get_verification`, which waits again. A text with several claims returns `status: needs_input` with the list: call `select_claims` with the chosen claims' exact text. A completed result replaces any earlier quick verdict on the claim and says how to present it; its `suggested_rewrite` is an unchecked suggestion.",
       "inputSchema": {
         "properties": {
           "claim": {
-            "description": "ONE claim, as a statement that makes sense on its own: Lenz sees only this text, not the conversation, so bring in what the conversation says it refers to and change nothing else. A claim a quick check listed goes exactly as listed, so the deep check matches it; otherwise use the user's own words and language, not translated.",
+            "default": "",
+            "description": "ONE claim, as a statement that makes sense on its own: Lenz sees only this text, not the conversation, so bring in what the conversation says it refers to and change nothing else. A claim a quick check listed goes exactly as listed, so the deep check matches it; otherwise use the user's own words and language, not translated. Leave empty when passing `claims`.",
             "title": "Claim",
             "type": "string"
+          },
+          "claims": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Up to 10 claims to deep-check in parallel in one call, each a standalone statement or a claim a quick check listed, exactly as listed. Mutually exclusive with `claim`.",
+            "title": "Claims"
           },
           "depth": {
             "default": "standard",
@@ -492,9 +523,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "claim"
-        ],
         "title": "verify_claimArguments",
         "type": "object"
       },

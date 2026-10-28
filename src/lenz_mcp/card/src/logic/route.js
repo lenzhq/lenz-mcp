@@ -52,7 +52,7 @@ function quickRow(entry) {
 // the card must adopt the run on either. Reading only one shows a paid, running
 // check as "did not finish".
 const DEEP_RUNNING = new Set(['submitted', 'processing']);
-const DEEP_STATUSES = new Set(['completed', 'needs_input', ...DEEP_RUNNING]);
+const DEEP_STATUSES = new Set(['completed', 'needs_input', 'partial', ...DEEP_RUNNING]);
 
 // True when the MODEL ran this check, not the card. Such a card pushes nothing
 // and stores nothing, so it must not even open the context store: probing
@@ -71,11 +71,33 @@ export function routePayload(payload) {
 // line here: the model started this one, so there is no quick verdict on screen,
 // and nothing is pushed to the model, which already has the result.
 export function routeDeep(payload) {
+  const whole = (value) => (Number.isInteger(value) && value > 0 ? value : 0);
+  if (Array.isArray(payload.items) && payload.items.length > 0) {
+    const items = payload.items
+      .filter((it) => it && typeof it === 'object')
+      .map((it) => {
+        const status = text(it.status);
+        const taskId = text(it.task_id);
+        return {
+          claim: text(it.claim),
+          taskId: isSendableId(taskId) ? taskId : '',
+          status,
+          result: status === 'completed' ? deepResult(it) : null,
+          stage: stageLabel(it.step),
+          index: whole(it.index),
+          total: whole(it.total) || 5,
+          elapsed: wholeSeconds(it.elapsed_seconds),
+          failureClass: text(it.failure_class),
+        };
+      })
+      .filter((it) => it.claim || it.taskId || it.result);
+    if (!items.length) return { view: 'did-not-finish' };
+    return { view: 'deep-batch', items };
+  }
   if (payload.status === 'completed') return { view: 'deep', result: deepResult(payload) };
   if (DEEP_RUNNING.has(payload.status)) {
     const taskId = text(payload.task_id);
     if (!SENDABLE_ID.test(taskId)) return { view: 'did-not-finish' };
-    const whole = (value) => (Number.isInteger(value) && value > 0 ? value : 0);
     return {
       view: 'deep-running',
       taskId,
