@@ -1460,6 +1460,7 @@ def _batch_verify_message(
     total: int,
     completed_count: int,
     pending_count: int,
+    needs_input_count: int = 0,
     partial: bool,
     unstarted_count: int,
 ) -> str:
@@ -1478,8 +1479,19 @@ def _batch_verify_message(
                 '(or pass `pending_task_ids` as `task_ids`) — '
                 'it waits for the check and returns the verdict when it finishes.'
             )
-    else:
+    elif completed_count > 0:
         lead = f'Completed {completed_count} of {total} verification(s).'
+    elif needs_input_count == total and total > 0:
+        lead = f'{needs_input_count} of {total} verification(s) need claim selection.'
+    elif needs_input_count > 0:
+        lead = f'0 of {total} verification(s) completed ({needs_input_count} need claim selection).'
+    else:
+        lead = f'0 of {total} verification(s) completed.'
+
+    if needs_input_count > 0:
+        lead += (
+            ' For each item with status `needs_input`, call `select_claims` with its `task_id` and the chosen `claims`.'
+        )
 
     if partial:
         if unstarted_count > 0:
@@ -1517,16 +1529,22 @@ def _batch_verify_envelope(
         if it.get('status') in ('submitted', 'processing') and isinstance(it.get('task_id'), str) and it['task_id']
     ]
     completed_count = sum(1 for it in cleaned_items if it.get('status') == 'completed')
+    needs_input_count = sum(1 for it in cleaned_items if it.get('status') == 'needs_input')
 
     if partial:
         status = 'partial'
     elif pending_task_ids:
         status = 'processing' if tool == 'get_verification' else 'submitted'
-    elif any_completed:
-        status = 'completed'
     else:
         statuses = {str(it.get('status') or '') for it in cleaned_items if it.get('status')}
-        status = next(iter(statuses)) if len(statuses) == 1 else 'completed'
+        if len(statuses) == 1:
+            status = next(iter(statuses))
+        elif any_completed:
+            status = 'completed'
+        elif needs_input_count > 0:
+            status = 'needs_input'
+        else:
+            status = 'failed'
 
     out: dict[str, Any] = {'status': status, 'items': cleaned_items}
     if pending_task_ids:
@@ -1538,6 +1556,7 @@ def _batch_verify_envelope(
         total=len(cleaned_items),
         completed_count=completed_count,
         pending_count=len(pending_task_ids),
+        needs_input_count=needs_input_count,
         partial=partial,
         unstarted_count=len(unstarted or []),
     )
@@ -1647,43 +1666,30 @@ async def verify_claim(
         to_start = items
         unstarted: list[str] = []
         partial = False
-        usage_resp = await client.me_usage(authorization)
-        if usage_resp.ok and isinstance(usage_resp.data, dict):
-            raw_credits = usage_resp.data.get('credits')
-            credits = raw_credits if isinstance(raw_credits, dict) else {}
-            raw_costs = usage_resp.data.get('costs')
-            costs = raw_costs if isinstance(raw_costs, dict) else {}
-            raw_opts = usage_resp.data.get('cost_options')
-            opts = raw_opts if isinstance(raw_opts, dict) else {}
-            raw_verify_opts = opts.get('verify')
-            verify_opts = raw_verify_opts if isinstance(raw_verify_opts, dict) else {}
-            raw_depth_opts = verify_opts.get('depth')
-            depth_opts = raw_depth_opts if isinstance(raw_depth_opts, dict) else {}
-            unit_cost = depth_opts.get('low') if depth == 'low' else costs.get('verify')
-            if not isinstance(unit_cost, int) or unit_cost <= 0:
-                unit_cost = costs.get('verify')
-            remaining = credits.get('remaining')
-            if (
-                credits.get('resets_at') is not None
-                and isinstance(remaining, int)
-                and isinstance(unit_cost, int)
-                and unit_cost > 0
-            ):
-                affordable = remaining // unit_cost
-                if affordable <= 0:
-                    return _quota_exhausted({'cost': unit_cost, 'credits_remaining': remaining})
-                if affordable < len(items):
-                    to_start = items[:affordable]
-                    unstarted = items[affordable:]
-                    partial = True
-
         resps = await asyncio.gather(
-            *(client.verify(authorization, text=c, language=language, depth=depth) for c in to_start)
+            *(client.verify(authorization, text=c, language=language, depth=depth) for c in to_start),
+            return_exceptions=True,
         )
         started_runs: list[tuple[int, str, str, bool]] = []
         by_index: dict[int, dict[str, Any]] = {}
         first_err_resp: client.ApiResponse | None = None
+        first_exc: BaseException | None = None
         for idx, (c, resp) in enumerate(zip(to_start, resps, strict=True)):
+            if isinstance(resp, BaseException):
+                if first_exc is None:
+                    first_exc = resp
+                if isinstance(resp, (exchange.ExchangeFailed, exchange.ExchangeNotConfigured)):
+                    err = _exchange_failure_result(resp)
+                    err['claim'] = c
+                    by_index[idx] = err
+                else:
+                    logger.exception('batch verify_claim submit failed for item %d', idx, exc_info=resp)
+                    by_index[idx] = {
+                        'status': 'error',
+                        'claim': c,
+                        'message': 'Unexpected error communicating with Lenz API. Please try again.',
+                    }
+                continue
             already_running = resp.status == 409 and bool(resp.data.get('task_id'))
             if already_running or resp.ok:
                 tid = resp.data.get('task_id') or resp.data.get('id')
@@ -1707,6 +1713,8 @@ async def verify_claim(
                 err['claim'] = c
                 by_index[idx] = err
 
+        if not started_runs and first_exc is not None and first_err_resp is None:
+            raise first_exc
         if not started_runs and not by_index and first_err_resp is not None:
             return _error_result(first_err_resp)
         if not started_runs and len(by_index) == len(to_start) and first_err_resp is not None and not partial:
@@ -1917,7 +1925,12 @@ async def _one_verification(
 ) -> dict[str, Any]:
     """Wait on a task_id or fetch a completed 8-hex verification_id."""
     if _VERIFICATION_ID_RE.match(ident):
-        resp = await client.verification_detail(authorization, verification_id=ident)
+        try:
+            resp = await client.verification_detail(authorization, verification_id=ident)
+        except (exchange.ExchangeFailed, exchange.ExchangeNotConfigured) as exc:
+            err = _exchange_failure_result(exc)
+            err['task_id'] = ident
+            return err
         if resp.status == 404:
             return {
                 'status': 'not_found',
@@ -1977,7 +1990,7 @@ async def get_verification(
         list[str] | None,
         Field(
             description=(
-                f'Up to {config.ASSESS_MAX_CLAIMS} task_ids or verification_ids to wait on or fetch in parallel in '
+                f'Up to {config.DEEP_CHECK_BATCH} task_ids or verification_ids to wait on or fetch in parallel in '
                 'one call. Mutually exclusive with `task_id`.'
             )
         ),
@@ -2016,10 +2029,10 @@ async def get_verification(
             return {'status': 'error', 'message': 'Pass either `task_id` (one id) or `task_ids` (a list), not both.'}
         if not ids:
             return {'status': 'invalid_request', 'message': 'Pass a `task_id` or a `task_ids` list.'}
-        if len(ids) > config.ASSESS_MAX_CLAIMS:
+        if len(ids) > config.DEEP_CHECK_BATCH:
             return {
                 'status': 'invalid_request',
-                'message': f'Pass at most {config.ASSESS_MAX_CLAIMS} ids in `task_ids` at a time.',
+                'message': f'Pass at most {config.DEEP_CHECK_BATCH} ids in `task_ids` at a time.',
             }
         for candidate in ids:
             if not _sendable_id(candidate):

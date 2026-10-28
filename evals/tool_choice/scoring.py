@@ -115,10 +115,11 @@ def _get_verification_ok(args: dict[str, Any]) -> bool:
 
 
 def _call_claims(call) -> list[str]:
-    """The claim string(s) a tool call submitted (`claim` or `claims`)."""
-    raw_list = call.arguments.get('claims')
-    if isinstance(raw_list, list) and raw_list:
-        return [str(c) for c in raw_list if _text(c)]
+    """The claim string(s) a `verify_claim` call submitted (`claim` or `claims`)."""
+    if call.name == 'verify_claim':
+        raw_list = call.arguments.get('claims')
+        if isinstance(raw_list, list) and raw_list:
+            return [str(c) for c in raw_list if _text(c)]
     single = call.arguments.get('claim')
     return [str(single)] if _text(single) else []
 
@@ -281,6 +282,9 @@ def _judge_fan_out(case: case_data.Case, calls, turn_batches: tuple[tuple[str, .
         if widest > case.batch:
             return False, f'started {widest} calls in one turn; batches of at most {case.batch}'
     if total_submitted != case.count:
+        used_batch = any(isinstance(c.arguments.get('claims'), list) for c in fanned)
+        if used_batch:
+            return False, f'submitted {total_submitted} claims to {tool}; wanted {case.count}'
         return False, f'called {tool} {total_submitted} times; wanted {case.count}'
     claims = {' '.join(c.split()).lower() for call in fanned for c in _call_claims(call)}
     if len(claims) != case.count:

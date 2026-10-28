@@ -372,16 +372,17 @@ class CallCredential:
         """After a 401: evict the token and exchange again, at most once per call.
 
         When parallel requests in the same tool call share this credential and
-        both see 401 on the old token, the first caller Under ``self._lock``
+        both see 401 on the old token, the first caller under ``self._lock``
         exchanges and replaces ``self._token``; subsequent callers whose
-        ``failed_header`` no longer matches the current token receive the newly
-        exchanged header instead of ``None``.
+        ``failed_header`` no longer matches the current (unexpired) token
+        receive the newly exchanged header instead of ``None``.
         """
         async with self._lock:
             if (
                 self._token is not None
                 and failed_header is not None
                 and f'Bearer {self._token.access_token}' != failed_header
+                and self._token.expires_at - _now() > PIN_SKEW_S
             ):
                 return f'Bearer {self._token.access_token}'
             if self._renewed:

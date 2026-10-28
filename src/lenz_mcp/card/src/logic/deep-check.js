@@ -12,7 +12,7 @@
 //   another task, or after dispose(), is dropped.
 // - A reopened card recovers by the ids it stored, never by claim text.
 
-import { stageLabel } from './format.js';
+import { stageLabel, text } from './format.js';
 
 export const POLL_MS = 3000;
 export const LONG_POLL_MS = 10000;
@@ -118,7 +118,10 @@ export function createDeepCheck({ claim, language = '', host, store, clock, onCh
       return;
     }
     if (status === 'needs_input') {
-      set({ kind: 'failed', taskId, failureClass: 'needs_input', retryable: false });
+      const claims = (Array.isArray(out.claims) ? out.claims : [])
+        .map((c) => text(c && typeof c === 'object' ? c.text || c.claim : c))
+        .filter(Boolean);
+      set({ kind: 'failed', taskId, failureClass: 'needs_input', retryable: false, ...(claims.length ? { claims } : {}) });
       return;
     }
     if (status === 'not_found') {

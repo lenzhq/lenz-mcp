@@ -1067,7 +1067,7 @@ function PickedRow({ index, pick, host, announce, registerCompleted, reportState
   );
 }
 
-function DeepBatchCard({ items, host, announce }) {
+function DeepBatchCard({ items, unstarted = [], host, announce, registerCompleted, reportState }) {
   const [settled, setSettled] = useState(() => {
     const init = {};
     items.forEach((it, i) => {
@@ -1104,6 +1104,8 @@ function DeepBatchCard({ items, host, announce }) {
               item={item}
               host={host}
               announce={announce}
+              registerCompleted={registerCompleted}
+              reportState={reportState}
               open={openIdx === i}
               onToggle={() => setOpenIdx(openIdx === i ? -1 : i)}
               onSettled={(gotVerdict) => {
@@ -1112,15 +1114,27 @@ function DeepBatchCard({ items, host, announce }) {
               }}
             />
           ))}
+          {unstarted.map((claim, j) => (
+            <li key={`unstarted-${j}`}>
+              <span class="num">{items.length + j + 1}</span>
+              <div>
+                <div class="lz-row-head">
+                  <span class="row-claim">{claim}</span>
+                  <span class="lz-meta row-meta">{copy.QUOTA_SHORT}</span>
+                </div>
+              </div>
+            </li>
+          ))}
         </ol>
       </div>
+      {unstarted.length > 0 ? <p class="lz-note">{copy.pickerPartial(items.length, items.length + unstarted.length)}</p> : null}
       {running ? <p class="lz-note">{copy.USUALLY}</p> : null}
       {running ? null : <Footer right={copy.DEEP_ROWS_FOOTER} />}
     </div>
   );
 }
 
-function DeepBatchRow({ index, item, host, announce, open, onToggle, onSettled }) {
+function DeepBatchRow({ index, item, host, announce, registerCompleted, reportState, open, onToggle, onSettled }) {
   const isRunningInitial = !item.result && (item.status === 'submitted' || item.status === 'processing') && !!item.taskId;
   const row = useMemo(() => ({ claim: item.claim, verdict: '' }), [item.claim]);
   const label = copy.rowLabel(index + 1);
@@ -1149,6 +1163,11 @@ function DeepBatchRow({ index, item, host, announce, open, onToggle, onSettled }
 
   const polledResult = state.kind === 'completed' ? deepResult(state.result) : null;
   const result = item.result || polledResult;
+  const polledPicker =
+    state.kind === 'failed' && state.failureClass === 'needs_input' && item.taskId && Array.isArray(state.claims) && state.claims.length
+      ? { taskId: item.taskId, claims: state.claims }
+      : null;
+  const picker = item.picker || polledPicker;
   const ended = !result && (!isRunningInitial || TERMINAL.has(state.kind));
 
   useEffect(() => {
@@ -1177,6 +1196,8 @@ function DeepBatchRow({ index, item, host, announce, open, onToggle, onSettled }
                 {copy.rowSources(result.sourcesTotal)}
               </span>
             </>
+          ) : picker ? (
+            <span class="lz-meta row-meta">{copy.PICKER_EMPTY_BUTTON}</span>
           ) : ended ? (
             <span class="lz-meta row-meta">{copy.ROW_DID_NOT_FINISH}</span>
           ) : (
@@ -1185,8 +1206,8 @@ function DeepBatchRow({ index, item, host, announce, open, onToggle, onSettled }
             </span>
           )}
         </button>
-        {open ? (
-          <div class="lz-row-panel" id={panelId}>
+        {open || picker ? (
+          <div class="lz-row-panel" id={panelId} hidden={!open}>
             {result ? (
               <>
                 <p class="lz-meta lz-conf">{copy.deepConfidence(result.confidence)}</p>
@@ -1197,6 +1218,15 @@ function DeepBatchRow({ index, item, host, announce, open, onToggle, onSettled }
                 </div>
                 {full ? <DeepResult result={result} host={host} compact /> : null}
               </>
+            ) : picker ? (
+              <Picker
+                key={picker.taskId}
+                route={picker}
+                host={host}
+                announce={announce}
+                registerCompleted={registerCompleted}
+                reportState={reportState}
+              />
             ) : ended ? (
               <NotFinished
                 state={isRunningInitial ? state : { kind: 'failed', failureClass: item.failureClass }}
@@ -1234,7 +1264,16 @@ export function App({ host, payload, announce, registerCompleted, reportState })
     case 'deep-running':
       return <DeepCard key={route.taskId || (route.result && route.result.verificationId)} route={route} host={host} announce={announce} />;
     case 'deep-batch':
-      return <DeepBatchCard items={route.items} host={host} announce={announce} />;
+      return (
+        <DeepBatchCard
+          items={route.items}
+          unstarted={route.unstarted}
+          host={host}
+          announce={announce}
+          registerCompleted={registerCompleted}
+          reportState={reportState}
+        />
+      );
     case 'picker':
       return (
         <Picker

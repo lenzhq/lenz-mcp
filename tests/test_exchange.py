@@ -719,3 +719,19 @@ def test_an_api_key_caller_never_exchanges(lenz, monkeypatch):
     assert out['status'] == 'ok'
     assert lenz.exchange_count() == 0
     assert lenz.api_calls[0][2] == 'Bearer lenz_' + 'a' * 32
+
+
+def test_renew_does_not_short_circuit_to_an_expired_token(lenz):
+    """When a renewed token has itself expired by the time a second 401 arrives,
+    `renew()` returns `None` instead of handing back the expired token."""
+    credential = exchange.CallCredential(SUBJECT, exchange.scopes_for('verify_claim'))
+    first = _run(credential.header())
+    second = _run(credential.renew(first))
+    assert second is not None and second != first
+    # Concurrent caller with the original failed header receives the fresh token.
+    assert _run(credential.renew(first)) == second
+    # Once the renewed token has expired, even a mismatched failed_header will not return it.
+    lenz.now += 10_000
+    assert _run(credential.renew(first)) is None
+    # And a second 401 on the renewed token itself returns None (at most one renewal per call).
+    assert _run(credential.renew(second)) is None

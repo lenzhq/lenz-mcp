@@ -377,7 +377,7 @@
               }
             ],
             "default": null,
-            "description": "Up to 20 task_ids or verification_ids to wait on or fetch in parallel in one call. Mutually exclusive with `task_id`.",
+            "description": "Up to 10 task_ids or verification_ids to wait on or fetch in parallel in one call. Mutually exclusive with `task_id`.",
             "title": "Task Ids"
           }
         },

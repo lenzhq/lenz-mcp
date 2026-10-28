@@ -2562,63 +2562,94 @@ def test_verify_claim_batch_validation_and_single_item_unwrapping(monkeypatch):
     assert 'items' not in single
 
 
-def test_verify_claim_batch_caps_to_affordable_credits_and_handles_unlimited(monkeypatch):
-    """Upfront `me_usage` check caps batch submissions when credits are short,
-    returns `quota_exhausted` when 0 are affordable, and does not cap unlimited pools."""
+def test_verify_claim_batch_handles_per_item_402_without_me_usage(monkeypatch):
+    """Per-item 402 responses return `quota_exhausted` when 0 claims start and
+    `partial` with `unstarted_claims` when some start, without calling `me_usage`."""
+    me_usage_called = False
+
+    async def _forbid_me_usage(_auth):
+        nonlocal me_usage_called
+        me_usage_called = True
+        raise AssertionError('me_usage must not be called by verify_claim')
+
+    monkeypatch.setattr(client, 'me_usage', _forbid_me_usage)
+
+    # All items 402 -> top-level quota_exhausted.
     _patch_api(
         monkeypatch,
-        'me_usage',
+        'verify',
         ApiResponse(
-            status=200,
-            data={
-                'plan': 'free',
-                'credits': {'remaining': 4, 'limit': 50, 'resets_at': '2026-11-01T00:00:00Z'},
-                'costs': {'verify': 10, 'verify_fast': 5},
-            },
+            status=402, data={'detail': 'Insufficient credits', 'credits_remaining': 4, 'credits_required': 10}
         ),
     )
     zero_out = _run(server.verify_claim(ctx=_ctx(), claims=['A.', 'B.']))
     assert zero_out['status'] == 'quota_exhausted'
-    assert 'has 4' in zero_out['message']
+    assert not me_usage_called
 
-    # 15 credits remaining -> 1 standard check (cost 10) started, 1 unstarted (`partial`).
-    _patch_api(
-        monkeypatch,
-        'me_usage',
-        ApiResponse(
-            status=200,
-            data={
-                'plan': 'free',
-                'credits': {'remaining': 15, 'limit': 50, 'resets_at': '2026-11-01T00:00:00Z'},
-                'costs': {'verify': 10, 'verify_fast': 5},
-            },
-        ),
-    )
-    _patch_api(monkeypatch, 'verify', ApiResponse(status=202, data={'task_id': 'task-1', 'status': 'queued'}))
+    # First item 202, second item 402 -> partial batch with unstarted_claims=['B.'].
+    async def _one_then_402(_auth, *, text, **_kw):
+        if text == 'A.':
+            return ApiResponse(status=202, data={'task_id': 'task-1', 'status': 'queued'})
+        return ApiResponse(
+            status=402, data={'detail': 'Insufficient credits', 'credits_remaining': 5, 'credits_required': 10}
+        )
+
+    monkeypatch.setattr(client, 'verify', _one_then_402)
     _status_sequence(monkeypatch, _COMPLETED)
     partial_out = _run(server.verify_claim(ctx=_ctx(), claims=['A.', 'B.']))
     assert partial_out['status'] == 'partial'
     assert partial_out['unstarted_claims'] == ['B.']
     assert len(partial_out['items']) == 1
     assert partial_out['items'][0]['status'] == 'completed'
+    assert not me_usage_called
 
-    # An account whose usage payload does not state a reset window (`credits` without `resets_at`) is not capped.
-    _patch_api(
-        monkeypatch,
-        'me_usage',
-        ApiResponse(
+
+def test_verify_claim_batch_survives_mid_batch_submit_errors_and_reports_failed_or_needs_input(monkeypatch):
+    """A mid-batch ExchangeFailed or 409 on one item never discards accepted task_ids;
+    all-failed/not_found batches report status='failed', and needs_input items name select_claims."""
+    from lenz_mcp.exchange import ExchangeFailed
+
+    async def _submit(_auth, *, text, **_kw):
+        if text == 'Accepted.':
+            return ApiResponse(status=202, data={'task_id': 'task-ok', 'status': 'queued'})
+        if text == 'Busy.':
+            return ApiResponse(status=409, data={'detail': 'Verification already in progress'})
+        raise ExchangeFailed(503, 'transient token exchange failure')
+
+    monkeypatch.setattr(client, 'verify', _submit)
+    _status_sequence(monkeypatch, _COMPLETED)
+    out = _run(server.verify_claim(ctx=_ctx(), claims=['Accepted.', 'Busy.', 'Dropped.']))
+    assert out['status'] == 'completed'
+    assert [it['status'] for it in out['items']] == ['completed', 'in_progress', 'service_unavailable']
+    assert out['items'][0]['task_id'] == 'task-ok'
+
+    # Mixed failed + not_found batch -> top-level status='failed', "0 of 2 verification(s) completed."
+    async def _failed_or_gone(_auth, *, task_id):
+        if task_id == 'task-fail':
+            return ApiResponse(status=200, data={'status': 'failed', 'error': 'pipeline_error'})
+        return ApiResponse(status=404, data={'detail': 'Not found'})
+
+    monkeypatch.setattr(client, 'verify_status', _failed_or_gone)
+    failed_batch = _run(server.get_verification(ctx=_ctx(), task_ids=['task-fail', 'task-gone']))
+    assert failed_batch['status'] == 'failed'
+    assert '0 of 2 verification(s) completed.' in failed_batch['message']
+
+    # Batch item with needs_input -> message instructs caller to call select_claims.
+    async def _needs_input(_auth, *, task_id):
+        return ApiResponse(
             status=200,
             data={
-                'plan': 'enterprise',
-                'credits': {'remaining': 0, 'limit': 0},
-                'costs': {'verify': 10, 'verify_fast': 5},
+                'status': 'needs_input',
+                'reason': 'multi_claim',
+                'task_id': task_id,
+                'claims': [{'index': 0, 'claim': 'Subclaim 1.'}, {'index': 1, 'claim': 'Subclaim 2.'}],
             },
-        ),
-    )
-    _status_sequence(monkeypatch, _COMPLETED, _COMPLETED)
-    unlimited_out = _run(server.verify_claim(ctx=_ctx(), claims=['A.', 'B.']))
-    assert unlimited_out['status'] == 'completed'
-    assert len(unlimited_out['items']) == 2
+        )
+
+    monkeypatch.setattr(client, 'verify_status', _needs_input)
+    needs_input_batch = _run(server.get_verification(ctx=_ctx(), task_ids=['task-pick-1', 'task-pick-2']))
+    assert needs_input_batch['status'] == 'needs_input'
+    assert 'select_claims' in needs_input_batch['message']
 
 
 def test_get_verification_batch_waits_and_fetches_in_parallel(monkeypatch):
@@ -2643,11 +2674,11 @@ def test_get_verification_batch_waits_and_fetches_in_parallel(monkeypatch):
     assert [it['status'] for it in out['items']] == ['completed', 'processing', 'completed']
     assert out['items'][2]['verification_id'] == 'ab12cd34'
 
-    # Validation: mutual exclusion, empty list, >12 limit, single-element unwrap.
+    # Validation: mutual exclusion, empty list, >DEEP_CHECK_BATCH limit, single-element unwrap.
     assert _run(server.get_verification('t1', _ctx(), task_ids=['t2']))['status'] == 'error'
     assert _run(server.get_verification('', _ctx(), task_ids=[]))['status'] == 'invalid_request'
     too_many = _run(
-        server.get_verification('', _ctx(), task_ids=[f'task-{i}' for i in range(config.ASSESS_MAX_CLAIMS + 1)])
+        server.get_verification('', _ctx(), task_ids=[f'task-{i}' for i in range(config.DEEP_CHECK_BATCH + 1)])
     )
     assert too_many['status'] == 'invalid_request'
 

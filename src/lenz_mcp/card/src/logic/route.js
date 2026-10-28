@@ -52,13 +52,18 @@ function quickRow(entry) {
 // the card must adopt the run on either. Reading only one shows a paid, running
 // check as "did not finish".
 const DEEP_RUNNING = new Set(['submitted', 'processing']);
-const DEEP_STATUSES = new Set(['completed', 'needs_input', 'partial', ...DEEP_RUNNING]);
+const DEEP_STATUSES = new Set(['completed', 'needs_input', ...DEEP_RUNNING]);
+const DEEP_BATCH_STATUSES = new Set(['completed', 'needs_input', 'partial', 'failed', ...DEEP_RUNNING]);
 
 // True when the MODEL ran this check, not the card. Such a card pushes nothing
 // and stores nothing, so it must not even open the context store: probing
 // whether storage works is itself a write.
 export function modelRanIt(payload) {
-  return !!payload && typeof payload === 'object' && DEEP_STATUSES.has(payload.status);
+  if (!payload || typeof payload !== 'object') return false;
+  if (Array.isArray(payload.items) && payload.items.length > 0) {
+    return DEEP_BATCH_STATUSES.has(payload.status);
+  }
+  return DEEP_STATUSES.has(payload.status);
 }
 
 export function routePayload(payload) {
@@ -77,12 +82,20 @@ export function routeDeep(payload) {
       .filter((it) => it && typeof it === 'object')
       .map((it) => {
         const status = text(it.status);
-        const taskId = text(it.task_id);
+        const rawTaskId = text(it.task_id);
+        const taskId = isSendableId(rawTaskId) ? rawTaskId : '';
+        const pickerClaims =
+          status === 'needs_input'
+            ? (Array.isArray(it.claims) ? it.claims : [])
+                .map((c) => text(c && typeof c === 'object' ? c.text || c.claim : c))
+                .filter(Boolean)
+            : [];
         return {
           claim: text(it.claim),
-          taskId: isSendableId(taskId) ? taskId : '',
+          taskId,
           status,
           result: status === 'completed' ? deepResult(it) : null,
+          picker: taskId && pickerClaims.length ? { taskId, claims: pickerClaims } : null,
           stage: stageLabel(it.step),
           index: whole(it.index),
           total: whole(it.total) || 5,
@@ -91,8 +104,11 @@ export function routeDeep(payload) {
         };
       })
       .filter((it) => it.claim || it.taskId || it.result);
+    const unstarted = (Array.isArray(payload.unstarted_claims) ? payload.unstarted_claims : [])
+      .map((c) => text(c))
+      .filter(Boolean);
     if (!items.length) return { view: 'did-not-finish' };
-    return { view: 'deep-batch', items };
+    return { view: 'deep-batch', items, unstarted };
   }
   if (payload.status === 'completed') return { view: 'deep', result: deepResult(payload) };
   if (DEEP_RUNNING.has(payload.status)) {

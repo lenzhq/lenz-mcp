@@ -694,10 +694,7 @@ async def _call(
         # early): exchange again, once, and resend the same request (same body,
         # same key). The API refused the first request outright, so resending
         # a write repeats nothing.
-        try:
-            renewed = await credential.renew(header)
-        except TypeError:
-            renewed = await credential.renew()
+        renewed = await credential.renew(header)
         if renewed is not None:
             resp = await _attempt(op, path, renewed, invoke, timeout=timeout, anonymous=anonymous)
     return resp
