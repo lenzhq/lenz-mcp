@@ -644,7 +644,7 @@ class _Credential:
     async def header(self) -> str:
         return 'Bearer lat_old'
 
-    async def renew(self) -> str | None:
+    async def renew(self, failed_header: str | None = None) -> str | None:
         self.renewals += 1
         return self.renewed
 

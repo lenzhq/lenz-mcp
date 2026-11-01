@@ -80,7 +80,7 @@ _MULTI_CLAIM = ApiResponse(
     data={
         'status': 'needs_input',
         'reason': 'multi_claim',
-        'claims': [{'text': 'claim A', 'domain': 'science'}, {'text': 'claim B', 'domain': ''}],
+        'claims': [{'claim': 'claim A', 'domain': 'science'}, {'claim': 'claim B', 'domain': ''}],
         'hint': 'Pick one.',
     },
 )
@@ -378,10 +378,24 @@ def test_assess_no_claim(monkeypatch):
     _patch_api(
         monkeypatch,
         'assess',
-        ApiResponse(status=200, data={'claims': [], 'error': 'No verifiable claim detected', 'error_code': 'no_claim'}),
+        ApiResponse(
+            status=200,
+            data={
+                'status': 'no_checkable_claim',
+                'claims': [],
+                'failure': {
+                    'code': 'no_checkable_claim',
+                    'detail': 'No claim in the input could be checked against public evidence.',
+                    'hint': 'The input is a greeting. Send one factual claim.',
+                    'failure_class': 'invalid_input',
+                    'retryable': False,
+                },
+                'more_claims': [],
+            },
+        ),
     )
     out = _run(server.assess_claim('hello there', _ctx()))
-    assert out['status'] == 'no_claim'
+    assert out == {'status': 'no_claim', 'message': 'No verifiable claim detected'}
 
 
 def test_assess_claims_list_one_row_per_item_in_position(monkeypatch):
@@ -395,49 +409,75 @@ def test_assess_claims_list_one_row_per_item_in_position(monkeypatch):
         return ApiResponse(
             status=200,
             data={
+                'status': 'ok',
                 'claims': [
                     {
                         'claim': 'A',
+                        'language': 'en',
+                        'status': 'completed',
                         'verdict': 'True',
                         'confidence': 'high',
                         'verification_url': None,
-                        'error_code': None,
-                        'candidate_claims': [],
-                        'identified_claims': [],
-                        'hint': None,
+                        'rationale': None,
+                        'dissent': None,
+                        'suggested_rewrite': None,
+                        'more_claims': [],
+                        'failure': None,
                     },
                     {
                         'claim': 'B primary',
+                        'language': 'en',
+                        'status': 'completed',
                         'verdict': 'Mixed',
                         'confidence': 'medium',
                         'verification_url': None,
-                        'error_code': None,
-                        'candidate_claims': [],
-                        'identified_claims': ['B second'],
-                        'hint': 'Assessed the main claim only. Send identified_claims as their own items to check the rest.',
+                        'rationale': None,
+                        'dissent': None,
+                        'suggested_rewrite': None,
+                        'more_claims': ['B second'],
+                        'failure': None,
                     },
                     {
                         'claim': 'hello',
-                        'verdict': 'Error',
-                        'confidence': 'low',
+                        'language': 'en',
+                        'status': 'failed',
+                        'verdict': None,
+                        'confidence': None,
                         'verification_url': None,
-                        'error_code': 'no_claim',
-                        'candidate_claims': [],
-                        'identified_claims': [],
-                        'hint': 'No statement that can be true or false was found in the input.',
+                        'rationale': None,
+                        'dissent': None,
+                        'suggested_rewrite': None,
+                        'more_claims': [],
+                        'failure': {
+                            'code': 'no_checkable_claim',
+                            'detail': 'The item has no verdict.',
+                            'hint': 'No statement that can be true or false was found in the input.',
+                            'failure_class': 'invalid_input',
+                            'retryable': False,
+                        },
                     },
                     {
                         'claim': 'slow one',
-                        'verdict': 'Error',
-                        'confidence': 'low',
+                        'language': 'en',
+                        'status': 'failed',
+                        'verdict': None,
+                        'confidence': None,
                         'verification_url': None,
-                        'error_code': 'timeout',
-                        'candidate_claims': [],
-                        'identified_claims': [],
-                        'hint': "This item was not processed inside the call's time budget; nothing was charged.",
+                        'rationale': None,
+                        'dissent': None,
+                        'suggested_rewrite': None,
+                        'more_claims': [],
+                        'failure': {
+                            'code': 'timeout',
+                            'detail': 'The item has no verdict.',
+                            'hint': "This item was not processed inside the call's time budget; nothing was charged.",
+                            'failure_class': 'upstream_unavailable',
+                            'retryable': True,
+                        },
                     },
                 ],
-                'error': None,
+                'failure': None,
+                'more_claims': [],
             },
         )
 
@@ -452,11 +492,10 @@ def test_assess_claims_list_one_row_per_item_in_position(monkeypatch):
     assert rows[1]['identified_claims'] == ['B second']
     assert rows[1]['hint'].startswith('Assessed the main claim only')
     assert rows[2]['verdict'] == 'Error'
+    assert rows[2]['confidence'] == 'low'
     assert rows[2]['error'] == 'no_claim'
-    # The always-empty field is never forwarded to the agent.
-    assert 'candidate_claims' not in rows[2]
+    assert rows[2]['hint'].startswith('No statement')
     assert rows[3]['error'] == 'timeout'
-    assert 'candidate_claims' not in rows[3]
     assert rows[3]['hint'].startswith('This item was not processed')
 
 
@@ -924,7 +963,7 @@ def test_429_surfaces_the_real_wait_not_shortly(monkeypatch):
             data={
                 'detail': 'Daily fair-use limit reached for this account.',
                 'code': 'extract_daily_limit',
-                'reset_in_seconds': 7200,
+                'retry_after': 7200,
                 'upgrade_url': 'https://lenz.io/plans',
             },
         ),
@@ -1065,7 +1104,7 @@ def test_get_verification_needs_input(monkeypatch):
         'verify_status',
         ApiResponse(
             status=200,
-            data={'status': 'needs_input', 'reason': 'multi_claim', 'claims': [{'text': 'a'}, {'text': 'b'}]},
+            data={'status': 'needs_input', 'reason': 'multi_claim', 'claims': [{'claim': 'a'}, {'claim': 'b'}]},
         ),
     )
     out = _run(server.get_verification('tid', _ctx()))
@@ -1089,8 +1128,8 @@ def test_select_fans_out(monkeypatch):
             data={
                 'batch_id': 'b1',
                 'items': [
-                    {'task_id': 't-a', 'claim_text': 'claim A'},
-                    {'task_id': 't-b', 'claim_text': 'claim B'},
+                    {'task_id': 't-a', 'claim': 'claim A'},
+                    {'task_id': 't-b', 'claim': 'claim B'},
                 ],
             },
         ),
@@ -1111,7 +1150,7 @@ def test_select_single_claim_waits_and_answers_on_the_new_task_id(monkeypatch):
     _patch_api(
         monkeypatch,
         'select',
-        ApiResponse(status=202, data={'batch_id': 'b1', 'items': [{'task_id': 't-a', 'claim_text': 'claim A'}]}),
+        ApiResponse(status=202, data={'batch_id': 'b1', 'items': [{'task_id': 't-a', 'claim': 'claim A'}]}),
     )
     calls = _status_sequence(monkeypatch, _PROCESSING, _COMPLETED)
     out = _run(server.select_claims('parent', ['claim A'], _ctx()))
@@ -1126,7 +1165,7 @@ def test_select_single_claim_still_running_reports_submitted_with_the_new_task_i
     _patch_api(
         monkeypatch,
         'select',
-        ApiResponse(status=202, data={'batch_id': 'b1', 'items': [{'task_id': 't-a', 'claim_text': 'claim A'}]}),
+        ApiResponse(status=202, data={'batch_id': 'b1', 'items': [{'task_id': 't-a', 'claim': 'claim A'}]}),
     )
     _status_sequence(monkeypatch, _PROCESSING)
     out = _run(server.select_claims('parent', ['claim A'], _ctx()))
@@ -1140,9 +1179,7 @@ def test_select_partial(monkeypatch):
     _patch_api(
         monkeypatch,
         'select',
-        ApiResponse(
-            status=202, data={'batch_id': 'b1', 'items': [{'task_id': 't-a', 'claim_text': 'A'}], 'partial': True}
-        ),
+        ApiResponse(status=202, data={'batch_id': 'b1', 'items': [{'task_id': 't-a', 'claim': 'A'}], 'partial': True}),
     )
     out = _run(server.select_claims('parent', ['A', 'B'], _ctx()))
     assert out['status'] == 'partial'
@@ -1191,38 +1228,28 @@ def test_get_verification_failed_passes_the_retry_contract_through(monkeypatch):
             status=200,
             data={
                 'status': 'failed',
-                'error': 'Pipeline stopped at: research_empty',
-                'failure_reason': 'research_empty',
-                'failure_class': 'upstream_unavailable',
-                'retryable': True,
+                'failure': {
+                    'code': 'research_failed',
+                    'detail': 'Search providers were unavailable.',
+                    'failure_class': 'upstream_unavailable',
+                    'retryable': True,
+                },
             },
         ),
     )
     out = _run(server.get_verification('tid', _ctx()))
-    assert out['failure_reason'] == 'research_empty'
+    assert out['message'] == 'Pipeline stopped at: research_failed'
+    assert out['failure_reason'] == 'research_failed'
     assert out['failure_class'] == 'upstream_unavailable'
     assert out['retryable'] is True
 
 
-@pytest.mark.parametrize(
-    'body',
-    [
-        # The older body: its own `error` is a step name.
-        {
-            'status': 'failed',
-            'error': 'Pipeline stopped at: research_empty',
-            'failure_reason': 'research_empty',
-            'failure_class': 'insufficient_evidence',
-            'retryable': False,
-        },
-        # The newer body: a code and a class, no `error`.
-        {
-            'status': 'failed',
-            'failure': {'code': 'research_insufficient', 'failure_class': 'insufficient_evidence', 'retryable': False},
-        },
-    ],
-)
-def test_get_verification_too_few_sources_says_so_in_a_sentence(monkeypatch, body):
+@pytest.mark.parametrize('code', ['research_empty', 'research_insufficient'])
+def test_get_verification_too_few_sources_says_so_in_a_sentence(monkeypatch, code):
+    body = {
+        'status': 'failed',
+        'failure': {'code': code, 'failure_class': 'insufficient_evidence', 'retryable': False},
+    }
     _patch_api(monkeypatch, 'verify_status', ApiResponse(status=200, data=body))
     out = _run(server.get_verification('tid', _ctx()))
     assert out['status'] == 'failed'
@@ -1516,19 +1543,25 @@ def test_check_usage(monkeypatch):
             status=200,
             data={
                 'plan': 'free',
-                'assess': {'remaining': 100},
-                'verify': {'remaining': 10},
-                'quota_resets_at': '2026-07-01T00:00:00+00:00',
+                'credits': {
+                    'total': 100,
+                    'used': 0,
+                    'remaining': 100,
+                    'extra': 0,
+                    'resets_at': '2026-07-01T00:00:00+00:00',
+                },
+                'costs': {'verify': 10, 'assess': 1},
             },
         ),
     )
     out = _run(server.check_usage(_ctx()))
     assert out['plan'] == 'free'
+    # The one pool, in each capability's price.
+    assert out['credits_remaining'] == 100
     assert out['assess_remaining'] == 100
     assert out['verify_remaining'] == 10
     assert out['resets_at'].startswith('2026-07-01')
-    # an API without the pool sends no prices; the agent gets empty maps, not None
-    assert out['costs'] == {}
+    # no depth prices sent: the agent gets an empty map, not None
     assert out['cost_options'] == {}
 
 
@@ -2446,7 +2479,7 @@ def test_assess_says_when_a_text_is_longer_than_lenz_reads(monkeypatch):
 
 
 def test_the_picker_selects_every_claim_when_the_user_asked_for_all():
-    message = server._needs_input_message({'claims': [{'text': 'One.'}, {'text': 'Two.'}]})
+    message = server._needs_input_message({'claims': [{'claim': 'One.'}, {'claim': 'Two.'}]})
     assert 'already asked for every claim, select them all' in message
     assert f'up to {config.DEEP_CHECK_BATCH} at a time' in message
     assert message.endswith('1. One.\n2. Two.')
@@ -2456,3 +2489,199 @@ def test_an_out_of_credits_result_says_what_happened_to_the_rest():
     out = server._quota_exhausted({'cost': 10, 'credits_remaining': 3})
     assert out['next_step'] == server.QUOTA_NEXT_STEP
     assert 'already started keeps running' in out['next_step']
+
+
+# ── batch verify_claim(claims=...) & get_verification(task_ids=...) ───
+
+
+def test_verify_claim_batch_submits_and_awaits_in_parallel(monkeypatch):
+    """Passing `claims` submits all claims in parallel, waits on their task_ids
+    under one shared budget, and wraps the results in `items` with hoisted notes."""
+    submitted_texts = []
+
+    async def _fake_verify(_auth, *, text, language='', depth='standard'):
+        submitted_texts.append((text, depth))
+        idx = len(submitted_texts)
+        return ApiResponse(status=202, data={'task_id': f'task-{idx}', 'status': 'queued'})
+
+    async def _fake_status(_auth, *, task_id):
+        if task_id == 'task-1':
+            return _COMPLETED
+        return _PROCESSING
+
+    monkeypatch.setattr(client, 'verify', _fake_verify)
+    monkeypatch.setattr(client, 'verify_status', _fake_status)
+    _patch_api(
+        monkeypatch,
+        'me_usage',
+        ApiResponse(
+            status=200,
+            data={
+                'plan': 'pro',
+                'credits': {'remaining': 100, 'limit': 500, 'resets_at': '2026-11-01T00:00:00Z'},
+                'costs': {'verify': 10, 'verify_fast': 5},
+            },
+        ),
+    )
+
+    out = _run(server.verify_claim(ctx=_ctx(), claims=['Claim one.', 'Claim two.', 'Claim one.']))
+    assert [t for t, _ in submitted_texts] == ['Claim one.', 'Claim two.']
+    assert out['status'] == 'submitted'
+    assert out['pending_task_ids'] == ['task-2']
+    assert len(out['items']) == 2
+    assert out['items'][0]['status'] == 'completed'
+    assert out['items'][0]['claim'] == 'big claim'
+    assert 'confidence_note' not in out['items'][0]
+    assert out['items'][1]['status'] == 'submitted'
+    assert out['items'][1]['claim'] == 'Claim two.'
+    assert out['items'][1]['task_id'] == 'task-2'
+    assert out['confidence_note'] == server.CONFIDENCE_NOTE
+    assert out['presentation'] == server.PRESENTATION_NOTE
+    assert out['supersedes'] == server.SUPERSEDES_NOTE
+
+
+def test_verify_claim_batch_validation_and_single_item_unwrapping(monkeypatch):
+    """`claim` and `claims` are mutually exclusive; >10 claims returns `invalid_request`;
+    a 1-item `claims` list unwraps to the single-claim path."""
+    both = _run(server.verify_claim('one', _ctx(), claims=['two']))
+    assert both['status'] == 'error'
+    assert 'not both' in both['message']
+
+    empty = _run(server.verify_claim('', _ctx(), claims=['  ', '']))
+    assert empty['status'] == 'error'
+
+    too_many = _run(server.verify_claim('', _ctx(), claims=[f'Claim {i}.' for i in range(config.DEEP_CHECK_BATCH + 1)]))
+    assert too_many['status'] == 'invalid_request'
+    assert str(config.DEEP_CHECK_BATCH) in too_many['message']
+
+    _patch_api(monkeypatch, 'verify', ApiResponse(status=202, data={'task_id': 'task-single', 'status': 'queued'}))
+    _status_sequence(monkeypatch, _COMPLETED)
+    single = _run(server.verify_claim('', _ctx(), claims=['Only one.']))
+    assert single['status'] == 'completed'
+    assert single['task_id'] == 'task-single'
+    assert 'items' not in single
+
+
+def test_verify_claim_batch_handles_per_item_402_without_me_usage(monkeypatch):
+    """Per-item 402 responses return `quota_exhausted` when 0 claims start and
+    `partial` with `unstarted_claims` when some start, without calling `me_usage`."""
+    me_usage_called = False
+
+    async def _forbid_me_usage(_auth):
+        nonlocal me_usage_called
+        me_usage_called = True
+        raise AssertionError('me_usage must not be called by verify_claim')
+
+    monkeypatch.setattr(client, 'me_usage', _forbid_me_usage)
+
+    # All items 402 -> top-level quota_exhausted.
+    _patch_api(
+        monkeypatch,
+        'verify',
+        ApiResponse(
+            status=402, data={'detail': 'Insufficient credits', 'credits_remaining': 4, 'credits_required': 10}
+        ),
+    )
+    zero_out = _run(server.verify_claim(ctx=_ctx(), claims=['A.', 'B.']))
+    assert zero_out['status'] == 'quota_exhausted'
+    assert not me_usage_called
+
+    # First item 202, second item 402 -> partial batch with unstarted_claims=['B.'].
+    async def _one_then_402(_auth, *, text, **_kw):
+        if text == 'A.':
+            return ApiResponse(status=202, data={'task_id': 'task-1', 'status': 'queued'})
+        return ApiResponse(
+            status=402, data={'detail': 'Insufficient credits', 'credits_remaining': 5, 'credits_required': 10}
+        )
+
+    monkeypatch.setattr(client, 'verify', _one_then_402)
+    _status_sequence(monkeypatch, _COMPLETED)
+    partial_out = _run(server.verify_claim(ctx=_ctx(), claims=['A.', 'B.']))
+    assert partial_out['status'] == 'partial'
+    assert partial_out['unstarted_claims'] == ['B.']
+    assert len(partial_out['items']) == 1
+    assert partial_out['items'][0]['status'] == 'completed'
+    assert not me_usage_called
+
+
+def test_verify_claim_batch_survives_mid_batch_submit_errors_and_reports_failed_or_needs_input(monkeypatch):
+    """A mid-batch ExchangeFailed or 409 on one item never discards accepted task_ids;
+    all-failed/not_found batches report status='failed', and needs_input items name select_claims."""
+    from lenz_mcp.exchange import ExchangeFailed
+
+    async def _submit(_auth, *, text, **_kw):
+        if text == 'Accepted.':
+            return ApiResponse(status=202, data={'task_id': 'task-ok', 'status': 'queued'})
+        if text == 'Busy.':
+            return ApiResponse(status=409, data={'detail': 'Verification already in progress'})
+        raise ExchangeFailed(503, 'transient token exchange failure')
+
+    monkeypatch.setattr(client, 'verify', _submit)
+    _status_sequence(monkeypatch, _COMPLETED)
+    out = _run(server.verify_claim(ctx=_ctx(), claims=['Accepted.', 'Busy.', 'Dropped.']))
+    assert out['status'] == 'completed'
+    assert [it['status'] for it in out['items']] == ['completed', 'in_progress', 'service_unavailable']
+    assert out['items'][0]['task_id'] == 'task-ok'
+
+    # Mixed failed + not_found batch -> top-level status='failed', "0 of 2 verification(s) completed."
+    async def _failed_or_gone(_auth, *, task_id):
+        if task_id == 'task-fail':
+            return ApiResponse(status=200, data={'status': 'failed', 'error': 'pipeline_error'})
+        return ApiResponse(status=404, data={'detail': 'Not found'})
+
+    monkeypatch.setattr(client, 'verify_status', _failed_or_gone)
+    failed_batch = _run(server.get_verification(ctx=_ctx(), task_ids=['task-fail', 'task-gone']))
+    assert failed_batch['status'] == 'failed'
+    assert '0 of 2 verification(s) completed.' in failed_batch['message']
+
+    # Batch item with needs_input -> message instructs caller to call select_claims.
+    async def _needs_input(_auth, *, task_id):
+        return ApiResponse(
+            status=200,
+            data={
+                'status': 'needs_input',
+                'reason': 'multi_claim',
+                'task_id': task_id,
+                'claims': [{'index': 0, 'claim': 'Subclaim 1.'}, {'index': 1, 'claim': 'Subclaim 2.'}],
+            },
+        )
+
+    monkeypatch.setattr(client, 'verify_status', _needs_input)
+    needs_input_batch = _run(server.get_verification(ctx=_ctx(), task_ids=['task-pick-1', 'task-pick-2']))
+    assert needs_input_batch['status'] == 'needs_input'
+    assert 'select_claims' in needs_input_batch['message']
+
+
+def test_get_verification_batch_waits_and_fetches_in_parallel(monkeypatch):
+    """`get_verification(task_ids=...)` waits on running task_ids and fetches 8-hex
+    verification_ids in parallel in one call."""
+
+    async def _fake_status(_auth, *, task_id):
+        if task_id == 'task-done':
+            return _COMPLETED
+        return _PROCESSING
+
+    monkeypatch.setattr(client, 'verify_status', _fake_status)
+    _patch_api(
+        monkeypatch,
+        'verification_detail',
+        ApiResponse(status=200, data={'verification_id': 'ab12cd34', 'verdict': 'True', 'claim': 'Stored.'}),
+    )
+
+    out = _run(server.get_verification(ctx=_ctx(), task_ids=['task-done', 'task-run', 'ab12cd34', 'task-done']))
+    assert out['status'] == 'processing'
+    assert out['pending_task_ids'] == ['task-run']
+    assert [it['status'] for it in out['items']] == ['completed', 'processing', 'completed']
+    assert out['items'][2]['verification_id'] == 'ab12cd34'
+
+    # Validation: mutual exclusion, empty list, >DEEP_CHECK_BATCH limit, single-element unwrap.
+    assert _run(server.get_verification('t1', _ctx(), task_ids=['t2']))['status'] == 'error'
+    assert _run(server.get_verification('', _ctx(), task_ids=[]))['status'] == 'invalid_request'
+    too_many = _run(
+        server.get_verification('', _ctx(), task_ids=[f'task-{i}' for i in range(config.DEEP_CHECK_BATCH + 1)])
+    )
+    assert too_many['status'] == 'invalid_request'
+
+    single = _run(server.get_verification('', _ctx(), task_ids=['ab12cd34']))
+    assert single['status'] == 'completed'
+    assert 'items' not in single

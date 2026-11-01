@@ -828,34 +828,34 @@ def _quota_exhausted(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-# ── reading the API's response shapes ────────────────────────────────
+# ── reading the API's response shape ─────────────────────────────────
 #
-# The API serves two response shapes, an older one and a newer one, and this
-# server reads both. A tool result is the same whichever shape arrived: each
-# newer-shape value is turned back into the older value it stands for, and the
-# older reading runs on that. The card and the model see one vocabulary.
+# The API answers in the version this server names (`config.API_VERSION`); the
+# client refuses a success in any other. The tools keep their own vocabulary,
+# which predates that shape and is part of their contract: a picker option's
+# `text`, an assess row's `error_code`-style `error` (`no_claim`, ...) and
+# `identified_claims`, a failed deep check's `failure_reason` (`not_a_claim`,
+# ...) and `message`. The helpers below build those from the API's body.
 
-# The newer API's single word for "the input states nothing checkable". The
-# tools keep the older per-endpoint words: `no_claim` on an assess row,
-# `not_a_claim` on a deep check's `failure_reason`.
+# The API's single word for "the input states nothing checkable". The tools
+# keep their per-endpoint words: `no_claim` on an assess row, `not_a_claim` on
+# a deep check's `failure_reason`.
 _NO_CHECKABLE_CLAIM = 'no_checkable_claim'
 
-# The sentence the older API put on a compound assess row (a row whose item
-# held further claims). The newer API carries no hint on such a row.
+# The tools' sentence on a compound assess row (a row whose item held further
+# claims). The API carries no hint on such a row.
 _COMPOUND_ROW_HINT = 'Assessed the main claim only. Send identified_claims as their own items to check the rest.'
 
-# The older API's `error` on an assess answer with no rows, by code.
+# The tools' message on an assess answer with no rows, by failure code.
 _ASSESS_ERROR_TEXT = {_NO_CHECKABLE_CLAIM: 'No verifiable claim detected'}
 
-# What a deep check that found too few public sources says, whichever body
-# reports it: the older body's own `error` is a step name, not a sentence.
+# What a deep check that found too few public sources says.
 INSUFFICIENT_EVIDENCE_MESSAGE = 'Lenz found too few public sources to check this claim; nothing was charged.'
 
-# The older API's `error` on a failed deep check, by failure code; any other
-# code read "Pipeline stopped at: <code>".
+# The tools' message on a failed deep check, by failure code; any other code
+# reads "Pipeline stopped at: <code>".
 _VERIFY_ERROR_TEXT = {
     _NO_CHECKABLE_CLAIM: 'Not a verifiable claim.',
-    'not_a_claim': 'Not a verifiable claim.',
     'cancelled': 'Cancelled.',
     'task_error': 'Pipeline failed.',
     'task_stuck': 'The task was never completed and has been marked failed.',
@@ -863,13 +863,13 @@ _VERIFY_ERROR_TEXT = {
     'research_insufficient': INSUFFICIENT_EVIDENCE_MESSAGE,
 }
 
-# 429 codes whose older wait field was `retry_after_seconds`, which this server
-# never read (it read `reset_in_seconds`, then the Retry-After header).
+# 429 codes whose body `retry_after` the tools do not read: their wait comes
+# from the Retry-After header alone, as it always has.
 _UNREAD_WAIT_CODES = frozenset({'review_in_flight', 'citecheck_in_flight'})
 
 
 def _failure_block(data: Any) -> dict[str, Any]:
-    """The newer shape's ``failure`` object on a failed item, or ``{}``."""
+    """The ``failure`` object on a failed item, or ``{}``."""
     if not isinstance(data, dict):
         return {}
     failure = data.get('failure')
@@ -877,60 +877,54 @@ def _failure_block(data: Any) -> dict[str, Any]:
 
 
 def _item_claim(item: dict[str, Any]) -> Any:
-    """A receipt item's claim text: ``claim`` in the newer shape, ``claim_text`` in the older."""
-    key = 'claim' if 'claim' in item and 'claim_text' not in item else 'claim_text'
-    return item.get(key, '')
-
-
-def _option_text(option: dict[str, Any]) -> Any:
-    """A picker option's text: ``text`` in the older shape, ``claim`` in the newer."""
-    return option['claim'] if option.get('text') is None and 'claim' in option else option.get('text', '')
+    """A receipt item's claim text."""
+    return item.get('claim', '')
 
 
 def _option(option: Any) -> Any:
     """A claim-picker option as the tools give it: ``{text, domain, ...}``.
 
-    The newer API names the option's text ``claim``; the tools keep ``text``.
+    The API names the option's text ``claim``; the tools keep ``text``.
     """
-    if not isinstance(option, dict) or option.get('text') is not None or 'claim' not in option:
+    if not isinstance(option, dict) or 'claim' not in option:
         return option
     out = {'text': option['claim']}
     out.update((key, value) for key, value in option.items() if key not in ('text', 'claim'))
     return out
 
 
+def _option_text(option: dict[str, Any]) -> Any:
+    """A picker option's text."""
+    return option.get('claim', '')
+
+
 def _retryable(data: dict[str, Any]) -> Any:
-    """A failed deep check's retry signal, in either shape."""
-    failure = _failure_block(data)
-    return failure['retryable'] if 'retryable' in failure else data.get('retryable')
+    """A failed deep check's retry signal."""
+    return _failure_block(data).get('retryable')
 
 
-def _legacy_wait(data: dict[str, Any]) -> Any:
-    """The 429 wait as the older body's ``reset_in_seconds`` would have carried it."""
-    if 'reset_in_seconds' in data:
-        return data['reset_in_seconds']
+def _rate_limit_wait(data: dict[str, Any]) -> Any:
+    """The wait a 429 body states, unless its code is one whose wait is the header's alone."""
     if 'retry_after' in data and data.get('code') not in _UNREAD_WAIT_CODES:
         return data['retry_after']
     return None
 
 
-def _legacy_body_error(data: dict[str, Any]) -> Any:
-    """An assess answer's ``error`` as the older body carried it."""
-    if 'error' in data:
-        return data['error']
+def _assess_failure_text(data: dict[str, Any]) -> Any:
+    """The tools' message for an assess answer with no rows, from its ``failure``."""
     failure = _failure_block(data)
     return _ASSESS_ERROR_TEXT.get(str(failure.get('code')), failure.get('detail')) if failure else None
 
 
-def _legacy_row(row: Any) -> Any:
-    """An assess row as the older API wrote it.
+def _assess_row(row: Any) -> Any:
+    """An assess row in the tools' vocabulary.
 
-    The newer row says ``status: failed`` with a null verdict and a ``failure``
-    block, and lists unchecked extras as ``more_claims``; the older one says
+    The API's row says ``status: failed`` with a null verdict and a ``failure``
+    block, and lists unchecked extras as ``more_claims``; the tools say
     ``verdict: "Error"`` / ``confidence: "low"``, ``error_code`` + ``hint``, and
-    ``identified_claims``. An older row passes through untouched.
+    ``identified_claims``, with a hint on a compound row.
     """
-    if not isinstance(row, dict) or not ('status' in row or 'failure' in row or 'more_claims' in row):
+    if not isinstance(row, dict):
         return row
     out = dict(row)
     failure = _failure_block(row)
@@ -940,8 +934,6 @@ def _legacy_row(row: Any) -> Any:
         out['confidence'] = 'low' if row.get('confidence') is None else row['confidence']
     if 'code' in failure:
         out['error_code'] = 'no_claim' if failure['code'] == _NO_CHECKABLE_CLAIM else failure['code']
-    elif out.get('error_code') == _NO_CHECKABLE_CLAIM:
-        out['error_code'] = 'no_claim'
     if 'hint' in failure:
         out['hint'] = failure['hint']
     if 'more_claims' in row:
@@ -951,35 +943,40 @@ def _legacy_row(row: Any) -> Any:
     return out
 
 
-def _legacy_failed_poll(data: dict[str, Any]) -> dict[str, Any]:
-    """A failed deep check's poll body as the older API wrote it.
+def _failed_verification(data: dict[str, Any]) -> dict[str, Any]:
+    """A failed deep check's poll body as the tool result.
 
-    The newer body nests the reason, class and retry signal in ``failure``
-    (the reason as ``code``) and has no ``error``; the older ``error`` text is
-    rebuilt from the code. An older body passes through untouched.
+    The API nests the reason, class and retry signal in ``failure`` (the reason
+    as ``code``); the tool passes the REST contract's two axes through, where it
+    stopped and why (+ the derived retry signal), so an agent can branch on
+    ``retryable`` instead of re-submitting blindly, and words the message from
+    the code.
     """
     failure = _failure_block(data)
-    if not failure:
-        return data
-    out = {key: value for key, value in data.items() if key != 'failure'}
     code = failure.get('code')
+    message = _VERIFY_ERROR_TEXT.get(code, f'Pipeline stopped at: {code}') if isinstance(code, str) and code else None
+    out: dict[str, Any] = {'status': 'failed', 'message': message or 'The verification failed.'}
+    if failure.get('failure_class') == 'insufficient_evidence':
+        out['message'] = INSUFFICIENT_EVIDENCE_MESSAGE
     if 'code' in failure:
         out['failure_reason'] = 'not_a_claim' if code == _NO_CHECKABLE_CLAIM else code
     for key in ('failure_class', 'retryable'):
         if key in failure:
             out[key] = failure[key]
-    if 'error' not in out and isinstance(code, str) and code:
-        out['error'] = _VERIFY_ERROR_TEXT.get(code, f'Pipeline stopped at: {code}')
+    # An outage is not a verdict: say what it means for the user here,
+    # where it happens, instead of in the instructions ChatGPT never reads.
+    if failure.get('failure_class') == 'upstream_unavailable':
+        out['next_step'] = SOURCES_UNAVAILABLE_NEXT_STEP
     return out
 
 
-def _legacy_detail(data: dict[str, Any]) -> Any:
-    """``detail`` as the older body carried it.
+def _validation_detail(data: dict[str, Any]) -> Any:
+    """A 422's ``detail`` as the tools give it.
 
-    A request-schema 422 carried a list of validation items; the newer body
-    carries a sentence and the same items under ``errors``. Their ``loc``
-    starts ``["body", "payload", ...]``, which tells them apart from the
-    handler's own checks, whose older ``detail`` was already a sentence.
+    For a request-schema 422 the tools give the list of validation items (the
+    API also sends them under ``errors``, beside a one-line ``detail``); their
+    ``loc`` starts ``["body", "payload", ...]``, which tells them apart from the
+    handler's own checks, whose ``detail`` sentence the tools give as is.
     """
     detail = data.get('detail')
     errors = data.get('errors')
@@ -999,7 +996,7 @@ def _legacy_detail(data: dict[str, Any]) -> Any:
 def _error_result(resp: client.ApiResponse) -> dict[str, Any]:
     """Map a non-2xx API response to a clean, agent-safe tool result."""
     status, data = resp.status, resp.data
-    detail = _legacy_detail(data) or data.get('error')
+    detail = _validation_detail(data)
     if status == 0:
         return {'status': 'error', 'message': "Couldn't reach the Lenz API — please retry shortly."}
     if status == 401:
@@ -1038,7 +1035,7 @@ def _error_result(resp: client.ApiResponse) -> dict[str, Any]:
     if status == 429:
         # Pass the real wait through when the server states one — "shortly" is
         # a lie in front of the /extract daily cap, which can be hours away.
-        retry_after = _legacy_wait(data) or resp.headers.get('retry-after')
+        retry_after = _rate_limit_wait(data) or resp.headers.get('retry-after')
         message = 'Rate limited — slow down and retry shortly.'
         try:
             seconds = int(retry_after) if retry_after is not None else 0
@@ -1168,11 +1165,11 @@ async def assess_claim(
     if not raw_claims:
         return {
             'status': 'no_claim',
-            'message': _legacy_body_error(data) or 'No verifiable factual claim was detected in the text.',
+            'message': _assess_failure_text(data) or 'No verifiable factual claim was detected in the text.',
         }
 
     claims_out = []
-    for c in map(_legacy_row, raw_claims):
+    for c in map(_assess_row, raw_claims):
         entry = {
             'claim': c.get('claim', ''),
             'verdict': c.get('verdict', ''),
@@ -1341,7 +1338,12 @@ def _verify_wait_seconds() -> float:
 
 
 async def _await_verification(
-    ctx: Context, task_id: str, *, started_at: float | None = None, tool: str = ''
+    ctx: Context,
+    task_id: str,
+    *,
+    started_at: float | None = None,
+    tool: str = '',
+    log_exhausted: bool = True,
 ) -> dict[str, Any]:
     """Poll a run server-side until it leaves ``processing`` or the wait budget ends.
 
@@ -1389,7 +1391,8 @@ async def _await_verification(
             # emitted here rather than at each caller's still-running message:
             # `verify_claim` is the call whose wait matters most, and it is not
             # one of the callers that writes such a message.
-            _note_wait_exhausted(wait, tool)
+            if log_exhausted:
+                _note_wait_exhausted(wait, tool)
             return out
         await _sleep(min(config.VERIFY_POLL_INTERVAL, remaining))
 
@@ -1448,6 +1451,125 @@ def _verify_outcome(
     return {'status': out.get('status'), 'task_id': task_id, **rest}
 
 
+_HOISTED_BATCH_KEYS = ('confidence_note', 'presentation', 'supersedes', 'source', 'card_note')
+
+
+def _batch_verify_message(
+    *,
+    tool: str,
+    total: int,
+    completed_count: int,
+    pending_count: int,
+    needs_input_count: int = 0,
+    partial: bool,
+    unstarted_count: int,
+) -> str:
+    """Summary message for a multi-claim deep-check envelope (say/do split, no duration numbers)."""
+    if pending_count > 0:
+        if tool == 'get_verification':
+            lead = (
+                f'{pending_count} of {total} verification(s) still running ({completed_count} completed). '
+                'Tell the user which checks finished and that the rest are still running. '
+                'Do not mention tool names to the user. '
+                'Call `get_verification` again with `task_ids` set to `pending_task_ids`.'
+            )
+        else:
+            lead = (
+                f'Started {total} verification(s). Call `get_verification` with each task_id '
+                '(or pass `pending_task_ids` as `task_ids`) — '
+                'it waits for the check and returns the verdict when it finishes.'
+            )
+    elif completed_count > 0:
+        lead = f'Completed {completed_count} of {total} verification(s).'
+    elif needs_input_count == total and total > 0:
+        lead = f'{needs_input_count} of {total} verification(s) need claim selection.'
+    elif needs_input_count > 0:
+        lead = f'0 of {total} verification(s) completed ({needs_input_count} need claim selection).'
+    else:
+        lead = f'0 of {total} verification(s) completed.'
+
+    if needs_input_count > 0:
+        lead += (
+            ' For each item with status `needs_input`, call `select_claims` with its `task_id` and the chosen `claims`.'
+        )
+
+    if partial:
+        if unstarted_count > 0:
+            lead += (
+                f' Not enough Lenz credits to start the remaining {unstarted_count} claim(s) in '
+                '`unstarted_claims`; tell the user which claims were not started and why.'
+            )
+        else:
+            lead += ' Some selections were not started — retry the missing ones.'
+    return lead
+
+
+def _batch_verify_envelope(
+    items: list[dict[str, Any]],
+    *,
+    tool: str,
+    partial: bool = False,
+    unstarted: list[str] | None = None,
+) -> dict[str, Any]:
+    """Wrap multiple deep-check outcomes in a single envelope with hoisted notes."""
+    cleaned_items: list[dict[str, Any]] = []
+    any_completed = False
+    hoisted_card_note = ''
+    for item in items:
+        if item.get('status') == 'completed':
+            any_completed = True
+        if isinstance(item.get('card_note'), str) and item['card_note']:
+            hoisted_card_note = item['card_note']
+        cleaned = {k: v for k, v in item.items() if k not in _HOISTED_BATCH_KEYS}
+        cleaned_items.append(cleaned)
+
+    pending_task_ids = [
+        str(it['task_id'])
+        for it in cleaned_items
+        if it.get('status') in ('submitted', 'processing') and isinstance(it.get('task_id'), str) and it['task_id']
+    ]
+    completed_count = sum(1 for it in cleaned_items if it.get('status') == 'completed')
+    needs_input_count = sum(1 for it in cleaned_items if it.get('status') == 'needs_input')
+
+    if partial:
+        status = 'partial'
+    elif pending_task_ids:
+        status = 'processing' if tool == 'get_verification' else 'submitted'
+    else:
+        statuses = {str(it.get('status') or '') for it in cleaned_items if it.get('status')}
+        if len(statuses) == 1:
+            status = next(iter(statuses))
+        elif any_completed:
+            status = 'completed'
+        elif needs_input_count > 0:
+            status = 'needs_input'
+        else:
+            status = 'failed'
+
+    out: dict[str, Any] = {'status': status, 'items': cleaned_items}
+    if pending_task_ids:
+        out['pending_task_ids'] = pending_task_ids
+    if unstarted:
+        out['unstarted_claims'] = list(unstarted)
+    out['message'] = _batch_verify_message(
+        tool=tool,
+        total=len(cleaned_items),
+        completed_count=completed_count,
+        pending_count=len(pending_task_ids),
+        needs_input_count=needs_input_count,
+        partial=partial,
+        unstarted_count=len(unstarted or []),
+    )
+    if any_completed:
+        out['confidence_note'] = CONFIDENCE_NOTE
+        out['presentation'] = PRESENTATION_NOTE
+        out['supersedes'] = SUPERSEDES_NOTE
+        out['source'] = 'Lenz deep fact-check'
+    if hoisted_card_note:
+        out['card_note'] = hoisted_card_note
+    return out
+
+
 @_tool(
     title='Deep fact-check',
     # idempotentHint=False: the same claim sent again inside the 24-hour replay window
@@ -1465,11 +1587,12 @@ async def verify_claim(
                 'ONE claim, as a statement that makes sense on its own: Lenz sees only this text, not the '
                 'conversation, so bring in what the conversation says it refers to and change nothing else. '
                 'A claim a quick check listed goes exactly as listed, so the deep check '
-                "matches it; otherwise use the user's own words and language, not translated."
+                "matches it; otherwise use the user's own words and language, not translated. "
+                'Leave empty when passing `claims`.'
             )
         ),
-    ],
-    ctx: Context,
+    ] = '',
+    ctx: Context = None,  # type: ignore[assignment]
     language: Annotated[
         LanguageCode,
         Field(description=LANGUAGE_FIELD_DESCRIPTION),
@@ -1488,20 +1611,30 @@ async def verify_claim(
             )
         ),
     ] = 'standard',
+    claims: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                f'Up to {config.DEEP_CHECK_BATCH} claims to deep-check in parallel in one call, each a standalone '
+                'statement or a claim a quick check listed, exactly as listed. Mutually exclusive with `claim`.'
+            )
+        ),
+    ] = None,
 ) -> dict[str, Any]:
-    """Run the deep check on ONE claim against independent sources and return a verdict with a
-    1–10 score (or No Public Record when nothing public records the claim), the key finding,
-    warnings and the main sources (about a minute or two).
+    """Run the deep check on ONE claim (or up to 10 in `claims` in parallel) against independent
+    sources and return a verdict with a 1–10 score (or No Public Record when nothing public records
+    the claim), the key finding, warnings and the main sources (about a minute or two).
 
 
     It costs 10 credits against 1 for `assess_claim` (`depth="low"` costs 5;
     `check_usage` has the live prices), so the quick check is the default and
     a plain "check this" is `assess_claim`. Run the deep check when the user asks
     for sources, a deep check or a verification, or says yes to one you
-    offered. When they ask for several or all claims, run one per claim, at
-    most 10 calls at once. Checks continue on their own once submitted, so
-    submit every requested claim before calling `get_verification` to wait
-    on any of them, and report results as they arrive, without asking again. Tell the user it is
+    offered. When they ask for several or all claims, pass up to 10 in `claims`
+    in one call, or run one per claim, at most 10 calls at once. Checks continue
+    on their own once submitted, so submit every requested claim before calling
+    `get_verification` to wait on any of them, and report results as they
+    arrive, without asking again. Tell the user it is
     running. It waits and returns `status: completed` when the check finishes
     in time; otherwise `status: submitted` with a `task_id` for
     `get_verification`, which waits again. A text with several claims returns
@@ -1513,7 +1646,100 @@ async def verify_claim(
     started_at = time.monotonic()  # the wait budget covers the submission too
     authorization = _authorization(ctx)  # gate enforced by @requires_auth
 
-    resp = await client.verify(authorization, text=claim, language=language, depth=depth)
+    raw_items = [c.strip() for c in (claims or []) if isinstance(c, str) and c.strip()]
+    items = list(dict.fromkeys(raw_items))
+    text = (claim or '').strip()
+    if items and text:
+        return {'status': 'error', 'message': 'Pass either `claim` (one text) or `claims` (a list), not both.'}
+    if not items and not text:
+        return {'status': 'error', 'message': 'Pass a `claim` to check, or a `claims` list.'}
+    if len(items) > config.DEEP_CHECK_BATCH:
+        return {
+            'status': 'invalid_request',
+            'message': f'Pass at most {config.DEEP_CHECK_BATCH} claims in `claims` at a time.',
+        }
+    if len(items) == 1:
+        text = items[0]
+        items = []
+
+    if items:
+        to_start = items
+        unstarted: list[str] = []
+        partial = False
+        resps = await asyncio.gather(
+            *(client.verify(authorization, text=c, language=language, depth=depth) for c in to_start),
+            return_exceptions=True,
+        )
+        started_runs: list[tuple[int, str, str, bool]] = []
+        by_index: dict[int, dict[str, Any]] = {}
+        first_err_resp: client.ApiResponse | None = None
+        first_exc: BaseException | None = None
+        for idx, (c, resp) in enumerate(zip(to_start, resps, strict=True)):
+            if isinstance(resp, BaseException):
+                if first_exc is None:
+                    first_exc = resp
+                if isinstance(resp, (exchange.ExchangeFailed, exchange.ExchangeNotConfigured)):
+                    err = _exchange_failure_result(resp)
+                    err['claim'] = c
+                    by_index[idx] = err
+                else:
+                    logger.exception('batch verify_claim submit failed for item %d', idx, exc_info=resp)
+                    by_index[idx] = {
+                        'status': 'error',
+                        'claim': c,
+                        'message': 'Unexpected error communicating with Lenz API. Please try again.',
+                    }
+                continue
+            already_running = resp.status == 409 and bool(resp.data.get('task_id'))
+            if already_running or resp.ok:
+                tid = resp.data.get('task_id') or resp.data.get('id')
+                if tid:
+                    started_runs.append((idx, str(tid), c, already_running))
+                else:
+                    by_index[idx] = {
+                        'status': 'error',
+                        'claim': c,
+                        'message': 'The Lenz API did not return a task id.',
+                    }
+            elif resp.status == 402 or (resp.status == 403 and resp.data.get('code') in _QUOTA_CODES):
+                partial = True
+                unstarted.append(c)
+                if first_err_resp is None:
+                    first_err_resp = resp
+            else:
+                if first_err_resp is None:
+                    first_err_resp = resp
+                err = _error_result(resp)
+                err['claim'] = c
+                by_index[idx] = err
+
+        if not started_runs and first_exc is not None and first_err_resp is None:
+            raise first_exc
+        if not started_runs and not by_index and first_err_resp is not None:
+            return _error_result(first_err_resp)
+        if not started_runs and len(by_index) == len(to_start) and first_err_resp is not None and not partial:
+            # Every submission failed before starting a task (e.g., 401/503/429).
+            return _error_result(first_err_resp)
+
+        if started_runs:
+            awaited_list = await asyncio.gather(
+                *(
+                    _await_verification(ctx, tid, started_at=started_at, tool='verify_claim', log_exhausted=False)
+                    for _, tid, _, _ in started_runs
+                )
+            )
+            if any(a.get('status') == 'processing' for a in awaited_list):
+                _note_wait_exhausted(_verify_wait_seconds(), 'verify_claim')
+            for (idx, tid, c, already_running), awaited in zip(started_runs, awaited_list, strict=True):
+                shaped = _verify_outcome(awaited, tid, already_running=already_running, depth=depth, claim=c)
+                if not shaped.get('claim'):
+                    shaped['claim'] = c
+                by_index[idx] = shaped
+
+        ordered_items = [by_index[idx] for idx in sorted(by_index)]
+        return _batch_verify_envelope(ordered_items, tool='verify_claim', partial=partial, unstarted=unstarted)
+
+    resp = await client.verify(authorization, text=text, language=language, depth=depth)
 
     # 409: an identical verify (same idempotency key) is already running — the
     # API returns its in-flight task_id. Wait on the existing run instead of
@@ -1530,7 +1756,7 @@ async def verify_claim(
     # client's wait: in Claude most runs, elsewhere a cache hit,
     # needs_input or a short run (config, VERIFY_WAIT_SECONDS_BY_USER_AGENT).
     out = await _await_verification(ctx, task_id, started_at=started_at, tool='verify_claim')
-    return _verify_outcome(out, task_id, already_running=already_running, depth=depth, claim=claim)
+    return _verify_outcome(out, task_id, already_running=already_running, depth=depth, claim=text)
 
 
 @_tool(
@@ -1575,8 +1801,7 @@ async def select_claims(
     texts, exactly as listed. Each selected claim starts its own deep
     verification. With ONE claim selected this waits for the check and
     returns its result like `get_verification` (with the new `task_id`);
-    with several it returns one `task_id` per claim to pass to
-    `get_verification`.
+    with several it returns their new `task_id`s to pass to `get_verification`.
     """
     started_at = time.monotonic()  # the wait budget covers the selection too
     authorization = _authorization(ctx)  # gate enforced by @requires_auth
@@ -1603,18 +1828,19 @@ async def select_claims(
         out['batch_id'] = resp.data.get('batch_id')
         return out
 
-    out = {
+    msg = (
+        f'Started {len(started)} verification(s). Call get_verification with each task_id — '
+        'it waits for the check and returns the verdict when it finishes.'
+    )
+    if partial:
+        msg += ' Some selections were not started — retry the missing ones.'
+
+    return {
         'status': 'partial' if partial else 'submitted',
         'batch_id': resp.data.get('batch_id'),
         'claims': started,
-        'message': (
-            f'Started {len(started)} verification(s). Call get_verification with each task_id — '
-            'it waits for the check and returns the verdict when it finishes.'
-        ),
+        'message': msg,
     }
-    if partial:
-        out['message'] += ' Some selections were not started — retry the missing ones.'
-    return out
 
 
 def _needs_input_message(data: dict[str, Any]) -> str:
@@ -1681,26 +1907,56 @@ async def _verification_result(
         return out
 
     if status == 'failed':
-        data = _legacy_failed_poll(data)
-        out = {'status': 'failed', 'message': data.get('error') or 'The verification failed.'}
-        if data.get('failure_class') == 'insufficient_evidence':
-            out['message'] = INSUFFICIENT_EVIDENCE_MESSAGE
-        # Pass the REST contract's two axes through: where it stopped and why
-        # (+ the derived retry signal), so an agent can branch on `retryable`
-        # instead of re-submitting blindly. Absent on older/odd bodies.
-        for key in ('failure_reason', 'failure_class', 'retryable'):
-            if key in data:
-                out[key] = data[key]
-        # An outage is not a verdict: say what it means for the user here,
-        # where it happens, instead of in the instructions ChatGPT never reads.
-        if data.get('failure_class') == 'upstream_unavailable':
-            out['next_step'] = SOURCES_UNAVAILABLE_NEXT_STEP
-        return out
+        return _failed_verification(data)
 
     if status == 'completed':
         return _completed_result(data.get('result') or {})
 
     return {'status': 'error', 'message': 'Unexpected verification status.'}
+
+
+async def _one_verification(
+    ctx: Context,
+    authorization: client.Authorization,
+    ident: str,
+    *,
+    started_at: float,
+    log_exhausted: bool,
+) -> dict[str, Any]:
+    """Wait on a task_id or fetch a completed 8-hex verification_id."""
+    if _VERIFICATION_ID_RE.match(ident):
+        try:
+            resp = await client.verification_detail(authorization, verification_id=ident)
+        except (exchange.ExchangeFailed, exchange.ExchangeNotConfigured) as exc:
+            err = _exchange_failure_result(exc)
+            err['task_id'] = ident
+            return err
+        if resp.status == 404:
+            return {
+                'status': 'not_found',
+                'task_id': ident,
+                'message': (
+                    f'No completed verification with id {ident} is readable with this key. Pass the '
+                    'task_id from verify_claim to wait for a running check, or the verification_id '
+                    'of a completed one.'
+                ),
+            }
+        if not resp.ok:
+            err = _error_result(resp)
+            err['task_id'] = ident
+            return err
+        done = _completed_result(resp.data)
+        done['task_id'] = ident
+        return done
+    out = await _await_verification(
+        ctx, ident, started_at=started_at, tool='get_verification', log_exhausted=log_exhausted
+    )
+    if out.get('status') == 'processing':
+        out['task_id'] = ident
+        out['message'] = STILL_RUNNING_AFTER_WAIT.format(seconds=int(_verify_wait_seconds()))
+    elif 'task_id' not in out:
+        out['task_id'] = ident
+    return out
 
 
 @_tool(
@@ -1724,14 +1980,25 @@ async def get_verification(
         Field(
             description=(
                 'The task_id returned by verify_claim or select_claims (waits for the running check), '
-                'or the 8-character verification_id of a completed result (fetches it).'
+                'or the 8-character verification_id of a completed result (fetches it). '
+                'Leave empty when passing `task_ids`.'
             )
         ),
-    ],
-    ctx: Context,
+    ] = '',
+    ctx: Context = None,  # type: ignore[assignment]
+    task_ids: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                f'Up to {config.DEEP_CHECK_BATCH} task_ids or verification_ids to wait on or fetch in parallel in '
+                'one call. Mutually exclusive with `task_id`.'
+            )
+        ),
+    ] = None,
 ) -> dict[str, Any]:
     """Get the result of a deep check that is running or already finished: wait for a
-    running check by `task_id`, or fetch a completed one by `verification_id`.
+    running check by `task_id` (or several in parallel via `task_ids`), or fetch a completed
+    one by `verification_id`.
 
     With a `task_id` (from `verify_claim` or `select_claims`) this waits for
     the run to finish and returns `status: completed` with the
@@ -1751,8 +2018,37 @@ async def get_verification(
     started_at = time.monotonic()  # the wait budget covers the whole call
     authorization = _authorization(ctx)
     ident = (task_id or '').strip()
-    if not _sendable_id(ident):
-        return _unsendable_id('task_id', 'verify_claim or select_claims')
+    if task_ids is None:
+        if not _sendable_id(ident):
+            return _unsendable_id('task_id', 'verify_claim or select_claims')
+        ids: list[str] = []
+    else:
+        raw_ids = [i.strip() for i in task_ids if isinstance(i, str) and i.strip()]
+        ids = list(dict.fromkeys(raw_ids))
+        if ids and ident:
+            return {'status': 'error', 'message': 'Pass either `task_id` (one id) or `task_ids` (a list), not both.'}
+        if not ids:
+            return {'status': 'invalid_request', 'message': 'Pass a `task_id` or a `task_ids` list.'}
+        if len(ids) > config.DEEP_CHECK_BATCH:
+            return {
+                'status': 'invalid_request',
+                'message': f'Pass at most {config.DEEP_CHECK_BATCH} ids in `task_ids` at a time.',
+            }
+        for candidate in ids:
+            if not _sendable_id(candidate):
+                return _unsendable_id('task_id', 'verify_claim or select_claims')
+        if len(ids) == 1:
+            ident = ids[0]
+            ids = []
+
+    if ids:
+        results = await asyncio.gather(
+            *(_one_verification(ctx, authorization, i, started_at=started_at, log_exhausted=False) for i in ids)
+        )
+        if any(r.get('status') == 'processing' for r in results):
+            _note_wait_exhausted(_verify_wait_seconds(), 'get_verification')
+        return _batch_verify_envelope(list(results), tool='get_verification')
+
     # Two ids, told apart by shape: an 8-hex verification_id names a stored
     # result, anything else is a run to wait on. The SDK's
     # `verifications.get(verification_id)` and this tool's name collide — a
@@ -2170,32 +2466,18 @@ async def check_usage(ctx: Context) -> dict[str, Any]:
     credits: dict[str, Any] = raw_credits if isinstance(raw_credits, dict) else {}
     raw_costs = data.get('costs')
     costs: dict[str, Any] = raw_costs if isinstance(raw_costs, dict) else {}
-    # The older body carries a block per capability, `quota_resets_at` and a
-    # `bonus` in the pool; the newer one only the pool (with its own
-    # `resets_at`, no `bonus`) and the price list, from which the same
-    # per-capability numbers follow. The newer shape is recognised by what it
-    # has, so an older body that merely lacks a block reads as before.
-    newer = (
-        'resets_at' in credits
-        and 'bonus' not in credits
-        and not any(key in data for key in ('assess', 'verify', 'ask', 'quota_resets_at'))
-    )
-    older = not newer
+    # One pool funds every call: each capability's remaining count is the pool
+    # in that capability's price. Projected only from a whole pool (one that
+    # states when it resets, as the API's always does) at a positive price.
+    whole_pool = 'resets_at' in credits
 
     def _remaining(capability: str) -> int | None:
-        block = data.get(capability)
-        if older or isinstance(block, dict):
-            return block.get('remaining') if isinstance(block, dict) else None
         pool, cost = credits.get('remaining'), costs.get(capability)
-        if isinstance(pool, int) and isinstance(cost, int) and cost > 0:
+        if whole_pool and isinstance(pool, int) and isinstance(cost, int) and cost > 0:
             return pool // cost
         return None
 
-    resets_at = (
-        data.get('quota_resets_at') or data.get('resets_at')
-        if older
-        else credits.get('resets_at') or data.get('resets_at')
-    )
+    resets_at = credits.get('resets_at')
 
     return {
         'status': 'ok',
@@ -2559,18 +2841,9 @@ def _text_or_none(value: Any) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
-def _first_key(source: dict[str, Any], *names: str) -> Any:
-    """The value of the first of ``names`` the body has, whichever API shape wrote it."""
-    for name in names:
-        if name in source:
-            return source[name]
-    return None
-
-
 def _failure_code(failure: Any) -> str:
-    """A failure block's code: ``code`` in the newer shape, ``failure_reason`` in the older."""
-    block = failure if isinstance(failure, dict) else {}
-    code = _first_key(block, 'code', 'failure_reason')
+    """A failure block's ``code``, or ''."""
+    code = failure.get('code') if isinstance(failure, dict) else None
     return code if isinstance(code, str) else ''
 
 
@@ -2642,8 +2915,8 @@ def _citation_row(row: dict[str, Any]) -> dict[str, Any]:
 def _citecheck_summary(data: dict[str, Any]) -> dict[str, Any]:
     raw = _dict(data.get('summary'))
     checks = _dict(raw.get('citation_checks'))
-    # The older body says `citation_limit_reached`, the newer `citation_limit_exceeded`.
-    limit_reached = _first_key(raw, 'citation_limit_exceeded', 'citation_limit_reached')
+    # The API says `citation_limit_exceeded`; the tools say `limit_reached`.
+    limit_reached = raw.get('citation_limit_exceeded')
     summary = {
         'citations_found': raw.get('citations_found'),
         'citations_selected': raw.get('citations_selected'),
@@ -2845,8 +3118,8 @@ async def _await_citecheck(
 
 
 def _stated_wait(data: dict[str, Any], resp: client.ApiResponse, default: int) -> int:
-    """The wait an error states, in seconds, from either shape or the header."""
-    for value in (_first_key(data, 'retry_after', 'retry_after_seconds'), resp.headers.get('retry-after')):
+    """The wait an error states, in seconds, from its body or the header."""
+    for value in (data.get('retry_after'), resp.headers.get('retry-after')):
         if value is None or isinstance(value, bool):
             continue
         try:

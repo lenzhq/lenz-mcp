@@ -4,7 +4,6 @@
 row that comes back with a non-empty `suggested_rewrite` forwards it under a
 note that says what it is: built from the reviewers' reasoning, not from
 sources, and not checked itself. A row without one is exactly what it was.
-Both shapes of the API's rows are read.
 """
 
 from __future__ import annotations
@@ -38,24 +37,6 @@ def _reset_shared_http_client():
     client._http_client = None
 
 
-def _legacy_row(**extra):
-    row = {
-        'claim': 'The registry lists 5,000 filings for 2024.',
-        'language': 'en',
-        'verdict': 'False',
-        'confidence': 'high',
-        'verification_url': None,
-        'error_code': None,
-        'candidate_claims': [],
-        'identified_claims': [],
-        'hint': None,
-        'rationale': 'The registry lists 4,200 filings.',
-        'dissent': None,
-    }
-    row.update(extra)
-    return row
-
-
 def _canonical_row(**extra):
     row = {
         'claim': 'The registry lists 5,000 filings for 2024.',
@@ -71,10 +52,6 @@ def _canonical_row(**extra):
     }
     row.update(extra)
     return row
-
-
-ROWS = {'legacy': _legacy_row, 'canonical': _canonical_row}
-BOTH = tuple(ROWS)
 
 
 def _assess(monkeypatch, rows):
@@ -147,26 +124,23 @@ def test_a_key_from_before_the_flag_is_unchanged_and_the_flag_makes_a_new_one(mo
 # ── what comes back ──────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize('shape', BOTH)
-def test_a_rewrite_is_forwarded_under_the_quick_check_note(monkeypatch, shape):
-    out = _assess(monkeypatch, [ROWS[shape](suggested_rewrite=f'  {REWRITE}  ')])
+def test_a_rewrite_is_forwarded_under_the_quick_check_note(monkeypatch):
+    out = _assess(monkeypatch, [_canonical_row(suggested_rewrite=f'  {REWRITE}  ')])
     row = out['claims'][0]
     assert row['suggested_rewrite'] == REWRITE
     assert row['suggested_rewrite_note'] == server.QUICK_REWRITE_NOTE
 
 
-@pytest.mark.parametrize('shape', BOTH)
 @pytest.mark.parametrize('value', [None, '', '   ', 5, ['x'], {'a': 1}, True])
-def test_no_usable_rewrite_changes_nothing(monkeypatch, shape, value):
-    with_key = _assess(monkeypatch, [ROWS[shape](suggested_rewrite=value)])['claims'][0]
-    without_key = _assess(monkeypatch, [ROWS[shape]()])['claims'][0]
+def test_no_usable_rewrite_changes_nothing(monkeypatch, value):
+    with_key = _assess(monkeypatch, [_canonical_row(suggested_rewrite=value)])['claims'][0]
+    without_key = _assess(monkeypatch, [_canonical_row()])['claims'][0]
     assert with_key == without_key
     assert 'suggested_rewrite' not in with_key and 'suggested_rewrite_note' not in with_key
 
 
-@pytest.mark.parametrize('shape', BOTH)
-def test_a_row_from_an_api_that_never_sent_the_key_is_what_it_was(monkeypatch, shape):
-    row = ROWS[shape]()
+def test_a_row_from_an_api_that_never_sent_the_key_is_what_it_was(monkeypatch):
+    row = _canonical_row()
     assert 'suggested_rewrite' not in row
     out = _assess(monkeypatch, [row])['claims'][0]
     assert out == {
@@ -177,17 +151,11 @@ def test_a_row_from_an_api_that_never_sent_the_key_is_what_it_was(monkeypatch, s
     }
 
 
-def test_both_shapes_give_the_same_row(monkeypatch):
-    legacy = _assess(monkeypatch, [_legacy_row(suggested_rewrite=REWRITE)])
-    canonical = _assess(monkeypatch, [_canonical_row(suggested_rewrite=REWRITE)])
-    assert legacy == canonical
-
-
 def test_the_note_rides_only_on_the_rows_that_have_one(monkeypatch):
     rows = [
-        _legacy_row(suggested_rewrite=REWRITE),
-        _legacy_row(claim='B.'),
-        _legacy_row(claim='C.', suggested_rewrite=None),
+        _canonical_row(suggested_rewrite=REWRITE),
+        _canonical_row(claim='B.'),
+        _canonical_row(claim='C.', suggested_rewrite=None),
     ]
     out = _assess(monkeypatch, rows)['claims']
     assert [('suggested_rewrite' in r, 'suggested_rewrite_note' in r) for r in out] == [
@@ -207,7 +175,7 @@ def test_an_error_row_never_carries_one(monkeypatch):
 
 def test_a_deep_tier_row_serves_the_same_note(monkeypatch):
     # A claim already deep-checked is served with that check's rewrite in the quick row's shape.
-    row = _legacy_row(suggested_rewrite=REWRITE, verification_url='https://lenz.io/api/v1/verifications/abc12345')
+    row = _canonical_row(suggested_rewrite=REWRITE, verification_url='https://lenz.io/api/v1/verifications/abc12345')
     out = _assess(monkeypatch, [row])['claims'][0]
     assert out['suggested_rewrite_note'] == server.QUICK_REWRITE_NOTE
     assert out['suggested_rewrite_note'] != server.SUGGESTED_REWRITE_NOTE

@@ -93,16 +93,47 @@ def _assess_ok(args: dict[str, Any]) -> bool:
     return isinstance(claims, list) and bool(claims) and all(_text(item) for item in claims) and not claim
 
 
+def _verify_ok(args: dict[str, Any]) -> bool:
+    """`verify_claim` takes ONE text in `claim` or 1..10 in `claims`, never both, never neither."""
+    claim, claims = args.get('claim'), args.get('claims')
+    if _text(claim):
+        return not claims
+    return isinstance(claims, list) and 1 <= len(claims) <= 10 and all(_text(item) for item in claims) and not claim
+
+
+def _get_verification_ok(args: dict[str, Any]) -> bool:
+    """`get_verification` takes ONE id in `task_id` or 1..10 in `task_ids`, never both, never neither."""
+    task_id, task_ids = args.get('task_id'), args.get('task_ids')
+    if _text(task_id):
+        return not task_ids
+    return (
+        isinstance(task_ids, list)
+        and 1 <= len(task_ids) <= 10
+        and all(_text(item) for item in task_ids)
+        and not task_id
+    )
+
+
+def _call_claims(call) -> list[str]:
+    """The claim string(s) a `verify_claim` call submitted (`claim` or `claims`)."""
+    if call.name == 'verify_claim':
+        raw_list = call.arguments.get('claims')
+        if isinstance(raw_list, list) and raw_list:
+            return [str(c) for c in raw_list if _text(c)]
+    single = call.arguments.get('claim')
+    return [str(single)] if _text(single) else []
+
+
 _ARGS_OK = {
     'assess_claim': _assess_ok,
-    'verify_claim': lambda a: _text(a.get('claim')),
+    'verify_claim': _verify_ok,
     'select_claims': lambda a: (
         _text(a.get('task_id'))
         and isinstance(a.get('claims'), list)
         and bool(a['claims'])
         and all(_text(c) for c in a['claims'])
     ),
-    'get_verification': lambda a: _text(a.get('task_id')),
+    'get_verification': _get_verification_ok,
     'ask_followup': lambda a: _text(a.get('verification_id')) and _text(a.get('question')),
 }
 
@@ -199,8 +230,8 @@ def _judge_calls(case: case_data.Case, turn) -> tuple[bool, str]:
 
 
 def _judge_fan_out(case: case_data.Case, calls, turn_batches: tuple[tuple[str, ...], ...] = ()) -> tuple[bool, str]:
-    """The one expected tool `case.count` times, each on a different claim, with
-    the case's extras allowed once each before or between them."""
+    """The one expected tool covering `case.count` distinct claims (either one per call
+    or batched in `claims`), with the case's extras allowed once each before or between them."""
     (tool,) = case.expected_tools
     names = [call.name for call in calls]
     for name in names:
@@ -212,12 +243,6 @@ def _judge_fan_out(case: case_data.Case, calls, turn_batches: tuple[tuple[str, .
         if name != 'get_verification' and names.count(name) > 1:
             return False, f'called {name} {names.count(name)} times; at most once'
     fanned = [call for call in calls if call.name == tool]
-    if case.batch:
-        widest = max((names.count(tool) for names in turn_batches), default=0)
-        if widest > case.batch:
-            return False, f'started {widest} calls in one turn; batches of at most {case.batch}'
-    if len(fanned) != case.count:
-        return False, f'called {tool} {len(fanned)} times; wanted {case.count}'
     valid = _ARGS_OK.get(tool)
     for call in fanned:
         if valid is not None and not valid(call.arguments):
@@ -226,10 +251,42 @@ def _judge_fan_out(case: case_data.Case, calls, turn_batches: tuple[tuple[str, .
                 f'argument check: {tool} was called with arguments the server would refuse: {call.arguments!r}',
             )
         for key, predicate in case.expect_args.items():
+            if (
+                key == 'claim'
+                and 'claim' not in call.arguments
+                and isinstance(call.arguments.get('claims'), list)
+                and not predicate(None)
+            ):
+                for item in call.arguments['claims']:
+                    if not predicate(item):
+                        return False, f'argument claims item {item!r} failed its check'
+                continue
             value = call.arguments.get(key)
             if not predicate(value):
                 return False, f'argument {key}={value!r} failed its check'
-    claims = {' '.join(str(call.arguments.get('claim', '')).split()).lower() for call in fanned}
+
+    # Compute claims per call so both 1-claim-per-call fan-out and `claims=[...]`
+    # batch calls are scored on how many claims they submit per turn and in total.
+    per_call_counts = [max(1, len(_call_claims(call))) for call in fanned]
+    total_submitted = sum(len(_call_claims(call)) for call in fanned)
+    if case.batch:
+        call_idx = 0
+        widest = 0
+        for batch_names in turn_batches:
+            in_turn = batch_names.count(tool)
+            turn_claims = sum(per_call_counts[call_idx : call_idx + in_turn])
+            call_idx += in_turn
+            widest = max(widest, turn_claims, in_turn)
+        if call_idx < len(per_call_counts):
+            widest = max(widest, sum(per_call_counts[call_idx:]))
+        if widest > case.batch:
+            return False, f'started {widest} calls in one turn; batches of at most {case.batch}'
+    if total_submitted != case.count:
+        used_batch = any(isinstance(c.arguments.get('claims'), list) for c in fanned)
+        if used_batch:
+            return False, f'submitted {total_submitted} claims to {tool}; wanted {case.count}'
+        return False, f'called {tool} {total_submitted} times; wanted {case.count}'
+    claims = {' '.join(c.split()).lower() for call in fanned for c in _call_claims(call)}
     if len(claims) != case.count:
         return False, f'{tool} covered {len(claims)} different claims; wanted {case.count}'
     return True, ''
