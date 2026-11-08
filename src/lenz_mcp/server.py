@@ -2903,10 +2903,14 @@ def _citation_row(row: dict[str, Any]) -> dict[str, Any]:
         out['finding_label'] = CITECHECK_PENDING_LABEL
         out['is_issue'] = False
     reason = _text_or_none(check.get('unchecked_reason'))
+    hint = _text_or_none(check.get('hint'))
     if reason:
         out['unchecked_reason'] = reason
         out['reason'] = CITECHECK_REASONS.get(reason, CITECHECK_FALLBACK_REASON)
-    hint = _text_or_none(check.get('hint'))
+        # The fixed `partial_text` sentence is about absences and misleads on a row whose excerpt
+        # matched. Lenz words such a row itself (what was read, limitation first), so its hint is the reason.
+        if reason == 'partial_text' and hint and out.get('snippet'):
+            out['reason'] = hint
     if hint:
         out['hint'] = hint
     return out

@@ -407,6 +407,43 @@ def test_not_checked_rows_say_why_in_plain_words(monkeypatch):
     assert 'paywall' not in json.dumps(out).lower()
 
 
+PARTIAL_HINT = (
+    'Lenz could read only the abstract, so this citation is not checked. The excerpt is from the abstract; '
+    'the full paper may add limits or conditions that change it.'
+)
+
+
+def test_a_partial_read_row_with_an_excerpt_gives_the_server_hint_as_its_reason(monkeypatch):
+    _api, out = _check(monkeypatch, ['get_completed_partial_text'])
+    row = out['citations'][0]
+    assert row['finding'] == 'unchecked' and row['is_issue'] is False
+    assert row['unchecked_reason'] == 'partial_text'
+    assert row['snippet'] == 'The drug lowered blood pressure in adults.'
+    assert row['reason'] == PARTIAL_HINT
+    # The fixed sentence is about absences; it must not ride beside an excerpt that matched.
+    assert row['reason'] != server.CITECHECK_REASONS['partial_text']
+
+
+def test_a_partial_read_row_without_a_hint_or_an_excerpt_keeps_the_fixed_reason(monkeypatch):
+    fixed = server.CITECHECK_REASONS['partial_text']
+    for drop in ('hint', 'snippet'):
+        body = _body('get_completed_partial_text')
+        body['citations'][0]['check'][drop] = None
+        api = Api(monkeypatch, submit=_resp('receipt_202'), polls=[ApiResponse(status=200, data=body)])
+        row = _run(server.check_citations('A draft [1](https://example.gov/a).', _ctx()))['citations'][0]
+        assert row['reason'] == fixed, drop
+        assert api.polled
+
+
+def test_a_hint_on_any_other_reason_does_not_replace_its_reason(monkeypatch):
+    body = _body('get_completed_partial_text')
+    body['citations'][0]['check']['unchecked_reason'] = 'no_text'
+    Api(monkeypatch, submit=_resp('receipt_202'), polls=[ApiResponse(status=200, data=body)])
+    row = _run(server.check_citations('A draft [1](https://example.gov/a).', _ctx()))['citations'][0]
+    assert row['reason'] == server.CITECHECK_REASONS['no_text']
+    assert row['hint'] == PARTIAL_HINT
+
+
 def test_an_unknown_reason_falls_back_to_a_plain_sentence(monkeypatch):
     body = _body('get_completed_unchecked')
     body['citations'][0]['check']['unchecked_reason'] = 'a_reason_added_later'
