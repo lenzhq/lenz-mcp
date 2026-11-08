@@ -646,6 +646,78 @@
    "more_citations": []
   }
  },
+ "get_completed_partial_text": {
+  "status": 200,
+  "headers": {},
+  "body": {
+   "citecheck_id": "ab12cd34",
+   "status": "completed",
+   "outcome": "unchecked",
+   "created_at": "2026-10-09T10:00:00.000000Z",
+   "completed_at": "2026-10-09T10:00:00.000000Z",
+   "language": "en",
+   "poll_after_seconds": null,
+   "policy": {
+    "max_citations": 1
+   },
+   "summary": {
+    "citations_found": 1,
+    "citations_selected": 1,
+    "citation_limit": 1,
+    "citation_limit_exceeded": false,
+    "citation_checks": {
+     "checked": 0,
+     "unchecked": 1,
+     "failed": 0
+    },
+    "citation_issues": 0
+   },
+   "credits": {
+    "charged": 0
+   },
+   "citations": [
+    {
+     "index": 0,
+     "reference": "https://example.gov/report-2024",
+     "cited_url": "https://example.gov/report-2024",
+     "doi": null,
+     "statement": "The drug lowered blood pressure in adults.",
+     "quotes": [],
+     "position": null,
+     "result": {
+      "finding": "unchecked",
+      "source": null,
+      "is_issue": false
+     },
+     "check": {
+      "status": "completed",
+      "page_read": "partial",
+      "page_title": "Page at https://example.gov/report-2024",
+      "page_published_date": null,
+      "page_language": "en",
+      "source_url": "https://example.gov/report-2024",
+      "source_version": null,
+      "support": "unchecked",
+      "snippet": "The drug lowered blood pressure in adults.",
+      "rationale": null,
+      "quote": null,
+      "doi_registered": null,
+      "metadata": null,
+      "metadata_differences": [],
+      "registered": null,
+      "unchecked_reason": "partial_text",
+      "hint": "Lenz could read only the abstract, so this citation is not checked. The excerpt is from the abstract; the full paper may add limits or conditions that change it.",
+      "failure": null,
+      "missing_quote": null
+     }
+    }
+   ],
+   "citation_issues": [],
+   "citation_failures": [],
+   "failure": null,
+   "more_citations": []
+  }
+ },
  "get_completed_doi_pair": {
   "status": 200,
   "headers": {},
