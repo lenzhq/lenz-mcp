@@ -40,7 +40,7 @@
       "annotations": {
         "destructiveHint": false,
         "idempotentHint": false,
-        "openWorldHint": true,
+        "openWorldHint": false,
         "readOnlyHint": false,
         "title": "Ask a follow-up"
       },
