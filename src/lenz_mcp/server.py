@@ -2548,11 +2548,10 @@ async def list_verifications(ctx: Context) -> dict[str, Any]:
     # readOnlyHint=False: every call appends the question and the answer to the
     # check's follow-up thread and debits one credit. idempotentHint=False: no
     # Idempotency-Key is sent (see client.ask), so asking again adds another turn.
-    # openWorldHint=True: the question and the evidence already gathered for the
-    # check go to a hosted language model, whose answer is open-ended text; nothing
-    # is searched or fetched from the web at call time.
+    # openWorldHint=False: answers from the evidence already gathered for the
+    # completed check; nothing is searched or fetched from the web at call time.
     annotations=ToolAnnotations(
-        title='Ask a follow-up', readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True
+        title='Ask a follow-up', readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
     ),
 )
 @requires_auth

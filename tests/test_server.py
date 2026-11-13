@@ -1960,8 +1960,8 @@ def test_protocol_all_tools_registered():
 # assess_claim, verify_claim and the card's start tool are replayed for 24 hours
 # and then start a new charged check, and ask_followup sends no Idempotency-Key, so
 # none of them is idempotent; the select tools are (a resolved selection stays resolved).
-# Open world: the tool reaches the public web or an open-ended model, not just the
-# user's own account data.
+# Open world: the tool reaches the public web, not just stored check evidence or
+# the user's own account data.
 _EXPECTED_HINTS = {
     'assess_claim': (False, False, False, True),
     'verify_claim': (False, False, False, True),
@@ -1972,7 +1972,7 @@ _EXPECTED_HINTS = {
     'select_claims_widget': (False, False, True, True),
     'check_usage': (True, False, True, False),
     'list_verifications': (True, False, True, False),
-    'ask_followup': (False, False, False, True),
+    'ask_followup': (False, False, False, False),
     # A citation check debits a credit for every citation it checks and reads the cited
     # sources on the public web; the same input is replayed for a day and then starts a
     # new charged check, so it is not idempotent. Reading one back changes nothing.
