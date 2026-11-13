@@ -17,6 +17,8 @@
 <p align="center">
   <a href="https://claude.ai/directory/connectors/lenz"><img src="https://img.shields.io/badge/Add_to_Claude-D97757?style=for-the-badge&logo=claude&logoColor=white" alt="Add Lenz to Claude" height="28"></a>
   &nbsp;
+  <a href="https://chatgpt.com/plugins/plugin_asdk_app_6ad9d66b35dc8191b2dfaa59f7b1cfa9"><img src="https://img.shields.io/badge/Install_in_ChatGPT-10A37F?style=for-the-badge&logo=openai&logoColor=white" alt="Install Lenz in ChatGPT" height="28"></a>
+  &nbsp;
   <a href="https://cursor.com/en/install-mcp?name=lenz&config=eyJ1cmwiOiJodHRwczovL2xlbnouaW8vbWNwIn0%3D"><img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add Lenz to Cursor" height="28"></a>
   &nbsp;
   <a href="https://vscode.dev/redirect/mcp/install?name=lenz&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Flenz.io%2Fmcp%22%7D"><img src="https://img.shields.io/badge/Install_in_VS_Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="Install Lenz in VS Code" height="28"></a>
@@ -75,7 +77,7 @@ client gets the same results as text; nothing depends on the card.
 
 Two ways to connect, depending on your client:
 
-- **OAuth** — for clients that support it (e.g. Claude connectors). No key to
+- **OAuth** — for clients that support it (e.g. Claude connectors and the ChatGPT plugin). No key to
   paste; you sign in to Lenz and authorize the connection.
 - **API key** — works with any MCP client via an `Authorization` header.
 
@@ -86,6 +88,14 @@ Open the [Lenz connector page](https://claude.ai/directory/connectors/lenz) and
 click **Connect to Claude**, or in the app: **Settings → Extensions → Browse
 extensions**, search for Lenz and click **+**. Either way it is a one-time
 OAuth sign-in with nothing to configure, and one account covers all three.
+
+**ChatGPT (web, desktop and mobile):** Lenz is in the ChatGPT plugin directory.
+Open the [Lenz plugin page](https://chatgpt.com/plugins/plugin_asdk_app_6ad9d66b35dc8191b2dfaa59f7b1cfa9)
+and click **Install plugin** (then **Connect** if prompted), or in the app open
+**Plugins** in the sidebar (or **Settings → Plugins**), search for Lenz and
+click **Install plugin**. In a Business, Enterprise or Edu workspace, an admin
+can enable or pre-install Lenz in **Admin Console → Plugins**. One sign-in
+covers web, desktop and mobile.
 
 For any other client that supports OAuth for MCP, add the server with just its URL
 and no headers:
@@ -167,28 +177,6 @@ button above (OAuth, no key). Manual, with a key:
 ```bash
 code --add-mcp '{"name":"lenz","type":"http","url":"https://lenz.io/mcp","headers":{"Authorization":"Bearer ${LENZ_API_KEY}"}}'
 ```
-
-### ChatGPT
-
-At this time, ChatGPT connects to Lenz as a custom app through OpenAI's
-**Developer mode** — over OAuth, so there is no API key to paste. It is set up
-on chatgpt.com; the ChatGPT desktop and mobile apps cannot create one.
-
-**On a personal account (Plus or Pro).** **Settings → Plugins** → turn on
-**Developer mode** at the bottom → **Plugins → Browse plugins** → **+** next to
-Search → name it Lenz, URL `https://lenz.io/mcp`, Authentication **OAuth** →
-tick **I understand and want to continue** → **Create** → **Sign in with
-Lenz** → **Try in Chat**.
-
-**In a Business, Enterprise or Edu workspace.** An owner or admin publishes it
-once: **Workspace settings → Apps → + Create**, confirm **Enable developer
-mode**, fill in the same form with **OAuth**, then **Drafts → Publish**, set
-who can use it, and **Publish** again. Each member then goes to **Settings →
-Plugins → Lenz → Connect** and signs in.
-
-A custom app is off by default in every new chat: **+** and tick Lenz. Naming
-Lenz in the question is what makes ChatGPT reach for it rather than answer from
-memory.
 
 ### MCP Inspector (try the tools by hand)
 
