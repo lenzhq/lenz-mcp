@@ -3,7 +3,7 @@
   "name": "io.lenz/fact-check",
   "title": "Lenz Fact-Check",
   "description": "Check the facts, figures, and citations in your work: a quick verdict, or a deep check with sources.",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "websiteUrl": "https://lenz.io/integrations/mcp-server?utm_source=mcp-registry&utm_medium=directory",
   "icons": [
     {
