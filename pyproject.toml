@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "lenz-mcp"
 dynamic = ["version"]
-description = "The Lenz MCP server: check the factual claims in a text from Claude, ChatGPT and other MCP clients."
+description = "The Lenz MCP server: check the facts, figures, and citations in a text from ChatGPT, Claude, and other MCP clients."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
