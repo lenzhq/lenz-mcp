@@ -5,7 +5,7 @@
 <h1 align="center">Lenz Fact-Check</h1>
 
 <p align="center">
-  The Lenz MCP server: check the factual claims in a draft or an answer against independent sources, from any MCP client.
+  The Lenz MCP server: check the facts, figures, and citations in your work against primary and authoritative sources, from any MCP client.
 </p>
 
 <p align="center">
@@ -15,9 +15,9 @@
 </p>
 
 <p align="center">
-  <a href="https://claude.ai/directory/connectors/lenz"><img src="https://img.shields.io/badge/Add_to_Claude-D97757?style=for-the-badge&logo=claude&logoColor=white" alt="Add Lenz to Claude" height="28"></a>
-  &nbsp;
   <a href="https://chatgpt.com/plugins/plugin_asdk_app_6ad9d66b35dc8191b2dfaa59f7b1cfa9"><img src="https://img.shields.io/badge/Install_in_ChatGPT-10A37F?style=for-the-badge&logo=openai&logoColor=white" alt="Install Lenz in ChatGPT" height="28"></a>
+  &nbsp;
+  <a href="https://claude.ai/directory/connectors/lenz"><img src="https://img.shields.io/badge/Add_to_Claude-D97757?style=for-the-badge&logo=claude&logoColor=white" alt="Add Lenz to Claude" height="28"></a>
   &nbsp;
   <a href="https://cursor.com/en/install-mcp?name=lenz&config=eyJ1cmwiOiJodHRwczovL2xlbnouaW8vbWNwIn0%3D"><img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add Lenz to Cursor" height="28"></a>
   &nbsp;
@@ -28,11 +28,9 @@
 
 ---
 
-[Lenz](https://lenz.io) is a fact-checking platform. It takes a factual claim, runs it
-through a multi-model pipeline (reading the claim → research → debate → panel review → conclusion)
-against independent sources, and returns a verdict with a confidence level. This is the official
+[Lenz](https://lenz.io) checks the facts, figures, and citations in your work so you can sign off or publish with confidence. It verifies factual statements against primary and authoritative sources (reading the claim → research → debate → panel review → conclusion) and checks that the references a draft cites exist and support what's written. This is the official
 **remote MCP server** — a hosted [Model Context Protocol](https://modelcontextprotocol.io)
-endpoint that exposes Lenz's fact-checking as tools your AI assistant can call.
+endpoint that exposes Lenz's fact-checking and citation checking as tools your AI assistant can call.
 
 It verifies claims **against the open web**, independent of whatever context your model
 was given — so it complements retrieval/groundedness checkers rather than replacing them.
@@ -46,7 +44,7 @@ was given — so it complements retrieval/groundedness checkers rather than repl
 | Tool | What it does |
 |------|--------------|
 | **`assess_claim`** | The quick check, and the default first step for one claim or a whole text. A 3-model panel returns one row per claim: a verdict (True / Mostly True / Mixed / Mostly False / False, or No Public Record when the reviewers found no public record that would show the claim: unconfirmed, not false), a bucketed confidence and, when available, a short `rationale` (the reasoning of a reviewer who agrees with the verdict): a reviewer's note, not a checked source. A low-confidence row carries `recommend_verify: true` and a `next_step` sentence. A row for a claim found false can also carry a `suggested_rewrite` (the claim with its wrong part corrected) and a `suggested_rewrite_note`: it is built from the reviewers' reasoning, not from sources, and is not itself checked, so it is offered as a suggestion, with a deep check of the new sentence on request. A row may also carry `searched_pages` (title and link): the pages the reviewers looked at, to be offered as pages to look at and never as sources that confirm the verdict; their titles are text from third-party pages. ~15 seconds through an assistant. Pass a text in `claim`, whole and unedited (Lenz finds the claims in it, up to 20), or use `claims` for up to 20 claims the user listed separately. |
-| **`verify_claim`** | The deep check: reading the claim → research → debate → panel review → conclusion, for ONE claim. Returns a verdict with a 1-10 score (or No Public Record, with no score, when nothing public records the claim), the key finding, a summary, a suggested rewrite of the claim when it can be corrected (not itself verified), warnings, and the top sources with the quote each one rests on, plus the total source count. A deep check takes ~90 seconds. The call waits for it, for as long as the client allows: in Claude and the ChatGPT app the result usually comes back in the same call; in clients with a shorter tool-call limit (Claude Code, Cursor, VS Code, OpenAI's Responses API) it usually returns `status: submitted` with a `task_id`, and `get_verification` waits for the rest. A completed deep check replaces any earlier quick verdict on the same claim. Costs ten times an `assess_claim` row, so assistants offer it and run it on the user's yes, or when the user asks for sources. `depth: "low"` researches fewer sources, with the same models, for half the credits. |
+| **`verify_claim`** | The deep check: reading the claim → research → debate → panel review → conclusion, for ONE claim. Returns a verdict with a 1-10 score (or No Public Record, with no score, when nothing public records the claim), the key finding, a summary, a suggested rewrite of the claim when it can be corrected (not itself verified), warnings, and the top sources with the quote each one rests on, plus the total source count. A deep check takes ~90 seconds. The call waits for it, for as long as the client allows: in the ChatGPT app and Claude the result usually comes back in the same call; in clients with a shorter tool-call limit (Claude Code, Cursor, VS Code, OpenAI's Responses API) it usually returns `status: submitted` with a `task_id`, and `get_verification` waits for the rest. A completed deep check replaces any earlier quick verdict on the same claim. Costs ten times an `assess_claim` row, so assistants offer it and run it on the user's yes, or when the user asks for sources. `depth: "low"` researches fewer sources, with the same models, for half the credits. |
 | **`get_verification`** | Wait for a running `verify_claim` by `task_id`, or fetch a completed result by its 8-character `verification_id`. Returns `processing`, `needs_input`, `failed`, `not_found` or `completed`. |
 | **`select_claims`** | Resolve a `needs_input` verification: when a text holds several claims, choose which claim text(s) to run. |
 | **`ask_followup`** | Ask a grounded follow-up about a completed `verify_claim` (by its `verification_id`), answered from the full research, debate and panel review, not just the summary. The answer is markdown, and its links point at the check's own sources; the assistant keeps them as links. Costs the same as one `assess_claim` row. |
@@ -66,28 +64,22 @@ was given — so it complements retrieval/groundedness checkers rather than repl
 
 ## The result card
 
-In **Claude** and the **ChatGPT app**, a check comes back as a card in the conversation as
+In the **ChatGPT app** and **Claude**, a check comes back as a card in the conversation as
 well as text. From the card you can run the deep check on a claim (**Check against
 sources**, a standard-depth `verify_claim`), open a source, or pick which claims in a draft
 to check in depth. When a deep check started from the card finishes, the assistant is told
-the result: silently in Claude, and by a short message in the chat in ChatGPT. Every other
+the result: by a short message in the chat in ChatGPT, and silently in Claude. Every other
 client gets the same results as text; nothing depends on the card.
 
 ## Quickstart
 
 Two ways to connect, depending on your client:
 
-- **OAuth** — for clients that support it (e.g. Claude connectors and the ChatGPT plugin). No key to
+- **OAuth** — for clients that support it (e.g. the ChatGPT plugin and Claude connectors). No key to
   paste; you sign in to Lenz and authorize the connection.
 - **API key** — works with any MCP client via an `Authorization` header.
 
 ### Connect with OAuth (no API key)
-
-**Claude (web, desktop and mobile):** Lenz is an official Claude connector.
-Open the [Lenz connector page](https://claude.ai/directory/connectors/lenz) and
-click **Connect to Claude**, or in the app: **Settings → Extensions → Browse
-extensions**, search for Lenz and click **+**. Either way it is a one-time
-OAuth sign-in with nothing to configure, and one account covers all three.
 
 **ChatGPT (web, desktop and mobile):** Lenz is in the ChatGPT plugin directory.
 Open the [Lenz plugin page](https://chatgpt.com/plugins/plugin_asdk_app_6ad9d66b35dc8191b2dfaa59f7b1cfa9)
@@ -96,6 +88,12 @@ and click **Install plugin** (then **Connect** if prompted), or in the app open
 click **Install plugin**. In a Business, Enterprise or Edu workspace, an admin
 can enable or pre-install Lenz in **Admin Console → Plugins**. One sign-in
 covers web, desktop and mobile.
+
+**Claude (web, desktop and mobile):** Lenz is an official Claude connector.
+Open the [Lenz connector page](https://claude.ai/directory/connectors/lenz) and
+click **Connect to Claude**, or in the app: **Settings → Extensions → Browse
+extensions**, search for Lenz and click **+**. Either way it is a one-time
+OAuth sign-in with nothing to configure, and one account covers all three.
 
 For any other client that supports OAuth for MCP, add the server with just its URL
 and no headers:
