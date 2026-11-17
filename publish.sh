@@ -44,7 +44,7 @@ echo "==> [registry] validating server.json"
 mcp-publisher validate --file ./server.json
 
 echo "==> [registry] logging in (DNS namespace: $REGISTRY_DOMAIN)"
-priv="$(openssl pkey -in "$REGISTRY_KEY" -noout -text | grep -A3 'priv:' | tail -n +2 | tr -d ' :\n')"
+priv="$(openssl pkey -in "$REGISTRY_KEY" -noout -text | awk '/priv:/{f=1;next}/pub:/{f=0}f' | tr -d ' :\n')"
 mcp-publisher login dns --domain "$REGISTRY_DOMAIN" --private-key "$priv"
 
 echo "==> [registry] publishing"
