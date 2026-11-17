@@ -30,7 +30,7 @@
 
 [Lenz](https://lenz.io) checks the facts, figures, and citations in your work so you can sign off or publish with confidence. It verifies factual statements against primary and authoritative sources (reading the claim → research → debate → panel review → conclusion) and checks that the references a draft cites exist and support what's written. This is the official
 **remote MCP server** — a hosted [Model Context Protocol](https://modelcontextprotocol.io)
-endpoint that exposes Lenz's fact-checking and citation checking as tools your AI assistant can call.
+endpoint that exposes Lenz's claim and citation verification as tools your AI assistant can call.
 
 It verifies claims **against the open web**, independent of whatever context your model
 was given — so it complements retrieval/groundedness checkers rather than replacing them.
@@ -111,7 +111,7 @@ and no headers:
 
 The first time you use it, your client walks you through a one-time sign-in: you
 authenticate on Lenz's own screen and authorize the connection — no key is stored in your
-config. Your assistant then fact-checks on your behalf against your Lenz account's credits.
+config. Your assistant then checks claims and citations on your behalf against your Lenz account's credits.
 You can revoke the connection at any time; see the [privacy policy](https://lenz.io/privacy).
 
 ### Connect with an API key
