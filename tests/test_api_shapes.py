@@ -317,7 +317,7 @@ CHANGED_SINCE_THE_ORACLE: dict[str, dict[str, Any]] = {
     'errors__payment_required_verify': {
         'message': (
             'Out of Lenz credits: this call costs 10 and the account has 0. '
-            'The balance resets on 3 October 2026 at 12:00 UTC.'
+            'Monthly credits renew on 3 October 2026 at 12:00 UTC.'
         ),
         'cost': 10,
         'credits_remaining': 0,
@@ -326,7 +326,7 @@ CHANGED_SINCE_THE_ORACLE: dict[str, dict[str, Any]] = {
             'This call did not run and nothing was charged; any check already started keeps running and its '
             'result still arrives. Tell the user what was not checked and why, and what they can do: '
             '`manage_url` is the page where the user can add credits or change plan, so give the user that '
-            'link; the balance resets on the date in the message. The same call made again before the '
+            'link; monthly credits renew on the date in the message. The same call made again before the '
             'balance changes is refused again.'
         ),
     },

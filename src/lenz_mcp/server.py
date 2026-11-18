@@ -898,7 +898,7 @@ def _quota_message(data: dict[str, Any]) -> str:
         text = 'Out of Lenz credits for this call.'
     resets = _resets_on(data.get('resets_at'))
     if resets:
-        text += f' The balance resets on {resets}.'
+        text += f' Monthly credits renew on {resets}.'
     covers = data.get('balance_covers')
     if isinstance(covers, list) and covers and remaining:
         listed = '; '.join(_covers_phrase(c, requested) for c in covers)
@@ -933,7 +933,7 @@ def _quota_next_step(result: dict[str, Any]) -> str:
             '`manage_url` is the page where the user can add credits or change plan, so give the user that link'
         )
     if _resets_on(result.get('resets_at')):
-        options.append('the balance resets on the date in the message')
+        options.append('monthly credits renew on the date in the message')
     if result.get('balance_covers'):
         options.append('`balance_covers` lists the checks the remaining balance still pays for')
     say = 'Tell the user what was not checked and why'

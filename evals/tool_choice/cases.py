@@ -1400,7 +1400,7 @@ CASES: tuple[Case, ...] = (
         reply=lambda text: _PLANS_PAGE in text and _names_the_reset(text) and _offers_what_the_balance_covers(text),
         why=(
             'A deep check the user asked for was refused for credits. The result carries the link '
-            'where the user adds credits, the date the balance resets and the cheaper checks the '
+            'where the user adds credits, the date monthly credits renew and the cheaper checks the '
             'balance still covers. The reply gives the user all three, and makes no call: the same '
             'call is refused again, and a cheaper check spends credits the user has not agreed to.'
         ),

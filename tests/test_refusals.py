@@ -278,7 +278,7 @@ def test_out_of_credits_forwards_the_facts_and_names_the_options(monkeypatch):
     assert 'was not charged' in step or 'nothing was charged' in step
     # The link is named for what it is, and as something for the user.
     assert '`manage_url`' in step and 'add credits or change plan' in step and 'give' in step
-    assert 'resets' in step
+    assert 'monthly credits renew on the date in the message' in step
     assert 'refused again' in step
     assert 'balance_covers' not in out
 
@@ -294,7 +294,7 @@ def test_chatgpt_gets_the_facts_but_no_link_and_no_call_to_buy(monkeypatch, chat
     text = f'{out["message"]} {out["next_step"]}'.lower()
     for commercial in ('manage_url', 'plan', 'buy', 'purchase', 'upgrade', 'add credits', 'http'):
         assert commercial not in text, commercial
-    assert 'resets' in out['next_step']
+    assert 'monthly credits renew on the date in the message' in out['next_step']
 
 
 def test_a_short_balance_says_what_it_still_covers_from_the_live_prices(monkeypatch, price_list):
@@ -597,3 +597,13 @@ def test_a_running_check_is_not_said_to_be_charged_already():
     """A deep check is charged when it completes, as every failed check now says."""
     assert 'already been charged' not in server.CREDENTIAL_LOST_MID_RUN
     assert 'charged when it completes' in server.CREDENTIAL_LOST_MID_RUN
+
+
+def test_the_reset_date_is_when_monthly_credits_renew_not_when_the_balance_comes_back(monkeypatch):
+    """`resets_at` ends the monthly allowance's period. Credits outside it (a
+    one-time grant, extra credits) do not come back then, so the result never
+    says the balance resets."""
+    _patch_api(monkeypatch, 'verify', _no_credits())
+    out = _run(server.verify_claim('x', _ctx()))
+    assert 'Monthly credits renew on 1 December 2026.' in out['message']
+    assert 'resets' not in out['message'] and 'resets' not in out['next_step']
