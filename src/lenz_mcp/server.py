@@ -303,11 +303,11 @@ MISSING_PERMISSION_MESSAGE = (
     'signs in again and grants the permissions Lenz asks for now. Tell the user to reconnect Lenz in this '
     'app and then ask again. Do not mention tool names to the user.'
 )
-# A check that was submitted and charged, whose credential then failed. The run
-# is untouched by it, so the model is told how to collect the result rather
-# than left to start (and pay for) the same check again.
+# A check that was submitted, whose credential then failed. The run is untouched
+# by it and is charged when it completes, so the model is told how to collect
+# the result rather than left to start (and pay for) the same check again.
 CREDENTIAL_LOST_MID_RUN = (
-    'The check itself is running and has already been charged. Once this is resolved, call '
+    'The check itself is running and is charged when it completes. Once this is resolved, call '
     '`get_verification` with this task_id to collect the result. If the conversation moves on first, '
     'call `list_verifications` later to find it. Do not start the same check again. Do not mention '
     'tool names to the user.'
@@ -992,6 +992,13 @@ _QUOTA_KEY_ORDER = (
 )
 
 
+def _citecheck_short_then(result: dict[str, Any]) -> str:
+    """Why a citation check did not run, in the past tense."""
+    requested = _int(result.get('requested'))
+    what = f'its {requested:,} citations' if requested else 'it'
+    return f'This citation check did not run: the balance did not cover {what} when it was submitted.'
+
+
 def _covered_now(result: dict[str, Any]) -> bool:
     """Whether the balance read since the refusal covers the refused call.
 
@@ -1006,7 +1013,12 @@ def _covered_now(result: dict[str, Any]) -> bool:
 
 def _word_quota(result: dict[str, Any]) -> None:
     """(Re)write an out-of-credits result's ``message`` and ``next_step`` from its fields."""
-    if _covered_now(result):
+    if 'citecheck_id' in result and _int(result.get('credits_remaining')) is None:
+        # A citation check that ran short, read back with no balance to read
+        # now: what happened then is known, the balance since is not.
+        result['message'] = _citecheck_short_then(result)
+        result['next_step'] = 'Nothing was charged. Tell the user what was not checked and why.'
+    elif _covered_now(result):
         result.pop('balance_covers', None)
         result['message'] = (
             f'This call did not run: the balance did not cover its cost of {result["cost"]:,} when it was '
