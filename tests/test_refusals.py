@@ -417,3 +417,141 @@ def test_a_successful_call_reads_no_price_list(monkeypatch, price_list):
     usage = price_list(_usage())
     _run(server.assess_claim('x', _ctx()))
     assert usage == []
+
+
+# ── a citation check short of credits ────────────────────────────────
+
+PAIRS = [
+    {'statement': 'Acme was founded in 1999.', 'url': 'https://example.org/a'},
+    {'statement': 'Acme employs 400 people.', 'url': 'https://example.org/b'},
+    {'statement': 'Acme is based in Oslo.', 'url': 'https://example.org/c'},
+]
+
+
+def _short_failure():
+    return {
+        'code': 'insufficient_credits',
+        'detail': 'The account did not have enough credits for this work.',
+        'hint': 'This check needs 3 credits, one per citation it checks. Nothing was charged.',
+        'failure_class': 'invalid_input',
+        'retryable': False,
+        'docs_url': 'https://lenz.example/docs/errors#invalid-input',
+    }
+
+
+def _short_citecheck():
+    """A citation check the balance did not cover: the API ends it as failed."""
+    rows = []
+    for index, pair in enumerate(PAIRS):
+        rows.append(
+            {
+                'index': index,
+                'reference': pair['url'],
+                'cited_url': pair['url'],
+                'doi': None,
+                'statement': pair['statement'],
+                'quotes': [],
+                'position': None,
+                'result': None,
+                'check': {'status': 'failed', 'failure': _short_failure()},
+            }
+        )
+    return ApiResponse(
+        status=200,
+        data={
+            'citecheck_id': 'ab12cd34',
+            'status': 'failed',
+            'outcome': 'unchecked',
+            'language': 'en',
+            'poll_after_seconds': None,
+            'policy': {'max_citations': 3},
+            'summary': {
+                'citations_found': 3,
+                'citations_selected': 3,
+                'citation_limit': 3,
+                'citation_limit_exceeded': False,
+                'citation_checks': {'checked': 0, 'unchecked': 0, 'failed': 3},
+                'citation_issues': 0,
+            },
+            'credits': {'charged': 0},
+            'citations': rows,
+            'citation_issues': [],
+            'failure': _short_failure(),
+            'more_citations': [],
+        },
+    )
+
+
+def _pairs():
+    return [server.CitationPair(**p) for p in PAIRS]
+
+
+def test_a_citation_check_short_of_credits_reads_as_a_credit_problem(monkeypatch, price_list):
+    """It used to come back as a failed check of the input, "the same input sent
+    again returns this same result for a day": wrong on both counts. It is the
+    same refusal as every other tool's, with the numbers and the link."""
+    _patch_api(monkeypatch, 'citecheck', ApiResponse(status=202, data={'citecheck_id': 'ab12cd34', 'status': 'queued'}))
+    _patch_api(monkeypatch, 'citecheck_status', _short_citecheck())
+    price_list(_usage(credits=2, citation=1))
+
+    out = _run(server.check_citations('', _ctx(), pairs=_pairs()))
+
+    assert out['status'] == 'quota_exhausted'
+    assert out['citecheck_id'] == 'ab12cd34'
+    assert out['cost'] == 3
+    assert out['requested'] == 3
+    assert out['credits_remaining'] == 2
+    assert out['resets_at'] == RESETS
+    assert out['manage_url'] == config.PLANS_URL
+    assert out['message'].startswith(
+        'Not enough Lenz credits: this call costs 3 (1 for each of 3 citations) and the account has 2.'
+    )
+    assert '2 of the 3 citations' in out['message']
+    assert out['balance_covers'][0]['count'] == 2
+    # Nothing about the input being wrong, and nothing about replay.
+    text = f'{out["message"]} {out["next_step"]}'
+    assert 'day' not in text and 'change the input' not in text
+    assert 'failure_class' not in out
+    assert [row['statement'] for row in out['not_checked']] == [p['statement'] for p in PAIRS]
+
+
+def test_a_citation_check_short_of_credits_without_the_price_list_still_says_so(monkeypatch, price_list):
+    _patch_api(monkeypatch, 'citecheck_status', _short_citecheck())
+    price_list(ApiResponse(status=0, data={}))
+
+    out = _run(server.get_citation_check('ab12cd34', _ctx()))
+
+    assert out['status'] == 'quota_exhausted'
+    assert out['message'].startswith('Not enough Lenz credits')
+    assert 'Out of' not in out['message']
+
+
+def test_a_citation_check_with_no_credits_at_all_gives_the_numbers(monkeypatch):
+    """The citation 402 states the balance as `remaining` (one credit per citation)."""
+    body = {
+        'detail': 'No remaining credits for citation checks.',
+        'code': 'no_credits',
+        'upgrade_url': PLANS,
+        'remaining': 0,
+        'resets_at': RESETS,
+        'cost': 1,
+    }
+    _patch_api(monkeypatch, 'citecheck', ApiResponse(status=402, data=body))
+
+    out = _run(server.check_citations('', _ctx(), pairs=_pairs()))
+
+    assert out['status'] == 'quota_exhausted'
+    assert out['credits_remaining'] == 0
+    assert out['cost_per_citation'] == 1
+    assert 'cost' not in out
+    assert out['message'].startswith('Out of Lenz credits: each citation checked costs 1 and the account has 0.')
+    assert '1 December 2026' in out['message']
+    assert out['manage_url'] == PLANS
+
+
+def test_a_citation_check_short_of_credits_gives_chatgpt_no_link(monkeypatch, chatgpt, price_list):
+    _patch_api(monkeypatch, 'citecheck_status', _short_citecheck())
+    price_list(_usage(credits=2))
+    out = _run(server.get_citation_check('ab12cd34', _ctx()))
+    assert 'manage_url' not in out
+    assert 'plan' not in out['next_step']
