@@ -146,27 +146,10 @@ def list_recent_result(arguments: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-# What the eval's out-of-credits answers say about the account: one reset date,
-# and the price list a refusal reads to say what the balance still covers.
+# What the eval's out-of-credits answers say about the account: one reset date
+# (the refusal's own body carries it) and the page where credits are added.
 QUOTA_RESETS_AT = '2026-12-01T00:00:00+00:00'
 QUOTA_PLANS_URL = f'{PROD_FRONTEND}/plans?wall=0f0e0d0c-0b0a-4908-8706-050403020100'
-
-
-def _price_list_body(credits_remaining: int) -> dict[str, Any]:
-    """`GET /me/usage` for an account holding `credits_remaining` credits, in the API's shape."""
-    return {
-        'plan': 'free',
-        'plan_label': 'Free',
-        'credits': {
-            'total': 100,
-            'used': 100 - credits_remaining,
-            'remaining': credits_remaining,
-            'extra': 0,
-            'resets_at': QUOTA_RESETS_AT,
-        },
-        'costs': {'verify': 10, 'assess': 1, 'ask': 1, 'citation': 1, 'extract': 0},
-        'cost_options': {'verify': {'depth': {'standard': 10, 'low': 5}}},
-    }
 
 
 def deep_check_refused_result(claim: str, *, credits_remaining: int, openai_client: bool) -> dict[str, Any]:
@@ -189,11 +172,7 @@ def deep_check_refused_result(claim: str, *, credits_remaining: int, openai_clie
     from lenz_mcp import server
 
     with mock.patch.object(server, 'request_is_chatgpt', lambda: openai_client):
-        return _run(
-            'verify_claim',
-            (claim,),
-            {'verify': (402, body), 'me_usage': (200, _price_list_body(credits_remaining))},
-        )
+        return _run('verify_claim', (claim,), {'verify': (402, body)})
 
 
 def quota_exhausted_result(arguments: dict[str, Any]) -> dict[str, Any]:

@@ -2,8 +2,9 @@
 
 A refusal is the turn where the user most needs a way forward, and the model can
 only offer one it has been given. So these results carry the facts the API sent
-(the price, the balance, when it resets, what the balance still covers) and say
-plainly what each option is, and the model words it for the user.
+(the price, the balance, when it resets) and say plainly what each option is, and
+the model words it for the user. They carry no list of cheaper checks and make no
+extra API call: a cheaper check is the user's choice, and the model is told so.
 
 The API bodies below are in the API's exact shape, with invented values.
 """
@@ -211,9 +212,6 @@ def test_too_few_sources_says_nothing_was_charged_once(monkeypatch):
 
 # ── out of credits ───────────────────────────────────────────────────
 
-# The real `_price_list`, before the suite-wide stub replaces it.
-REAL_PRICE_LIST = server._price_list
-
 RESETS = '2026-12-01T00:00:00+00:00'
 
 
@@ -233,28 +231,17 @@ def _no_credits(**fields):
     return ApiResponse(status=402, data=body)
 
 
-def _usage(credits=7, low=5, assess=1, citation=1):
-    return ApiResponse(
-        status=200,
-        data={
-            'plan': 'free',
-            'plan_label': 'Free',
-            'credits': {'total': 100, 'used': 100 - credits, 'remaining': credits, 'extra': 0, 'resets_at': RESETS},
-            'costs': {'verify': 10, 'assess': assess, 'ask': 1, 'citation': citation, 'extract': 0},
-            'cost_options': {'verify': {'depth': {'standard': 10, 'low': low}}},
-        },
-    )
-
-
 @pytest.fixture
-def price_list(monkeypatch):
-    """The real price-list lookup, answered by a stubbed `GET /me/usage`."""
-    monkeypatch.setattr(server, '_price_list', REAL_PRICE_LIST)
+def no_usage_read(monkeypatch):
+    """`GET /me/usage` fails the test if a refusal reaches for it."""
+    calls = []
 
-    def answer(response):
-        return _patch_api(monkeypatch, 'me_usage', response)
+    async def _forbidden(*args, **kwargs):
+        calls.append(args)
+        raise AssertionError('a refusal must not read the usage endpoint')
 
-    return answer
+    monkeypatch.setattr(client, 'me_usage', _forbidden)
+    return calls
 
 
 @pytest.fixture
@@ -272,15 +259,49 @@ def test_out_of_credits_forwards_the_facts_and_names_the_options(monkeypatch):
     assert out['credits_remaining'] == 0
     assert out['resets_at'] == RESETS
     assert out['manage_url'] == PLANS
-    assert out['message'].startswith('Out of Lenz credits: this call costs 10 and the account has 0.')
-    assert '1 December 2026' in out['message']
+    assert (
+        out['message']
+        == 'Out of Lenz credits: this call costs 10 and the account has 0. Monthly credits renew on 1 December 2026.'
+    )
     step = out['next_step']
-    assert 'was not charged' in step or 'nothing was charged' in step
+    assert 'nothing was charged' in step
     # The link is named for what it is, and as something for the user.
     assert '`manage_url`' in step and 'add credits or change plan' in step and 'give' in step
     assert 'monthly credits renew on the date in the message' in step
     assert 'refused again' in step
     assert 'balance_covers' not in out
+
+
+def test_a_cheaper_check_is_the_users_choice_on_every_refusal(monkeypatch):
+    """The model already knows the prices; what it must not do is spend the
+    user's last credits on a smaller check nobody chose. Stated as a rule with no
+    price and no call to make, so it fits a deep check, a batch and a citation check."""
+    _patch_api(monkeypatch, 'verify', _no_credits(credits_remaining=7))
+
+    out = _run(server.verify_claim('Acme was founded in 1999.', _ctx()))
+
+    assert server.QUOTA_CHEAPER_IS_THE_USERS in out['next_step']
+    rule = server.QUOTA_CHEAPER_IS_THE_USERS
+    assert "the user's choice" in rule and 'only when the user says yes' in rule
+    assert not any(ch.isdigit() for ch in rule)
+    for recipe in ('`', 'depth', 'verify_claim', 'assess_claim', 'check_citations', 'max_citations'):
+        assert recipe not in rule, recipe
+
+
+def test_a_short_balance_states_the_numbers_and_nothing_about_what_it_covers(monkeypatch, no_usage_read):
+    """7 credits against a call that costs 10: the refusal says so, and that is all.
+    The model works out what 7 credits buy from the prices it already has."""
+    _patch_api(monkeypatch, 'verify', _no_credits(credits_remaining=7))
+
+    out = _run(server.verify_claim('Acme was founded in 1999.', _ctx()))
+
+    assert no_usage_read == []
+    assert out['message'] == (
+        'Not enough Lenz credits: this call costs 10 and the account has 7. Monthly credits renew on 1 December 2026.'
+    )
+    assert out['credits_remaining'] == 7
+    assert 'balance_covers' not in out
+    assert 'still pay for' not in out['message'] and 'balance_covers' not in out['next_step']
 
 
 def test_chatgpt_gets_the_facts_but_no_link_and_no_call_to_buy(monkeypatch, chatgpt):
@@ -295,63 +316,22 @@ def test_chatgpt_gets_the_facts_but_no_link_and_no_call_to_buy(monkeypatch, chat
     for commercial in ('manage_url', 'plan', 'buy', 'purchase', 'upgrade', 'add credits', 'http'):
         assert commercial not in text, commercial
     assert 'monthly credits renew on the date in the message' in out['next_step']
+    assert server.QUOTA_CHEAPER_IS_THE_USERS in out['next_step']
 
 
-def test_a_short_balance_says_what_it_still_covers_from_the_live_prices(monkeypatch, price_list):
-    """7 credits do not pay for a standard deep check but do pay for a low one
-    and for quick checks. The prices come from the API, never from the connector."""
-    _patch_api(monkeypatch, 'verify', _no_credits(credits_remaining=7))
-    usage = price_list(_usage(credits=7, low=5, assess=1))
-
-    out = _run(server.verify_claim('Acme was founded in 1999.', _ctx()))
-
-    assert usage, 'the price list is read on a refusal that leaves something to spend'
-    covers = {c['check']: c for c in out['balance_covers']}
-    assert covers['deep check at depth "low"']['cost_each'] == 5
-    assert covers['deep check at depth "low"']['count'] == 1
-    assert covers['quick check of one claim']['cost_each'] == 1
-    assert covers['quick check of one claim']['count'] == 7
-    assert out['message'].startswith('Not enough Lenz credits: this call costs 10 and the account has 7.')
-    assert 'depth "low"' in out['message']
-    assert '`balance_covers`' in out['next_step']
-
-
-def test_what_the_balance_covers_follows_the_api_prices(monkeypatch, price_list):
-    _patch_api(monkeypatch, 'verify', _no_credits(credits_remaining=7))
-    price_list(_usage(credits=7, low=3, assess=2))
+def test_a_refusal_without_a_renewal_date_in_its_body_leaves_the_date_out(monkeypatch, no_usage_read):
+    """The date comes from the 402 and from nowhere else: no body date, no date, no call."""
+    body = _no_credits(credits_remaining=7).data
+    del body['resets_at']
+    _patch_api(monkeypatch, 'verify', ApiResponse(status=402, data=body))
 
     out = _run(server.verify_claim('x', _ctx()))
 
-    covers = {c['check']: c for c in out['balance_covers']}
-    assert covers['deep check at depth "low"']['count'] == 2
-    assert covers['quick check of one claim']['count'] == 3
-
-
-def test_a_low_depth_refusal_does_not_offer_low_depth_again(monkeypatch, price_list):
-    _patch_api(monkeypatch, 'verify', _no_credits(credits_remaining=3, cost=5))
-    price_list(_usage(credits=3))
-
-    out = _run(server.verify_claim('x', _ctx(), depth='low'))
-
-    assert [c['check'] for c in out['balance_covers']] == ['quick check of one claim']
-
-
-def test_an_empty_balance_never_reads_the_price_list(monkeypatch, price_list):
-    _patch_api(monkeypatch, 'verify', _no_credits())
-    usage = price_list(_usage(credits=0))
-    _run(server.verify_claim('x', _ctx()))
-    assert usage == []
-
-
-def test_a_price_list_that_cannot_be_read_leaves_the_facts(monkeypatch, price_list):
-    _patch_api(monkeypatch, 'verify', _no_credits(credits_remaining=7))
-    price_list(ApiResponse(status=0, data={}))
-
-    out = _run(server.verify_claim('x', _ctx()))
-
-    assert out['status'] == 'quota_exhausted'
-    assert out['credits_remaining'] == 7
-    assert 'balance_covers' not in out
+    assert no_usage_read == []
+    assert 'resets_at' not in out
+    assert 'renew' not in out['message'] and 'renew' not in out['next_step']
+    assert out['message'] == 'Not enough Lenz credits: this call costs 10 and the account has 7.'
+    assert server.QUOTA_CHEAPER_IS_THE_USERS in out['next_step']
 
 
 def test_several_deep_checks_report_the_whole_price(monkeypatch):
@@ -365,58 +345,50 @@ def test_several_deep_checks_report_the_whole_price(monkeypatch):
     assert out['requested'] == 3
     assert 'costs 30' in out['message']
     assert '10 for each of 3' in out['message']
+    assert server.QUOTA_CHEAPER_IS_THE_USERS in out['next_step']
 
 
-def test_a_quick_check_list_says_how_many_of_its_claims_the_balance_covers(monkeypatch, price_list):
+def test_a_quick_check_list_gives_its_size_and_price_and_no_list_of_options(monkeypatch, no_usage_read):
     body = {'detail': 'Insufficient /assess quota for 3 claims.', 'requested': 3, 'remaining': 2}
     _patch_api(monkeypatch, 'assess', _no_credits(**body, credits_remaining=2, cost=3))
-    usage = price_list(_usage(credits=2))
 
     out = _run(server.assess_claim('', _ctx(), claims=['a', 'b', 'c']))
 
-    assert usage == [], 'the 402 body alone prices a quick check'
-    assert out['balance_covers'] == [
-        {'check': 'claims of this call', 'cost_each': 1, 'count': 2, 'how': 'send fewer claims in the same call'}
-    ]
-    assert '2 of the 3 claims' in out['message']
+    assert no_usage_read == []
+    assert out['message'] == (
+        'Not enough Lenz credits: this call costs 3 (1 for each of 3 claims) and the account has 2. '
+        'Monthly credits renew on 1 December 2026.'
+    )
+    assert out['requested'] == 3
+    assert 'balance_covers' not in out
+    assert server.QUOTA_CHEAPER_IS_THE_USERS in out['next_step']
 
 
-def test_a_deep_check_selection_says_how_many_picks_the_balance_covers(monkeypatch, price_list):
+def test_a_deep_check_selection_gives_its_price_and_no_list_of_options(monkeypatch, no_usage_read):
     body = {'detail': 'Insufficient credits for selection.', 'requested': 2, 'remaining': 1}
     _patch_api(monkeypatch, 'select', _no_credits(**body, credits_remaining=12, cost=20))
-    price_list(_usage(credits=12))
 
     out = _run(server.select_claims('a' * 32, ['first', 'second'], _ctx()))
 
-    covers = {c['check']: c for c in out['balance_covers']}
-    assert covers['claims of this call']['count'] == 1
-    assert covers['deep check at depth "low"']['count'] == 2
+    assert no_usage_read == []
+    assert out['cost'] == 20 and out['requested'] == 2 and out['credits_remaining'] == 12
+    assert 'balance_covers' not in out
+    assert server.QUOTA_CHEAPER_IS_THE_USERS in out['next_step']
 
 
-def test_a_signed_in_caller_reads_the_price_list_with_the_usage_permission(monkeypatch, price_list):
-    """The tool's own credential carries only the tool's permissions; the
-    lookup asks for the one `check_usage` asks for."""
-    _signed_in(monkeypatch)
-    seen = []
-
-    async def _me_usage(authorization):
-        seen.append(authorization)
-        return _usage(credits=7)
-
-    monkeypatch.setattr(client, 'me_usage', _me_usage)
-
-    prices = _run(REAL_PRICE_LIST(_ctx()))
-
-    assert prices['costs']['assess'] == 1
-    assert isinstance(seen[0], exchange.CallCredential)
-    assert seen[0].scopes == exchange.scopes_for('check_usage')
-
-
-def test_a_successful_call_reads_no_price_list(monkeypatch, price_list):
-    _patch_api(monkeypatch, 'assess', ApiResponse(status=200, data={'failure': None, 'claims': [], 'more_claims': []}))
-    usage = price_list(_usage())
+@pytest.mark.parametrize('balance', [0, 7])
+def test_no_refusal_reads_the_usage_endpoint(monkeypatch, no_usage_read, balance):
+    _patch_api(monkeypatch, 'verify', _no_credits(credits_remaining=balance))
+    _run(server.verify_claim('x', _ctx()))
+    _patch_api(monkeypatch, 'assess', _no_credits(credits_remaining=balance, cost=1))
     _run(server.assess_claim('x', _ctx()))
-    assert usage == []
+    assert no_usage_read == []
+
+
+def test_a_successful_call_reads_no_usage(monkeypatch, no_usage_read):
+    _patch_api(monkeypatch, 'assess', ApiResponse(status=200, data={'failure': None, 'claims': [], 'more_claims': []}))
+    _run(server.assess_claim('x', _ctx()))
+    assert no_usage_read == []
 
 
 # ── a citation check short of credits ────────────────────────────────
@@ -486,43 +458,48 @@ def _pairs():
     return [server.CitationPair(**p) for p in PAIRS]
 
 
-def test_a_citation_check_short_of_credits_reads_as_a_credit_problem(monkeypatch, price_list):
+def test_a_citation_check_short_of_credits_reads_as_a_credit_problem(monkeypatch, no_usage_read):
     """It used to come back as a failed check of the input, "the same input sent
-    again returns this same result for a day": wrong on both counts. It is the
-    same refusal as every other tool's, with the numbers and the link."""
+    again returns this same result for a day": wrong on both counts. It is a
+    refusal for credits, with the link and the citations that were not checked.
+    The record states neither the balance nor a renewal date, so the result
+    says what happened when it was submitted and asks the API for nothing."""
     _patch_api(monkeypatch, 'citecheck', ApiResponse(status=202, data={'citecheck_id': 'ab12cd34', 'status': 'queued'}))
     _patch_api(monkeypatch, 'citecheck_status', _short_citecheck())
-    price_list(_usage(credits=2, citation=1))
 
     out = _run(server.check_citations('', _ctx(), pairs=_pairs()))
 
+    assert no_usage_read == []
     assert out['status'] == 'quota_exhausted'
     assert out['citecheck_id'] == 'ab12cd34'
-    assert out['cost'] == 3
     assert out['requested'] == 3
-    assert out['credits_remaining'] == 2
-    assert out['resets_at'] == RESETS
+    assert 'credits_remaining' not in out and 'cost' not in out and 'resets_at' not in out
     assert out['manage_url'] == config.PLANS_URL
-    assert out['message'].startswith(
-        'Not enough Lenz credits: this call costs 3 (1 for each of 3 citations) and the account has 2.'
+    assert out['message'] == (
+        'This citation check did not run: the balance did not cover its 3 citations when it was submitted.'
     )
-    assert '2 of the 3 citations' in out['message']
-    assert out['balance_covers'][0]['count'] == 2
+    step = out['next_step']
+    assert step.startswith('Nothing was charged. Tell the user what was not checked and why')
+    assert '`manage_url`' in step and 'give the user that link' in step
+    assert server.QUOTA_CHEAPER_IS_THE_USERS in step
+    assert 'renew' not in step and 'refused again' not in step
     # Nothing about the input being wrong, and nothing about replay.
-    text = f'{out["message"]} {out["next_step"]}'
+    text = f'{out["message"]} {step}'
     assert 'day' not in text and 'change the input' not in text
     assert 'failure_class' not in out
+    assert 'balance_covers' not in out
     assert [row['statement'] for row in out['not_checked']] == [p['statement'] for p in PAIRS]
 
 
-def test_a_citation_check_short_of_credits_without_the_price_list_still_says_so(monkeypatch, price_list):
+def test_a_citation_check_short_of_credits_read_back_later_makes_no_usage_call(monkeypatch, no_usage_read):
     _patch_api(monkeypatch, 'citecheck_status', _short_citecheck())
-    price_list(ApiResponse(status=0, data={}))
 
     out = _run(server.get_citation_check('ab12cd34', _ctx()))
 
+    assert no_usage_read == []
     assert out['status'] == 'quota_exhausted'
     assert 'did not cover its 3 citations' in out['message']
+    assert 'when it was submitted' in out['message']
     # The balance now is unknown: neither "out of" nor "not enough" can be said of it.
     assert 'Out of' not in out['message'] and 'Not enough' not in out['message']
 
@@ -550,47 +527,18 @@ def test_a_citation_check_with_no_credits_at_all_gives_the_numbers(monkeypatch):
     assert out['manage_url'] == PLANS
 
 
-def test_a_citation_check_short_of_credits_gives_chatgpt_no_link(monkeypatch, chatgpt, price_list):
+def test_a_citation_check_short_of_credits_gives_chatgpt_no_link(monkeypatch, chatgpt, no_usage_read):
     _patch_api(monkeypatch, 'citecheck_status', _short_citecheck())
-    price_list(_usage(credits=2))
     out = _run(server.get_citation_check('ab12cd34', _ctx()))
     assert 'manage_url' not in out
-    assert 'plan' not in out['next_step']
-
-
-def test_a_citation_shortfall_read_after_a_top_up_does_not_claim_the_balance_is_short(monkeypatch, price_list):
-    """The check ran short when it was submitted; the balance read now covers it.
-    The result must not say the account lacks credits it has, and says nothing
-    about whether the same input would run again."""
-    _patch_api(monkeypatch, 'citecheck_status', _short_citecheck())
-    price_list(_usage(credits=100))
-
-    out = _run(server.get_citation_check('ab12cd34', _ctx()))
-
-    assert out['status'] == 'quota_exhausted'
-    assert 'Not enough' not in out['message'] and 'Out of' not in out['message']
-    assert 'which cover it' in out['message']
-    assert 'balance_covers' not in out
-    assert 'refused again' not in out['next_step']
-    assert 'day' not in out['next_step']
+    assert 'plan' not in out['next_step'] and 'manage_url' not in out['next_step']
+    assert server.QUOTA_CHEAPER_IS_THE_USERS in out['next_step']
 
 
 def test_a_refused_sign_in_at_the_exchange_is_told_to_reconnect():
     """The exchange runs only for a signed-in caller, so its refusal never talks about keys."""
     out = server._exchange_failure_result(exchange.ExchangeFailed('reauth', 'invalid_grant'))
     assert out == {'status': 'auth_required', 'message': server.OAUTH_REAUTH_MESSAGE}
-
-
-def test_a_citation_shortfall_read_without_a_balance_speaks_of_when_it_was_submitted(monkeypatch, price_list):
-    """With no balance to read now, the result says what happened then, and
-    predicts nothing about a retry: the balance may have changed since."""
-    _patch_api(monkeypatch, 'citecheck_status', _short_citecheck())
-    price_list(ApiResponse(status=0, data={}))
-
-    out = _run(server.get_citation_check('ab12cd34', _ctx()))
-
-    assert 'when it was submitted' in out['message']
-    assert 'refused again' not in out['next_step']
 
 
 def test_a_running_check_is_not_said_to_be_charged_already():

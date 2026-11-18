@@ -2564,9 +2564,7 @@ def test_verify_claim_batch_validation_and_single_item_unwrapping(monkeypatch):
 
 def test_verify_claim_batch_handles_per_item_402_without_me_usage(monkeypatch):
     """Per-item 402 responses return `quota_exhausted` when 0 claims start and
-    `partial` with `unstarted_claims` when some start, without a balance read
-    before the submissions. (A refusal's own price-list lookup is stubbed for the
-    whole suite and tested in `test_refusals.py`.)"""
+    `partial` with `unstarted_claims` when some start, without calling `me_usage`."""
     me_usage_called = False
 
     async def _forbid_me_usage(_auth):
