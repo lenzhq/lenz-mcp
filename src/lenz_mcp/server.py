@@ -862,25 +862,35 @@ def _quota_message(data: dict[str, Any]) -> str:
     than sent as null, so absence is the signal to fall back.
     """
     cost = _int(data.get('cost'))
+    per_citation = _int(data.get('cost_per_citation'))
     remaining = _int(data.get('credits_remaining'))
     requested = _int(data.get('requested'))
-    price = f'{cost:,}' if cost is not None else ''
-    if cost is not None and requested is not None and requested > 1 and cost % requested == 0:
-        price = f'{cost:,} ({cost // requested:,} for each of {requested:,} claims)'
+    noun = _quota_noun(data)
+    price = None
+    if cost is not None:
+        price = f'this call costs {cost:,}'
+        if requested is not None and requested > 1 and cost % requested == 0:
+            price += f' ({cost // requested:,} for each of {requested:,} {noun})'
+    elif per_citation is not None:
+        price = f'each citation checked costs {per_citation:,}'
     # "Out of" only when the balance really is empty. A 402 also fires when a
     # balance is non-zero but too small for THIS call (a 10-credit verify on 3
     # credits), and "Out of Lenz credits: the account has 3." contradicts
     # itself.
     if remaining is not None and remaining > 0:
-        if cost is not None:
-            text = f'Not enough Lenz credits: this call costs {price} and the account has {remaining:,}.'
+        if price:
+            text = f'Not enough Lenz credits: {price} and the account has {remaining:,}.'
         else:
             text = f'Not enough Lenz credits: the account has {remaining:,}.'
+    elif remaining is not None and price:
+        text = f'Out of Lenz credits: {price} and the account has 0.'
+    # A call the balance did not cover, with the balance unknown: "Out of"
+    # would claim an empty balance nobody stated.
+    elif requested is not None:
+        text = f'Not enough Lenz credits: {price}.' if price else 'Not enough Lenz credits for this call.'
     # Empty balance, or no usable numbers in the body. The generic sentence
     # beats echoing `detail`, which is the jargon this function exists to keep
     # out — including on the legacy-403 path, where `detail` is all there is.
-    elif remaining is not None and cost is not None:
-        text = f'Out of Lenz credits: this call costs {price} and the account has 0.'
     else:
         text = 'Out of Lenz credits for this call.'
     resets = _resets_on(data.get('resets_at'))
@@ -891,6 +901,11 @@ def _quota_message(data: dict[str, Any]) -> str:
         listed = '; '.join(_covers_phrase(c, requested) for c in covers)
         text += f' The {remaining:,} credits left still pay for: {listed}.'
     return text
+
+
+def _quota_noun(result: dict[str, Any]) -> str:
+    """What a refused call's ``requested`` counts."""
+    return 'citations' if 'citecheck_id' in result or 'cost_per_citation' in result else 'claims'
 
 
 def _covers_phrase(entry: dict[str, Any], requested: int | None) -> str:
@@ -947,7 +962,7 @@ def _quota_exhausted(data: dict[str, Any]) -> dict[str, Any]:
     over the SDK needs the actionable destination, and no policy covers them.
     """
     result: dict[str, Any] = {'status': 'quota_exhausted', 'message': ''}
-    for key in ('cost', 'credits_remaining', 'requested'):
+    for key in ('cost', 'cost_per_citation', 'credits_remaining', 'requested'):
         if _int(data.get(key)) is not None:
             result[key] = data[key]
     if isinstance(data.get('resets_at'), str) and data['resets_at']:
@@ -1048,7 +1063,11 @@ async def _with_balance_options(result: dict[str, Any], tool: str, ctx: Context,
     cost = _int(result.get('cost'))
     if balance and requested and requested > 1 and cost and cost % requested == 0:
         noun = 'citations' if capability == 'citation' else 'claims'
-        how = 'pass fewer citations' if capability == 'citation' else 'send fewer claims in the same call'
+        how = (
+            '`check_citations` with fewer pairs, or `max_citations` on a text'
+            if capability == 'citation'
+            else 'send fewer claims in the same call'
+        )
         covers += _covers(f'{noun} of this call', cost // requested, balance, how, ceiling=requested - 1)
     if balance and capability == 'verify':
         if kwargs.get('depth') != 'low':
@@ -1058,7 +1077,10 @@ async def _with_balance_options(result: dict[str, Any], tool: str, ctx: Context,
             )
         covers += _covers('quick check of one claim', _int(costs.get('assess')), balance, '`assess_claim`')
     if balance and capability == 'citation' and not covers:
-        covers += _covers('citations', _int(costs.get('citation')), balance, '`check_citations` with fewer citations')
+        per_citation = _int(costs.get('citation')) or _int(result.get('cost_per_citation'))
+        covers += _covers(
+            'citations', per_citation, balance, '`check_citations` with fewer pairs, or `max_citations` on a text'
+        )
     if covers:
         result['balance_covers'] = covers
     _word_quota(result)
@@ -3281,6 +3303,8 @@ def _finished_citecheck(data: dict[str, Any], citecheck_id: str, offset: int = 0
             'more_citations': _more_citations(data, offset, always=True),
             'source': 'Lenz citation check',
         }
+    if data.get('status') == 'failed' and _failure_code(_failure_block(data)) == 'insufficient_credits':
+        return _citecheck_short_of_credits(data, citecheck_id)
     rows = [_citation_row(r) for r in data.get('citations') or [] if isinstance(r, dict)]
     issues = [_citation_issue_row(r) for r in data.get('citation_issues') or [] if isinstance(r, dict)]
     credits = _dict(data.get('credits'))
@@ -3411,6 +3435,43 @@ def _stated_wait(data: dict[str, Any], resp: client.ApiResponse, default: int) -
     return default
 
 
+def _citecheck_quota_body(data: dict[str, Any]) -> dict[str, Any]:
+    """A citation check's 402 in the fields every out-of-credits result reads.
+
+    The API states the balance as ``remaining`` here (citations left, at one
+    credit each, so the same number as the credits), and its ``cost`` prices
+    ONE citation: the refused check was never sized, so the price stays per
+    citation rather than reading as the whole call's.
+    """
+    body = dict(data)
+    if _int(body.get('credits_remaining')) is None and _int(body.get('remaining')) is not None:
+        body['credits_remaining'] = body['remaining']
+    if _int(body.get('cost')) is not None and _int(body.get('requested')) is None:
+        body['cost_per_citation'] = body.pop('cost')
+    return body
+
+
+def _citecheck_short_of_credits(data: dict[str, Any], citecheck_id: str) -> dict[str, Any]:
+    """A check the balance did not cover, as the same refusal every tool gives.
+
+    The API ends such a check as ``failed`` with ``insufficient_credits``, after
+    it counted the citations, and charges nothing. It is a credit problem, not a
+    problem with the input, so it is not worded as a failed check: the price is
+    the citations it counted, and the balance and reset date come from the price
+    list (``_with_balance_options``), since this body states neither.
+    """
+    selected = _int(_citecheck_summary(data).get('citations_selected'))
+    result = _quota_exhausted({'requested': selected} if selected else {})
+    result['citecheck_id'] = citecheck_id
+    result['not_checked'] = [
+        {key: row[key] for key in ('index', 'reference', 'statement') if row.get(key) is not None}
+        for row in data.get('citations') or []
+        if isinstance(row, dict)
+    ]
+    _word_quota(result)
+    return result
+
+
 def _citecheck_submit_error(resp: client.ApiResponse) -> dict[str, Any]:
     """A start that was refused, as a tool result."""
     status, data = resp.status, resp.data
@@ -3418,6 +3479,8 @@ def _citecheck_submit_error(resp: client.ApiResponse) -> dict[str, Any]:
     detail = data.get('detail') if isinstance(data.get('detail'), str) and data.get('detail') else None
     if status == 0:
         return {'status': 'error', 'message': CITECHECK_UNREACHABLE}
+    if status == 402:
+        return _quota_exhausted(_citecheck_quota_body(data))
     if status == 422:
         out = {'status': 'invalid_request', 'message': detail or 'The request was invalid.'}
         if code:
