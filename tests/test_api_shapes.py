@@ -326,8 +326,9 @@ CHANGED_SINCE_THE_ORACLE: dict[str, dict[str, Any]] = {
             'This call did not run and nothing was charged; any check already started keeps running and its '
             'result still arrives. Tell the user what was not checked and why, and what they can do: '
             '`manage_url` is the page where the user can add credits or change plan, so give the user that '
-            'link; monthly credits renew on the date in the message. The same call made again before the '
-            'balance changes is refused again.'
+            'link; monthly credits renew on the date in the message. A cheaper or smaller check than the one '
+            "the user asked for is the user's choice: offer it if it helps, and run it only when the user "
+            'says yes. The same call made again before the balance changes is refused again.'
         ),
     },
 }

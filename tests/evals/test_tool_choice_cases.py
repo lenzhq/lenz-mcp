@@ -364,22 +364,30 @@ def _case(case_id):
 
 
 def test_the_out_of_credits_histories_carry_what_their_replies_are_judged_on():
-    """A reply can only give the user what the result gave the model."""
+    """A reply can only give the user what the result gave the model: the cost and
+    balance, the renewal date, and where there is one the link. It carries no list
+    of cheaper checks to run."""
     with_link = cases.DEEP_CHECK_REFUSED[-1].result
     without_link = cases.DEEP_CHECK_REFUSED_OPENAI[-1].result
     for result in (with_link, without_link):
         assert result['status'] == 'quota_exhausted'
         assert result['resets_at']
-        assert {c['check'] for c in result['balance_covers']} >= {'deep check at depth "low"'}
+        assert result['cost'] == 10 and result['credits_remaining'] == 7
+        assert 'balance_covers' not in result
+        assert 'how' not in str(result)
+        assert 'Monthly credits renew on 1 December 2026' in result['message']
+        assert "the user's choice" in result['next_step']
     assert cases._PLANS_PAGE in with_link['manage_url']
     assert 'manage_url' not in without_link
     assert cases._PLANS_PAGE not in str(without_link)
 
 
 GOOD_WALL_REPLY = (
-    "Lenz couldn't run that deep check: it costs 10 credits and you have 7. Your credits reset on "
-    'December 1, 2026. You can add credits at https://lenz.io/plans?wall=x, or I can run a lower-depth '
-    'deep check for 5 credits now.'
+    "Lenz couldn't run that deep check: it costs 10 credits and you have 7. Your credits renew on "
+    'December 1, 2026. You can add credits at https://lenz.io/plans?wall=x.'
+)
+NO_LINK_REPLY = (
+    "Lenz couldn't run that deep check: it costs 10 credits and you have 7. Your credits renew on December 1, 2026."
 )
 
 
@@ -387,15 +395,24 @@ GOOD_WALL_REPLY = (
     ('reply', 'with_link', 'without_link'),
     [
         (GOOD_WALL_REPLY, True, False),
-        (GOOD_WALL_REPLY.replace(' You can add credits at https://lenz.io/plans?wall=x, or', ' Or'), False, True),
+        (NO_LINK_REPLY, False, True),
+        # An offer of a cheaper check is allowed, and not required.
+        (NO_LINK_REPLY + ' I can run a quick check instead if you want.', False, True),
+        (GOOD_WALL_REPLY + ' A lower-depth deep check would also fit; want me to run it?', True, False),
+        # The date is required.
         (GOOD_WALL_REPLY.replace('December 1, 2026', 'next month'), False, False),
-        (GOOD_WALL_REPLY.replace('a lower-depth deep check for 5 credits now', 'nothing else'), False, False),
-        ('Out of credits. Credits reset on 1 Dec. A quick check of the claim still fits.', False, True),
-        # "below" and "allow" are not a cheaper check.
+        # Saying the check did not run is required: the price and the balance alone do not.
+        ('A deep check costs 10 credits; you have 7. Credits renew on 1 December 2026.', False, False),
+        # Other ways to say it did not run, or why.
+        ("I wasn't able to run that. Credits renew on 1 Dec 2026.", False, True),
+        ('That check did not run. Credits renew on 2026-12-01.', False, True),
+        ('You do not have enough credits for a deep check. Credits renew on 1 December 2026.', False, True),
+        ('The deep check didn\u2019t go through. Credits renew on 1 December 2026.', False, True),
+        # "below" and "allow" are not a refusal.
         ('You are below the balance this needs; your plan does not allow it until 2026-12-01.', False, False),
     ],
 )
-def test_the_out_of_credits_replies_are_judged_on_link_date_and_option(reply, with_link, without_link):
+def test_the_out_of_credits_replies_are_judged_on_not_run_date_and_link(reply, with_link, without_link):
     assert _case('out-of-credits-gives-the-way-forward').reply(reply) is with_link
     assert _case('out-of-credits-without-a-link').reply(reply) is without_link
 
@@ -403,9 +420,9 @@ def test_the_out_of_credits_replies_are_judged_on_link_date_and_option(reply, wi
 @pytest.mark.parametrize(
     'reply',
     [
-        'Buy more credits. Your credits reset on 1 December 2026. A quick check is available now.',
-        'You can upgrade your plan; credits reset on 1 December 2026, or I can run a quick check.',
-        'Credits reset on 1 December 2026; top up at https://example.org/billing or try a quick check.',
+        "I couldn't run that. Buy more credits. Your credits renew on 1 December 2026.",
+        "I couldn't run it; you can upgrade your plan, and credits renew on 1 December 2026.",
+        "I couldn't run it; top up at https://example.org/billing. Credits renew on 1 December 2026.",
     ],
 )
 def test_the_reply_without_a_link_also_carries_no_call_to_buy(reply):
@@ -413,11 +430,35 @@ def test_the_reply_without_a_link_also_carries_no_call_to_buy(reply):
 
 
 def test_a_reset_date_in_another_year_is_not_the_reset_date():
-    text = 'Your credits reset on December 1, 2027. A quick check still fits.'
+    text = "I couldn't run it. Your credits renew on December 1, 2027."
     assert _case('out-of-credits-without-a-link').reply(text) is False
     assert _case('out-of-credits-without-a-link').reply(text.replace('2027', '2026')) is True
 
 
-def test_a_paraphrased_cheaper_check_counts():
-    text = 'Your credits reset on 1 December 2026. A shallow investigation costing 5 credits still fits.'
-    assert _case('out-of-credits-without-a-link').reply(text) is True
+@pytest.mark.parametrize('tool', ['verify_claim', 'assess_claim'])
+def test_a_check_run_on_its_own_after_the_refusal_fails_whatever_the_reply_says(tool):
+    from types import SimpleNamespace
+
+    from evals.tool_choice import scoring
+
+    call = SimpleNamespace(name=tool, arguments={'claim': 'x', 'text': 'x'}, batches=())
+    for case_id, reply in (
+        ('out-of-credits-gives-the-way-forward', GOOD_WALL_REPLY),
+        ('out-of-credits-without-a-link', NO_LINK_REPLY),
+    ):
+        turn = SimpleNamespace(calls=[call], text=reply, batches=())
+        ok, note = scoring.judge(_case(case_id), turn)
+        assert not ok and tool in note
+
+
+def test_a_reply_that_says_it_all_and_calls_nothing_passes():
+    from types import SimpleNamespace
+
+    from evals.tool_choice import scoring
+
+    for case_id, reply in (
+        ('out-of-credits-gives-the-way-forward', GOOD_WALL_REPLY),
+        ('out-of-credits-without-a-link', NO_LINK_REPLY),
+    ):
+        ok, _ = scoring.judge(_case(case_id), SimpleNamespace(calls=[], text=reply, batches=()))
+        assert ok

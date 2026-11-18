@@ -564,8 +564,10 @@ QUICK_GERMAN_LOW = _quick(
 _SHORT_BALANCE = real.usage_result(50)
 
 # A deep check the balance did not cover: the user asked for it, the API refused
-# it, and the refusal is the last thing in the conversation. The balance covers a
-# cheaper check, so the result lists options; the OpenAI variant has no link.
+# it, and the refusal is the last thing in the conversation. The balance would
+# cover a cheaper check, which the result does not list: that is the user's
+# choice to make, and the case judges that the model does not make it. The OpenAI
+# variant has no link.
 _WALL_CLAIM = 'The Halden Systems headquarters moved to Rotterdam in 2019.'
 
 
@@ -610,19 +612,23 @@ _CALL_TO_BUY = re.compile(
 )
 
 
-# A cheaper way to run it, as the result lists: the deep check at a lower depth,
-# or the quick check.
-_CHEAPER_CHECK = re.compile(
-    r'\b(?:low|lower|lighter|shallow|shallower|cheaper|smaller|reduced)\b[^.\n]{0,40}'
-    r'\b(?:depth|check|verification|version|pass|research|investigation)\b'
-    r'|\bdepth\b[^.\n]{0,20}\blow\b'
-    r'|\bquick(?:er)?\s+(?:check|read|first read|verdict|assessment)\b',
+# The reply says the check did not run: said outright, or as the shortfall that
+# stopped it. A reply that only quotes the price and the balance does not say it.
+_NOT_RUN = re.compile(
+    r"\b(?:did(?:n't| not)|could(?:n't| not)|can(?:'t|not)|won't|wasn't|was not|weren't|were not|hasn't|has not"
+    r"|haven't|have not|unable to|not able to)\b[^.\n]{0,40}?"
+    r'\b(?:run|ran|start(?:ed)?|go through|went through|complete(?:d)?|checked?|perform(?:ed)?|carry out|carried out'
+    r'|proceed|process(?:ed)?|execute[d]?)\b'
+    r'|\bnot (?:been )?(?:run|checked|started)\b|\bno (?:deep )?check (?:was|has been) (?:run|made|done|started)\b'
+    r'|\b(?:refused|declined|rejected|blocked)\b'
+    r'|\bnot enough (?:lenz )?credits|\bout of (?:lenz )?credits|\binsufficient (?:lenz )?credits'
+    r"|\bshort (?:of|on) credits|\b(?:don't|do not|doesn't|does not) (?:have enough|cover)\b",
     re.IGNORECASE,
 )
 
 
-def _offers_what_the_balance_covers(text: str) -> bool:
-    return bool(_CHEAPER_CHECK.search(text))
+def _says_it_did_not_run(text: str) -> bool:
+    return bool(_NOT_RUN.search(text.replace('\u2019', "'")))
 
 
 # Where the user adds credits, as the result gives it (scheme and query aside).
@@ -1397,12 +1403,14 @@ CASES: tuple[Case, ...] = (
         history=DEEP_CHECK_REFUSED,
         prompt='',
         expect=NONE,
-        reply=lambda text: _PLANS_PAGE in text and _names_the_reset(text) and _offers_what_the_balance_covers(text),
+        forbid=('verify_claim', 'assess_claim'),
+        reply=lambda text: _says_it_did_not_run(text) and _names_the_reset(text) and _PLANS_PAGE in text,
         why=(
-            'A deep check the user asked for was refused for credits. The result carries the link '
-            'where the user adds credits, the date monthly credits renew and the cheaper checks the '
-            'balance still covers. The reply gives the user all three, and makes no call: the same '
-            'call is refused again, and a cheaper check spends credits the user has not agreed to.'
+            'A deep check the user asked for was refused for credits. The result carries the cost and '
+            'the balance, the link where the user adds credits and the date monthly credits renew, and '
+            "says a cheaper check is the user's choice. The reply tells the user the check did not "
+            'run, gives the date and the link, and makes no call: the same call is refused again, and '
+            'a cheaper check spends credits the user has not agreed to. Offering one is allowed.'
         ),
     ),
     Case(
@@ -1411,13 +1419,13 @@ CASES: tuple[Case, ...] = (
         history=DEEP_CHECK_REFUSED_OPENAI,
         prompt='',
         expect=NONE,
-        reply=lambda text: (
-            not _CALL_TO_BUY.search(text) and _names_the_reset(text) and _offers_what_the_balance_covers(text)
-        ),
+        forbid=('verify_claim', 'assess_claim'),
+        reply=lambda text: _says_it_did_not_run(text) and _names_the_reset(text) and not _CALL_TO_BUY.search(text),
         why=(
             'The same refusal as an OpenAI client gets it: no link to add credits, by the app '
-            'directory rules, but the same facts. The reply names the reset date and the cheaper '
-            'check, makes no call, and neither links to nor asks the user to buy anything.'
+            'directory rules, but the same facts. The reply tells the user the check did not run and '
+            'names the reset date, makes no call, and neither links to nor asks the user to buy '
+            'anything. Offering a cheaper check is allowed.'
         ),
     ),
     Case(
