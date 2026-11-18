@@ -1535,6 +1535,7 @@
       "confidence": null,
       "error": "no_claim",
       "hint": "This is a request to write something, not a statement that can be checked. Send a statement instead.",
+      "next_step": "This item was not checked and was not charged. Tell the user that Lenz checks factual claims, such as a fact, a figure, a date, a quote or an attribution; opinions, predictions, arithmetic, how programming code behaves and text with no checkable claim are outside what it can check. Ask them for a claim to check. Do not send the same text again unchanged. Restate the user's point as a claim only if the conversation makes clear what they mean: one claim as a statement, with what the conversation says it refers to and nothing else changed. Never make up a claim the user did not make.",
       "verdict": "Error"
      }
     ],
@@ -1548,6 +1549,7 @@
    "provenance": "hand-built (API body with no claims)",
    "toolResult": {
     "message": "No verifiable claim detected",
+    "next_step": "Nothing was checked and nothing was charged. Tell the user that Lenz checks factual claims, such as a fact, a figure, a date, a quote or an attribution; opinions, predictions, arithmetic, how programming code behaves and text with no checkable claim are outside what it can check. Ask them for a claim to check. Do not send the same text again unchanged. Restate the user's point as a claim only if the conversation makes clear what they mean: one claim as a statement, with what the conversation says it refers to and nothing else changed. Never make up a claim the user did not make.",
     "status": "no_claim"
    }
   },

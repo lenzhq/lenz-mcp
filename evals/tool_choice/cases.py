@@ -561,6 +561,46 @@ QUICK_GERMAN_LOW = _quick(
     'Prüfung mit Quellen starten?',
 )
 
+# A quick check of text with nothing checkable in it (an opinion): the user asked, the
+# tool answered with no rows, and that answer is the last thing in the conversation.
+_OPINION = 'Pineapple on pizza is a crime against food.'
+NO_CLAIM_FOUND = (
+    ('user', f'Check with Lenz: {_OPINION}'),
+    ToolExchange('assess_claim', {'claim': _OPINION}, real.assess_no_claim_result()),
+)
+
+# The reply says nothing was checked, in the ways a person would put it.
+_NOTHING_CHECKED = re.compile(
+    r'\bnothing (?:was|got|has been) (?:checked|verified|run)\b|\bnothing to (?:check|verify)\b'
+    r'|\bno (?:verifiable|checkable|factual) claims?\b|\bnot (?:a )?(?:verifiable|checkable|factual)\b'
+    r"|\b(?:wasn't|was not|isn't|is not|hasn't been|has not been|aren't|are not|can't be|cannot be|couldn't be|"
+    r'could not be) (?:\w+ ){0,2}?(?:checked|verified|fact-checked)\b'
+    r"|\b(?:didn't|did not|couldn't|could not|can't|cannot|unable to|not able to) (?:\w+ ){0,2}?(?:check|verify|find a claim)"
+    r'|\bnot checked\b|\bno check (?:was|has been) (?:run|made|done)\b|\bnot something (?:lenz|it|i) can (?:check|verify)\b'
+    r'|\boutside what (?:lenz|it) can check\b',
+    re.IGNORECASE,
+)
+# The reply names what Lenz can check (the instructions' own words)...
+_NAMES_WHAT_LENZ_CHECKS = re.compile(
+    r'\bfactual\b|\bfigures?\b|\bstatistics?\b|\bdates?\b|\bquot(?:e|es|ation|ations)\b|\battributions?\b',
+    re.IGNORECASE,
+)
+# ...or asks the user for one.
+_ASKS_FOR_A_CLAIM = re.compile(
+    r'\b(?:send|share|give|tell|paste|provide|name|pick|choose|ask)\b[^.?!\n]{0,60}?\b(?:claim|statement|fact)s?\b'
+    r'|\b(?:which|what|any|a) (?:specific |particular )?(?:factual )?(?:claim|statement|fact)s?\b[^.?!\n]{0,40}\?',
+    re.IGNORECASE,
+)
+
+
+def _says_nothing_was_checked(text: str) -> bool:
+    return bool(_NOTHING_CHECKED.search(text.replace('\u2019', "'")))
+
+
+def _names_or_asks_for_what_lenz_checks(text: str) -> bool:
+    return bool(_NAMES_WHAT_LENZ_CHECKS.search(text) or _ASKS_FOR_A_CLAIM.search(text))
+
+
 _SHORT_BALANCE = real.usage_result(50)
 
 # A deep check the balance did not cover: the user asked for it, the API refused
@@ -1426,6 +1466,23 @@ CASES: tuple[Case, ...] = (
             'directory rules, but the same facts. The reply tells the user the check did not run and '
             'names the reset date, makes no call, and neither links to nor asks the user to buy '
             'anything. Offering a cheaper check is allowed.'
+        ),
+    ),
+    Case(
+        id='no-claim-found-asks-for-one',
+        group='tool_results',
+        history=NO_CLAIM_FOUND,
+        prompt='',
+        expect=NONE,
+        forbid=('assess_claim', 'verify_claim'),
+        reply=lambda text: _says_nothing_was_checked(text) and _names_or_asks_for_what_lenz_checks(text),
+        why=(
+            'A quick check of an opinion came back with no claim. The result says nothing was checked '
+            'or charged, what Lenz can check, to ask the user for a claim, and not to send the same text '
+            'again. The reply tells the user nothing was checked and names the kind of statement Lenz '
+            'checks or asks for one, and makes no further check: the same text finds the same nothing, '
+            'and no claim the user did not make may be invented for them. Any check call fails the '
+            'attempt, the same text or a rewording.'
         ),
     ),
     Case(

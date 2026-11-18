@@ -270,6 +270,30 @@ SOURCES_UNAVAILABLE_NEXT_STEP = (
     'can be run again later; any earlier quick verdict still stands as a first read.'
 )
 
+# On every answer that found no checkable claim in what was sent (the quick check,
+# a row of a list, a deep check). It ends in a question to the user, not in a
+# second call: the same text sent again finds the same nothing. What is and is
+# not checkable is said in the words of the server instructions, and a restated
+# claim is the instructions' own rule (what the conversation says it refers to,
+# nothing else changed), allowed only where the conversation settles what the
+# user means. Nothing is charged on any of these paths: the quick check debits
+# only the claims it will answer, and a deep check is charged when it completes.
+NO_CLAIM_NOT_CHECKED = 'Nothing was checked and nothing was charged.'
+NO_CLAIM_ITEM_NOT_CHECKED = 'This item was not checked and was not charged.'
+NO_CLAIM_WHAT_TO_DO = (
+    'Tell the user that Lenz checks factual claims, such as a fact, a figure, a date, a quote or an attribution; '
+    'opinions, predictions, arithmetic, how programming code behaves and text with no checkable claim are outside '
+    'what it can check. Ask them for a claim to check. Do not send the same text again unchanged. Restate the '
+    "user's point as a claim only if the conversation makes clear what they mean: one claim as a statement, with "
+    'what the conversation says it refers to and nothing else changed. Never make up a claim the user did not make.'
+)
+
+
+def _no_claim_next_step(lead: str) -> str:
+    """What the model is told to do with a result that found no checkable claim."""
+    return f'{lead} {NO_CLAIM_WHAT_TO_DO}'
+
+
 # What `assess_claim` read past: the claims a text held beyond one quick
 # check, and a text longer than the API reads.
 MORE_CLAIMS_NOTE = (
@@ -1147,6 +1171,11 @@ def _failed_verification(data: dict[str, Any]) -> dict[str, Any]:
     # where it happens, instead of in the instructions ChatGPT never reads.
     if failure.get('failure_class') == 'upstream_unavailable':
         out['next_step'] = SOURCES_UNAVAILABLE_NEXT_STEP
+    # A text with nothing checkable in it is a dead end unless the model is told
+    # what the user can do next. Nothing was charged: the run ended before it
+    # could be.
+    elif code == _NO_CHECKABLE_CLAIM:
+        out['next_step'] = _no_claim_next_step(NO_CLAIM_NOT_CHECKED)
     return out
 
 
@@ -1347,10 +1376,15 @@ async def assess_claim(
     data = resp.data
     raw_claims = data.get('claims') or []
     if not raw_claims:
-        return {
+        none_found: dict[str, Any] = {
             'status': 'no_claim',
             'message': _assess_failure_text(data) or 'No verifiable factual claim was detected in the text.',
         }
+        # Only the answer that says no claim was found: any other reason an
+        # answer has no rows is not known to be uncharged, or to be the text's.
+        if _failure_block(data).get('code', _NO_CHECKABLE_CLAIM) == _NO_CHECKABLE_CLAIM:
+            none_found['next_step'] = _no_claim_next_step(NO_CLAIM_NOT_CHECKED)
+        return none_found
 
     claims_out = []
     for c in map(_assess_row, raw_claims):
@@ -1366,6 +1400,10 @@ async def assess_claim(
         # passes through untouched).
         if c.get('error_code'):
             entry['error'] = c['error_code']
+        # What to do with an item that held no claim, on that item's row only:
+        # the rows that were checked read as they always did.
+        if c.get('error_code') == 'no_claim':
+            entry['next_step'] = _no_claim_next_step(NO_CLAIM_ITEM_NOT_CHECKED)
         # Claims found in the same item that were NOT assessed — resubmit
         # them as their own items if they matter.
         if c.get('identified_claims'):

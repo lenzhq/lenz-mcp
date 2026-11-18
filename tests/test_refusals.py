@@ -210,6 +210,235 @@ def test_too_few_sources_says_nothing_was_charged_once(monkeypatch):
     assert out['message'].lower().count('nothing was charged') == 1
 
 
+# ── a text with nothing checkable in it ──────────────────────────────
+
+
+def _no_claim_failure():
+    return {
+        'code': 'no_checkable_claim',
+        'detail': 'No claim in the input could be checked against public evidence.',
+        'hint': 'The input is an opinion. Send one factual claim, or run the text through /extract.',
+        'failure_class': 'invalid_input',
+        'retryable': False,
+        'docs_url': 'https://lenz.example/docs/errors#invalid-input',
+    }
+
+
+def _assess_no_claim_answer():
+    return ApiResponse(
+        status=200,
+        data={'status': 'no_checkable_claim', 'claims': [], 'failure': _no_claim_failure(), 'more_claims': []},
+    )
+
+
+def _checked_row(claim, verdict='True', confidence='high'):
+    return {
+        'claim': claim,
+        'language': 'en',
+        'status': 'completed',
+        'verdict': verdict,
+        'confidence': confidence,
+        'verification_url': None,
+        'rationale': None,
+        'dissent': None,
+        'suggested_rewrite': None,
+        'more_claims': [],
+        'failure': None,
+    }
+
+
+def _no_claim_row(claim):
+    return {
+        **_checked_row(claim),
+        'status': 'failed',
+        'verdict': None,
+        'confidence': None,
+        'failure': _no_claim_failure(),
+    }
+
+
+def _says_what_to_do(step, lead):
+    """The next step is the lead, then what Lenz checks in the instructions' own words, then what to do."""
+    assert step.startswith(lead)
+    # What is and is not checkable is the server instructions' sentence, not a second list.
+    checkable = (
+        'It checks factual claims, such as a fact, a figure, a date, a quote or an attribution; opinions, '
+        'predictions, arithmetic, how programming code behaves and text with no checkable claim are outside '
+        'what it can check.'
+    )
+    assert checkable in server.mcp.instructions
+    assert checkable.replace('It checks', 'Lenz checks') in step
+    assert 'Ask them for a claim to check' in step
+    assert 'Do not send the same text again unchanged' in step
+    # The restatement is the instructions' own rule, and never an invented claim.
+    assert (
+        'one claim as a statement, with what the conversation says it refers to and nothing else changed'
+    ) in server.mcp.instructions
+    assert 'only if the conversation makes clear what they mean' in step
+    assert 'with what the conversation says it refers to and nothing else changed' in step
+    assert 'Never make up a claim the user did not make' in step
+
+
+def test_a_quick_check_with_no_claim_says_nothing_was_checked_and_what_to_do(monkeypatch):
+    calls = _patch_api(monkeypatch, 'assess', _assess_no_claim_answer())
+
+    out = _run(server.assess_claim('Pineapple on pizza is a crime.', _ctx()))
+
+    assert out['status'] == 'no_claim'
+    assert out['message'] == 'No verifiable claim detected'
+    _says_what_to_do(out['next_step'], 'Nothing was checked and nothing was charged.')
+    # The API's hint is written for an integrator and names an endpoint the model has no tool for.
+    assert '/extract' not in str(out)
+    assert set(out) == {'status', 'message', 'next_step'}
+    assert len(calls) == 1
+
+
+def test_a_quick_check_answer_with_no_rows_and_another_reason_gets_no_such_next_step(monkeypatch):
+    """Only a no-claim answer is known to be uncharged and the text's own doing."""
+    body = {
+        'status': 'error',
+        'claims': [],
+        'failure': {'code': 'internal', 'detail': 'The check stopped on our side.', 'retryable': False},
+        'more_claims': [],
+    }
+    _patch_api(monkeypatch, 'assess', ApiResponse(status=200, data=body))
+
+    out = _run(server.assess_claim('Acme was founded in 1999.', _ctx()))
+
+    assert out['status'] == 'no_claim'
+    assert 'next_step' not in out
+
+
+def test_a_list_says_what_to_do_on_the_unchecked_items_only(monkeypatch):
+    """The rows that were checked read exactly as before; the item with no claim says what to do."""
+    body = {
+        'status': 'ok',
+        'claims': [
+            _checked_row('Water boils at 100 C at sea level.'),
+            _no_claim_row('I think pineapple on pizza is wrong.'),
+            _checked_row('The Danube flows through ten countries.', 'Mostly True', 'low'),
+        ],
+        'failure': None,
+        'more_claims': [],
+    }
+    _patch_api(monkeypatch, 'assess', ApiResponse(status=200, data=body))
+
+    out = _run(
+        server.assess_claim(
+            ctx=_ctx(),
+            claims=['Water boils at 100 C at sea level.', 'I think pineapple on pizza is wrong.', 'The Danube.'],
+        )
+    )
+
+    first, none_found, last = out['claims']
+    assert first == {'claim': 'Water boils at 100 C at sea level.', 'verdict': 'True', 'confidence': 'high'}
+    assert 'next_step' not in first
+    assert none_found['error'] == 'no_claim'
+    _says_what_to_do(none_found['next_step'], 'This item was not checked and was not charged.')
+    # A low-confidence row keeps the recommendation it always had, and nothing of the no-claim step.
+    assert last['next_step'] == server.LOW_CONFIDENCE_NEXT_STEP
+    assert 'next_step' not in out
+
+
+def test_a_list_row_that_failed_for_another_reason_gets_no_such_next_step(monkeypatch):
+    slow = {
+        **_checked_row('A slow one.'),
+        'status': 'failed',
+        'verdict': None,
+        'confidence': None,
+        'failure': {'code': 'timeout', 'detail': 'Out of time.', 'hint': 'Retry it.', 'retryable': True},
+    }
+    body = {'status': 'ok', 'claims': [_checked_row('A.'), slow], 'failure': None, 'more_claims': []}
+    _patch_api(monkeypatch, 'assess', ApiResponse(status=200, data=body))
+
+    out = _run(server.assess_claim(ctx=_ctx(), claims=['A.', 'A slow one.']))
+
+    assert out['claims'][1]['error'] == 'timeout'
+    assert 'next_step' not in out['claims'][1]
+
+
+def test_a_normal_quick_check_carries_no_no_claim_text(monkeypatch):
+    body = {'status': 'ok', 'claims': [_checked_row('Water boils at 100 C at sea level.')], 'failure': None}
+    _patch_api(monkeypatch, 'assess', ApiResponse(status=200, data={**body, 'more_claims': []}))
+
+    out = _run(server.assess_claim('Water boils at 100 C at sea level.', _ctx()))
+
+    assert 'checks factual claims' not in str(out)
+    assert 'next_step' not in out and 'next_step' not in out['claims'][0]
+
+
+def test_a_deep_check_with_no_claim_says_nothing_was_checked_and_what_to_do(monkeypatch):
+    _patch_api(
+        monkeypatch,
+        'verify_status',
+        _failed('no_checkable_claim', 'No claim in the input could be checked.', 'invalid_input'),
+    )
+
+    out = _run(server.get_verification('f' * 32, _ctx()))
+
+    assert out['status'] == 'failed'
+    assert out['message'].startswith('No claim in the input could be checked.')
+    assert out['credits_charged'] == 0
+    assert out['failure_reason'] == 'not_a_claim'
+    _says_what_to_do(out['next_step'], 'Nothing was checked and nothing was charged.')
+
+
+def test_a_deep_check_that_fails_for_another_reason_gets_no_such_next_step(monkeypatch):
+    _patch_api(monkeypatch, 'verify_status', _failed('internal', 'The check stopped on an error on our side.'))
+    out = _run(server.get_verification('f' * 32, _ctx()))
+    assert 'next_step' not in out
+
+
+def test_a_deep_check_run_to_a_no_claim_answers_the_same_in_verify_claim_and_select_claims(monkeypatch):
+    """The wait inside `verify_claim` and `select_claims` reads the same failed status."""
+    _patch_api(monkeypatch, 'verify', ApiResponse(status=202, data={'task_id': 'a' * 32}))
+    _patch_api(monkeypatch, 'select', ApiResponse(status=202, data={'items': [{'task_id': 'b' * 32, 'claim': 'X.'}]}))
+    _patch_api(
+        monkeypatch,
+        'verify_status',
+        _failed('no_checkable_claim', 'No claim in the input could be checked.', 'invalid_input'),
+    )
+
+    verified = _run(server.verify_claim('Pineapple on pizza is a crime.', _ctx()))
+    selected = _run(server.select_claims('c' * 32, ['X.'], _ctx()))
+
+    for out in (verified, selected):
+        assert out['status'] == 'failed'
+        _says_what_to_do(out['next_step'], 'Nothing was checked and nothing was charged.')
+
+
+def test_a_batch_of_deep_checks_says_it_on_the_unchecked_items_only(monkeypatch):
+    _patch_api(monkeypatch, 'verify', ApiResponse(status=202, data={'task_id': 'a' * 32}))
+    answers = {
+        'a' * 32: ApiResponse(
+            status=200,
+            data={'status': 'completed', 'result': {'verification_id': 'a1b2c3d4', 'claim': 'A.', 'verdict': 'True'}},
+        )
+    }
+    body = _failed('no_checkable_claim', 'No claim in the input could be checked.', 'invalid_input')
+    calls = {'n': 0}
+
+    async def _status(*args, **kwargs):
+        calls['n'] += 1
+        return answers['a' * 32] if calls['n'] == 1 else body
+
+    monkeypatch.setattr(client, 'verify_status', _status)
+    ids = iter(['a' * 32, 'b' * 32])
+
+    async def _submit(*args, **kwargs):
+        return ApiResponse(status=202, data={'task_id': next(ids)})
+
+    monkeypatch.setattr(client, 'verify', _submit)
+
+    out = _run(server.verify_claim(ctx=_ctx(), claims=['A.', 'I think so.']))
+
+    done, none_found = out['items']
+    assert done['status'] == 'completed' and 'next_step' not in done
+    assert none_found['status'] == 'failed'
+    _says_what_to_do(none_found['next_step'], 'Nothing was checked and nothing was charged.')
+    assert 'next_step' not in out
+
+
 # ── out of credits ───────────────────────────────────────────────────
 
 RESETS = '2026-12-01T00:00:00+00:00'
