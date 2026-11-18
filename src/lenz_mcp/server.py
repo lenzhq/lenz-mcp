@@ -626,8 +626,10 @@ def _exchange_failure_result(exc: exchange.ExchangeFailed | exchange.ExchangeNot
         return _error_result(client.ApiResponse(status=503, data={'retry_after': exchange.DEFAULT_RETRY_AFTER_S}))
     if exc.kind == 'reauth':
         # The user's sign-in is no longer accepted: the same answer as the API's
-        # own 401, so a host re-authenticates exactly as it does today.
-        return _error_result(client.ApiResponse(status=401, data={}))
+        # own 401 gives a signed-in caller, which is the only kind the exchange
+        # serves, so a host re-authenticates exactly as it does today.
+        logger.info('mcp_auth_401')
+        return _auth_required(rejected=True, signed_in=True)
     if exc.kind == 'scope':
         return _missing_permission(signed_in=True)
     if exc.kind == 'approval':
@@ -672,7 +674,7 @@ def _is_own_url(value: str | None) -> bool:
     return isinstance(value, str) and value.startswith(f'{config.FRONTEND_URL}/') and not _AUTH_UNSENDABLE.search(value)
 
 
-def _auth_required(*, rejected: bool = False) -> dict[str, Any]:
+def _auth_required(*, rejected: bool = False, signed_in: bool | None = None) -> dict[str, Any]:
     """What a caller is told when their credential is missing or refused.
 
     The advice has to match the door they came through. Someone who signed in
@@ -681,9 +683,10 @@ def _auth_required(*, rejected: bool = False) -> dict[str, Any]:
 
     ``rejected`` is a key the API answered 401 on, as opposed to no key at
     all: telling that caller none was provided sends them looking for a
-    configuration they already have.
+    configuration they already have. ``signed_in`` says which door when the
+    caller already knows it (the token exchange serves only signed-in callers).
     """
-    if _caller_signed_in():
+    if signed_in if signed_in is not None else _caller_signed_in():
         return {'status': 'auth_required', 'message': OAUTH_REAUTH_MESSAGE}
     if rejected:
         return {
@@ -973,10 +976,52 @@ def _quota_exhausted(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+# The order an out-of-credits result's own fields are given in: the facts, then
+# what to do. Anything else a tool adds (a check's id, what was not checked) follows.
+_QUOTA_KEY_ORDER = (
+    'status',
+    'message',
+    'cost',
+    'cost_per_citation',
+    'credits_remaining',
+    'requested',
+    'resets_at',
+    'balance_covers',
+    'manage_url',
+    'next_step',
+)
+
+
+def _covered_now(result: dict[str, Any]) -> bool:
+    """Whether the balance read since the refusal covers the refused call.
+
+    Only a balance read AFTER the refusal (a citation check that ran short is
+    read back later, and its balance comes from the price list) can differ
+    from the one that refused it; the refusal is still the answer, and saying
+    the account is short of credits it holds would be false.
+    """
+    balance, cost = _int(result.get('credits_remaining')), _int(result.get('cost'))
+    return balance is not None and cost is not None and cost > 0 and balance >= cost
+
+
 def _word_quota(result: dict[str, Any]) -> None:
     """(Re)write an out-of-credits result's ``message`` and ``next_step`` from its fields."""
-    result['message'] = _quota_message(result)
-    result['next_step'] = _quota_next_step(result)
+    if _covered_now(result):
+        result.pop('balance_covers', None)
+        result['message'] = (
+            f'This call did not run: the balance did not cover its cost of {result["cost"]:,} when it was '
+            f'submitted. The account now has {result["credits_remaining"]:,} credits, which cover it.'
+        )
+        result['next_step'] = (
+            'Nothing was charged. Tell the user what was not checked and why, and that the balance now covers it.'
+        )
+    else:
+        result['message'] = _quota_message(result)
+        result['next_step'] = _quota_next_step(result)
+    ordered = {key: result[key] for key in _QUOTA_KEY_ORDER if key in result}
+    ordered.update((key, value) for key, value in result.items() if key not in ordered)
+    result.clear()
+    result.update(ordered)
 
 
 # The capability whose price a tool's refusal is in (`check_usage`'s `costs`).
