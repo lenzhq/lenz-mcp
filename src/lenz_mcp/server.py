@@ -287,6 +287,14 @@ OAUTH_REAUTH_MESSAGE = (
     'The Lenz sign-in for this connection is no longer valid. Tell the user to reconnect Lenz in '
     'this app and then ask again. Do not mention tool names to the user.'
 )
+# What a signed-in caller is told when the connection is valid but was not
+# granted the permission this request needs. Reconnecting is a new sign-in, and
+# a new sign-in grants what the connector asks for now.
+MISSING_PERMISSION_MESSAGE = (
+    'This Lenz connection does not have the permission this request needs. Reconnecting Lenz in this app '
+    'signs in again and grants the permissions Lenz asks for now. Tell the user to reconnect Lenz in this '
+    'app and then ask again. Do not mention tool names to the user.'
+)
 # A check that was submitted and charged, whose credential then failed. The run
 # is untouched by it, so the model is told how to collect the result rather
 # than left to start (and pay for) the same check again.
@@ -613,10 +621,7 @@ def _exchange_failure_result(exc: exchange.ExchangeFailed | exchange.ExchangeNot
         # own 401, so a host re-authenticates exactly as it does today.
         return _error_result(client.ApiResponse(status=401, data={}))
     if exc.kind == 'scope':
-        return {
-            'status': 'error',
-            'message': 'This Lenz connection is not allowed to do that. Retrying will not help.',
-        }
+        return _missing_permission(signed_in=True)
     if exc.kind == 'approval':
         uri = exc.approval_uri if _is_own_url(exc.approval_uri) else config.API_CREDENTIALS_URL
         return {
@@ -659,21 +664,55 @@ def _is_own_url(value: str | None) -> bool:
     return isinstance(value, str) and value.startswith(f'{config.FRONTEND_URL}/') and not _AUTH_UNSENDABLE.search(value)
 
 
-def _auth_required() -> dict[str, Any]:
+def _auth_required(*, rejected: bool = False) -> dict[str, Any]:
     """What a caller is told when their credential is missing or refused.
 
     The advice has to match the door they came through. Someone who signed in
     has no API key to create, so key-creation advice is a dead end for them:
     what fixes it is signing in again in the app they are using.
+
+    ``rejected`` is a key the API answered 401 on, as opposed to no key at
+    all: telling that caller none was provided sends them looking for a
+    configuration they already have.
     """
     if _caller_signed_in():
         return {'status': 'auth_required', 'message': OAUTH_REAUTH_MESSAGE}
+    if rejected:
+        return {
+            'status': 'auth_required',
+            'message': (
+                'Lenz did not accept the API key this connection sent: it may have been revoked, or changed '
+                f'when it was copied. Create a new key at {config.API_CREDENTIALS_URL} and set it as the '
+                'Authorization bearer token in your MCP client configuration.'
+            ),
+        }
     return {
         'status': 'auth_required',
         'message': (
             'No Lenz API key was provided. Create a free key at '
             f'{config.API_CREDENTIALS_URL} and set it as the Authorization bearer '
             'token in your MCP client configuration.'
+        ),
+    }
+
+
+def _missing_permission(*, signed_in: bool | None = None) -> dict[str, Any]:
+    """A credential that is valid but does not cover this request.
+
+    The same ``auth_required`` status as an expired sign-in, because the
+    remedy is the same one: a new authorization. A signed-in connection gets
+    one by reconnecting in the app, which grants the permissions the connector
+    asks for today; a key caller gets one from a new key. The token exchange
+    only ever runs for a signed-in caller, so it says so (``signed_in=True``).
+    """
+    if signed_in if signed_in is not None else _caller_signed_in():
+        return {'status': 'auth_required', 'message': MISSING_PERMISSION_MESSAGE}
+    return {
+        'status': 'auth_required',
+        'message': (
+            'The Lenz API key this connection sent does not allow this request. Create a new key at '
+            f'{config.API_CREDENTIALS_URL} and set it as the Authorization bearer token in your MCP '
+            'client configuration.'
         ),
     }
 
@@ -1001,7 +1040,7 @@ def _error_result(resp: client.ApiResponse) -> dict[str, Any]:
         return {'status': 'error', 'message': "Couldn't reach the Lenz API — please retry shortly."}
     if status == 401:
         logger.info('mcp_auth_401')  # friction gauge: real attempts blocked by the key wall
-        return _auth_required()
+        return _auth_required(rejected=True)
     if status == 402:
         # Unambiguous: out of credits, or the tier doesn't cover this
         # capability. No code inspection needed — that's the point of 402.
@@ -1031,6 +1070,10 @@ def _error_result(resp: client.ApiResponse) -> dict[str, Any]:
         code = data.get('code', '')
         if code in _QUOTA_CODES:
             return _quota_exhausted(data)
+        if code == 'insufficient_scope':
+            # A valid credential without this route's permission: a new
+            # authorization fixes it, which the API's own sentence does not say.
+            return _missing_permission()
         return {'status': 'forbidden', 'message': detail or 'Access denied.'}
     if status == 429:
         # Pass the real wait through when the server states one — "shortly" is

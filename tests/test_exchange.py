@@ -488,10 +488,10 @@ def test_our_own_misconfiguration_is_an_outage_never_a_reauth(lenz, status, erro
     assert out['retry_after_seconds'] == exchange.DEFAULT_RETRY_AFTER_S
 
 
-def test_invalid_scope_is_a_tool_error_with_no_retry(lenz):
+def test_invalid_scope_says_to_reconnect_with_no_retry(lenz):
+    """The connection lacks a permission: reconnecting grants it, retrying does not."""
     out = _refuse(lenz, 400, {'error': 'invalid_scope'})
-    assert out['status'] == 'error'
-    assert 'Retrying will not help' in out['message']
+    assert out == {'status': 'auth_required', 'message': server.MISSING_PERMISSION_MESSAGE}
     assert lenz.exchange_count() == 1
 
 

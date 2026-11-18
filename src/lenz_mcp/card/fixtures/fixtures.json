@@ -1940,7 +1940,7 @@
   "reconnect": {
    "provenance": "hand-built (API 401)",
    "toolResult": {
-    "message": "No Lenz API key was provided. Create a free key at https://lenz.io/api-credentials and set it as the Authorization bearer token in your MCP client configuration.",
+    "message": "Lenz did not accept the API key this connection sent: it may have been revoked, or changed when it was copied. Create a new key at https://lenz.io/api-credentials and set it as the Authorization bearer token in your MCP client configuration.",
     "status": "auth_required"
    }
   },
