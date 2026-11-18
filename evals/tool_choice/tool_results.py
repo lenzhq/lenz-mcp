@@ -101,6 +101,27 @@ def assess_result(rows: list[dict[str, Any]], more: list[str] = ()) -> dict[str,
     return _run('assess_claim', ('x',), {'assess': (200, body)})
 
 
+def assess_no_claim_result() -> dict[str, Any]:
+    """What `assess_claim` returns for a text with nothing checkable in it: the API's answer with no rows."""
+    body = {
+        'status': 'no_checkable_claim',
+        'claims': [],
+        'failure': {
+            'code': 'no_checkable_claim',
+            'detail': 'No claim in the input could be checked against public evidence.',
+            'hint': (
+                'The input is an opinion, not a statement that can be checked. Send one factual claim, '
+                'or run the text through /extract to enumerate its claims.'
+            ),
+            'failure_class': 'invalid_input',
+            'retryable': False,
+            'docs_url': f'{PROD_FRONTEND}/docs/errors#invalid-input',
+        },
+        'more_claims': [],
+    }
+    return _run('assess_claim', ('x',), {'assess': (200, body)})
+
+
 def verification_running_result(arguments: dict[str, Any]) -> dict[str, Any]:
     """What `get_verification` returns for a check the eval answers: still running."""
     from lenz_mcp import config

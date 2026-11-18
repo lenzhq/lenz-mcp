@@ -395,7 +395,11 @@ def test_assess_no_claim(monkeypatch):
         ),
     )
     out = _run(server.assess_claim('hello there', _ctx()))
-    assert out == {'status': 'no_claim', 'message': 'No verifiable claim detected'}
+    assert out == {
+        'status': 'no_claim',
+        'message': 'No verifiable claim detected',
+        'next_step': server._no_claim_next_step(server.NO_CLAIM_NOT_CHECKED),
+    }
 
 
 def test_assess_claims_list_one_row_per_item_in_position(monkeypatch):

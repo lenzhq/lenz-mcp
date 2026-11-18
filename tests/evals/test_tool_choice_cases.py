@@ -462,3 +462,82 @@ def test_a_reply_that_says_it_all_and_calls_nothing_passes():
     ):
         ok, _ = scoring.judge(_case(case_id), SimpleNamespace(calls=[], text=reply, batches=()))
         assert ok
+
+
+# ── a quick check that found no claim ────────────────────────────────
+
+NO_CLAIM_CASE = 'no-claim-found-asks-for-one'
+
+GOOD_NO_CLAIM_REPLY = (
+    "Lenz didn't check that: it's an opinion, and nothing was charged. Lenz checks factual claims, such as a "
+    'fact, a figure, a date, a quote or an attribution. Is there a claim like that you would like me to check?'
+)
+
+
+def test_the_no_claim_history_carries_what_its_reply_is_judged_on():
+    """The result the model answers is the connector's own: nothing checked or charged, what
+    Lenz checks in the instructions' words, to ask for a claim, and not to send the text again."""
+    case = _case(NO_CLAIM_CASE)
+    assert case.group == 'tool_results'
+    assert case.expects_none and not case.prompt.strip()
+    exchange = case.history[-1]
+    assert isinstance(exchange, cases.ToolExchange) and exchange.name == 'assess_claim'
+    result = exchange.result
+    assert result['status'] == 'no_claim'
+    step = result['next_step']
+    assert step.startswith('Nothing was checked and nothing was charged.')
+    assert 'a fact, a figure, a date, a quote or an attribution' in step
+    assert 'Ask them for a claim to check' in step
+    assert 'Do not send the same text again unchanged' in step
+    # The text sent is the opinion the user asked about, and the API's integrator hint stays out.
+    assert exchange.arguments == {'claim': cases._OPINION}
+    assert '/extract' not in str(result)
+    assert case.forbid == ('assess_claim', 'verify_claim')
+
+
+@pytest.mark.parametrize(
+    ('reply', 'passes'),
+    [
+        (GOOD_NO_CLAIM_REPLY, True),
+        # Naming what Lenz checks alone, or asking for a claim alone, with nothing checked said.
+        ("I didn't check it: that's an opinion. Lenz checks factual claims, like a date or a figure.", True),
+        ('Nothing was checked. Send me a statement you want checked and I will run it.', True),
+        ('That was not checked: it is a matter of taste. Which claim should I check instead?', True),
+        ('Lenz couldn’t check that. Share a factual claim and I will.', True),
+        # Saying only that nothing was checked leaves the user with nowhere to go.
+        ('Nothing was checked.', False),
+        ('Lenz did not check it because it is an opinion.', False),
+        # Describing what Lenz checks without saying this was not checked reads as an answer.
+        ('Lenz checks factual claims such as a date or a figure.', False),
+        # An opinion answered as if it were a verdict.
+        ('Lenz says that is false, and you should check the figure on the label.', False),
+        ('', False),
+    ],
+)
+def test_the_no_claim_reply_is_judged_on_nothing_checked_and_what_lenz_checks(reply, passes):
+    assert bool(_case(NO_CLAIM_CASE).reply(reply)) is passes
+
+
+@pytest.mark.parametrize('tool', ['assess_claim', 'verify_claim'])
+@pytest.mark.parametrize('claim', [cases._OPINION, 'Many people dislike pineapple on pizza.'])
+def test_any_check_after_a_no_claim_fails_whatever_the_reply_says(tool, claim):
+    """The same text finds the same nothing, and a reworded claim is one the user did not make."""
+    from types import SimpleNamespace
+
+    from evals.tool_choice import scoring
+
+    call = SimpleNamespace(name=tool, arguments={'claim': claim}, batches=())
+    turn = SimpleNamespace(calls=[call], text=GOOD_NO_CLAIM_REPLY, batches=())
+    ok, note = scoring.judge(_case(NO_CLAIM_CASE), turn)
+    assert not ok and tool in note
+
+
+def test_a_reply_that_says_it_and_calls_nothing_passes_the_no_claim_case():
+    from types import SimpleNamespace
+
+    from evals.tool_choice import scoring
+
+    ok, _ = scoring.judge(_case(NO_CLAIM_CASE), SimpleNamespace(calls=[], text=GOOD_NO_CLAIM_REPLY, batches=()))
+    assert ok
+    ok, note = scoring.judge(_case(NO_CLAIM_CASE), SimpleNamespace(calls=[], text='Nothing was checked.', batches=()))
+    assert not ok

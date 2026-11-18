@@ -280,6 +280,25 @@ def _oracle() -> dict[str, Any]:
 # The oracle file stays as that commit wrote it; each entry here overlays the
 # fields that changed, so every deliberate change is listed in one place.
 _NOT_CHARGED = 'Nothing was charged: a deep check is charged only when it completes.'
+# An answer that found no checkable claim tells the model what to do next. The
+# wording is the server instructions' own for what Lenz can and cannot check.
+_NO_CLAIM_WHAT_TO_DO = (
+    'Tell the user that Lenz checks factual claims, such as a fact, a figure, a date, a quote or an '
+    'attribution; opinions, predictions, arithmetic, how programming code behaves and text with no '
+    'checkable claim are outside what it can check. Ask them for a claim to check. Do not send the same '
+    "text again unchanged. Restate the user's point as a claim only if the conversation makes clear what "
+    'they mean: one claim as a statement, with what the conversation says it refers to and nothing else '
+    'changed. Never make up a claim the user did not make.'
+)
+_NO_CLAIM_NOT_CHECKED = f'Nothing was checked and nothing was charged. {_NO_CLAIM_WHAT_TO_DO}'
+_NO_CLAIM_ITEM_NOT_CHECKED = f'This item was not checked and was not charged. {_NO_CLAIM_WHAT_TO_DO}'
+
+
+def _no_claim_rows_say_what_to_do(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The oracle's rows, with the next step on the rows that held no claim and nothing else changed."""
+    return [{**row, 'next_step': _NO_CLAIM_ITEM_NOT_CHECKED} if row.get('error') == 'no_claim' else row for row in rows]
+
+
 CHANGED_SINCE_THE_ORACLE: dict[str, dict[str, Any]] = {
     # A failed deep check gives the API's own sentence and says it was not charged.
     'verify__status_cancelled_durable': {'message': f'The check was cancelled. {_NOT_CHARGED}', 'credits_charged': 0},
@@ -299,11 +318,18 @@ CHANGED_SINCE_THE_ORACLE: dict[str, dict[str, Any]] = {
     'verify__status_not_a_claim': {
         'message': f'No claim in the input could be checked against public evidence. {_NOT_CHARGED}',
         'credits_charged': 0,
+        'next_step': _NO_CLAIM_NOT_CHECKED,
     },
     'verify__status_not_a_claim_durable': {
         'message': f'No claim in the input could be checked against public evidence. {_NOT_CHARGED}',
         'credits_charged': 0,
+        'next_step': _NO_CLAIM_NOT_CHECKED,
     },
+    # A quick check that found no claim says what to do next: on its own answer, or on
+    # the rows of a list that held none (the rows that were checked read as before).
+    'assess__single_no_claim': {'next_step': _NO_CLAIM_NOT_CHECKED},
+    'assess__list_all_error_rows': {'claims': _no_claim_rows_say_what_to_do},
+    'assess__list_mixed_rows': {'claims': _no_claim_rows_say_what_to_do},
     'verify__status_task_stuck': {
         'message': f'The check stopped responding before it finished. {_NOT_CHARGED}',
         'credits_charged': 0,
@@ -340,6 +366,8 @@ def _expected(scenario: str) -> Any:
     for key, value in CHANGED_SINCE_THE_ORACLE.get(scenario, {}).items():
         if value is None:
             expected.pop(key, None)
+        elif callable(value):
+            expected[key] = value(expected[key])
         else:
             expected[key] = value
     return expected

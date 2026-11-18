@@ -459,9 +459,12 @@ def test_a_low_confidence_row_carries_the_recommendation(monkeypatch):
     assert low['next_step'] == server.LOW_CONFIDENCE_NEXT_STEP
     for row in (medium, high, error):
         assert 'recommend_verify' not in row
+    for row in (medium, high):
         assert 'next_step' not in row
-    # An Error row still reads low confidence and is still no reason to check deeper.
+    # An Error row still reads low confidence and is still no reason to check deeper:
+    # its next step is the no-claim one, not the deep check.
     assert error['error'] == 'no_claim'
+    assert error['next_step'] == server._no_claim_next_step(server.NO_CLAIM_ITEM_NOT_CHECKED)
 
 
 def test_the_recommendation_never_assumes_reviewer_notes_exist(monkeypatch):
