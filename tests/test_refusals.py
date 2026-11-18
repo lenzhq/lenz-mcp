@@ -555,3 +555,26 @@ def test_a_citation_check_short_of_credits_gives_chatgpt_no_link(monkeypatch, ch
     out = _run(server.get_citation_check('ab12cd34', _ctx()))
     assert 'manage_url' not in out
     assert 'plan' not in out['next_step']
+
+
+def test_a_citation_shortfall_read_after_a_top_up_does_not_claim_the_balance_is_short(monkeypatch, price_list):
+    """The check ran short when it was submitted; the balance read now covers it.
+    The result must not say the account lacks credits it has, and says nothing
+    about whether the same input would run again."""
+    _patch_api(monkeypatch, 'citecheck_status', _short_citecheck())
+    price_list(_usage(credits=100))
+
+    out = _run(server.get_citation_check('ab12cd34', _ctx()))
+
+    assert out['status'] == 'quota_exhausted'
+    assert 'Not enough' not in out['message'] and 'Out of' not in out['message']
+    assert 'which cover it' in out['message']
+    assert 'balance_covers' not in out
+    assert 'refused again' not in out['next_step']
+    assert 'day' not in out['next_step']
+
+
+def test_a_refused_sign_in_at_the_exchange_is_told_to_reconnect():
+    """The exchange runs only for a signed-in caller, so its refusal never talks about keys."""
+    out = server._exchange_failure_result(exchange.ExchangeFailed('reauth', 'invalid_grant'))
+    assert out == {'status': 'auth_required', 'message': server.OAUTH_REAUTH_MESSAGE}
