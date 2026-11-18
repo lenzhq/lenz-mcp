@@ -129,3 +129,81 @@ def test_other_403s_stay_forbidden(monkeypatch):
     assert out['status'] == 'forbidden'
     blocked = server._exchange_failure_result(exchange.ExchangeFailed('blocked', 'access_denied'))
     assert blocked['status'] == 'forbidden'
+
+
+# ── a failed deep check ──────────────────────────────────────────────
+
+
+def _failed(code, detail, failure_class='internal', retryable=False, hint=None):
+    return ApiResponse(
+        status=200,
+        data={
+            'status': 'failed',
+            'task_id': 'f' * 32,
+            'failure': {
+                'code': code,
+                'detail': detail,
+                'hint': hint,
+                'failure_class': failure_class,
+                'retryable': retryable,
+                'docs_url': 'https://lenz.example/docs/errors#internal',
+            },
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    'detail',
+    [
+        'The check stopped on an error on our side.',
+        'No sources about the claim were found.',
+        'A service the check depends on was unavailable.',
+    ],
+)
+def test_a_failed_deep_check_relays_the_reason_and_says_nothing_was_charged(monkeypatch, detail):
+    """ "Pipeline stopped at: internal" tells the user nothing. The API states
+    the reason in a sentence, and a deep check is charged only when it
+    completes, which the user will want to know."""
+    _patch_api(monkeypatch, 'verify_status', _failed('internal', detail))
+
+    out = _run(server.get_verification('f' * 32, _ctx()))
+
+    assert out['status'] == 'failed'
+    assert 'Pipeline' not in out['message']
+    assert out['message'].startswith(detail)
+    assert 'Nothing was charged' in out['message']
+    assert out['credits_charged'] == 0
+    assert out['failure_reason'] == 'internal'
+    assert out['failure_class'] == 'internal'
+    assert out['retryable'] is False
+
+
+def test_a_failed_deep_check_with_no_sentence_still_says_nothing_was_charged(monkeypatch):
+    _patch_api(
+        monkeypatch,
+        'verify_status',
+        ApiResponse(status=200, data={'status': 'failed', 'failure': {'code': 'conclusion_failed'}}),
+    )
+    out = _run(server.get_verification('f' * 32, _ctx()))
+    assert 'Pipeline' not in out['message']
+    assert 'Nothing was charged' in out['message']
+
+
+def test_the_api_hint_written_for_integrators_stays_out(monkeypatch):
+    """`failure.hint` is developer copy and can name an endpoint the model has no tool for."""
+    hint = 'Send one factual claim, or run the text through /extract to enumerate its claims.'
+    _patch_api(monkeypatch, 'verify_status', _failed('no_checkable_claim', 'No claim could be checked.', hint=hint))
+    out = _run(server.get_verification('f' * 32, _ctx()))
+    assert '/extract' not in str(out)
+    assert out['message'].startswith('No claim could be checked.')
+
+
+def test_too_few_sources_says_nothing_was_charged_once(monkeypatch):
+    _patch_api(
+        monkeypatch,
+        'verify_status',
+        _failed('research_empty', 'No sources about the claim were found.', 'insufficient_evidence'),
+    )
+    out = _run(server.get_verification('f' * 32, _ctx()))
+    assert out['message'] == server.INSUFFICIENT_EVIDENCE_MESSAGE
+    assert out['message'].lower().count('nothing was charged') == 1
