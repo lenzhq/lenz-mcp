@@ -146,6 +146,56 @@ def list_recent_result(arguments: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+# What the eval's out-of-credits answers say about the account: one reset date,
+# and the price list a refusal reads to say what the balance still covers.
+QUOTA_RESETS_AT = '2026-12-01T00:00:00+00:00'
+QUOTA_PLANS_URL = f'{PROD_FRONTEND}/plans?wall=0f0e0d0c-0b0a-4908-8706-050403020100'
+
+
+def _price_list_body(credits_remaining: int) -> dict[str, Any]:
+    """`GET /me/usage` for an account holding `credits_remaining` credits, in the API's shape."""
+    return {
+        'plan': 'free',
+        'plan_label': 'Free',
+        'credits': {
+            'total': 100,
+            'used': 100 - credits_remaining,
+            'remaining': credits_remaining,
+            'extra': 0,
+            'resets_at': QUOTA_RESETS_AT,
+        },
+        'costs': {'verify': 10, 'assess': 1, 'ask': 1, 'citation': 1, 'extract': 0},
+        'cost_options': {'verify': {'depth': {'standard': 10, 'low': 5}}},
+    }
+
+
+def deep_check_refused_result(claim: str, *, credits_remaining: int, openai_client: bool) -> dict[str, Any]:
+    """What `verify_claim` returns when the balance does not cover a standard deep check.
+
+    The 402 is the API's own body for that refusal; `openai_client` builds the
+    result an OpenAI client gets, which carries no link to add credits.
+    """
+    body = {
+        'detail': 'No remaining claim checks.',
+        'code': 'no_credits',
+        'docs_url': f'{PROD_FRONTEND}/docs/errors#quota',
+        'upgrade_url': QUOTA_PLANS_URL,
+        'wall_id': '0f0e0d0c-0b0a-4908-8706-050403020100',
+        'remaining': 0,
+        'resets_at': QUOTA_RESETS_AT,
+        'credits_remaining': credits_remaining,
+        'cost': 10,
+    }
+    from lenz_mcp import server
+
+    with mock.patch.object(server, 'request_is_chatgpt', lambda: openai_client):
+        return _run(
+            'verify_claim',
+            (claim,),
+            {'verify': (402, body), 'me_usage': (200, _price_list_body(credits_remaining))},
+        )
+
+
 def quota_exhausted_result(arguments: dict[str, Any]) -> dict[str, Any]:
     """What `verify_claim` returns once the balance no longer covers a deep check."""
     return _run(

@@ -563,6 +563,57 @@ QUICK_GERMAN_LOW = _quick(
 
 _SHORT_BALANCE = real.usage_result(50)
 
+# A deep check the balance did not cover: the user asked for it, the API refused
+# it, and the refusal is the last thing in the conversation. The balance covers a
+# cheaper check, so the result lists options; the OpenAI variant has no link.
+_WALL_CLAIM = 'The Halden Systems headquarters moved to Rotterdam in 2019.'
+
+
+def _deep_check_refused(*, openai_client: bool) -> tuple[Turn, ...]:
+    return (
+        ('user', f'Run a deep check with sources on this: {_WALL_CLAIM}'),
+        ToolExchange(
+            'verify_claim',
+            {'claim': _WALL_CLAIM},
+            real.deep_check_refused_result(_WALL_CLAIM, credits_remaining=7, openai_client=openai_client),
+        ),
+    )
+
+
+DEEP_CHECK_REFUSED = _deep_check_refused(openai_client=False)
+DEEP_CHECK_REFUSED_OPENAI = _deep_check_refused(openai_client=True)
+
+# The reset date as a person might write it: 1 December 2026, December 1st, 1 Dec,
+# 2026-12-01, 12/1, 1.12.
+_RESET_DATE = re.compile(
+    r'\b1(?:st)?\s+dec|\bdec(?:ember|\.)?\s+1(?:st)?\b|2026-12-01|\b12/0?1\b|\b0?1/12\b|\b0?1\.12\b',
+    re.IGNORECASE,
+)
+
+
+def _names_the_reset(text: str) -> bool:
+    return bool(_RESET_DATE.search(text))
+
+
+# A cheaper way to run it, as the result lists: the deep check at a lower depth,
+# or the quick check.
+_CHEAPER_CHECK = re.compile(
+    r'\b(?:low|lower|lighter|shallower|cheaper|smaller|reduced)\b[^.\n]{0,40}'
+    r'\b(?:depth|check|verification|version|pass|research)\b'
+    r'|\bdepth\b[^.\n]{0,20}\blow\b'
+    r'|\bquick(?:er)?\s+(?:check|read|first read|verdict|assessment)\b',
+    re.IGNORECASE,
+)
+
+
+def _offers_what_the_balance_covers(text: str) -> bool:
+    return bool(_CHEAPER_CHECK.search(text))
+
+
+# Where the user adds credits, as the result gives it (scheme and query aside).
+_PLANS_PAGE = real.QUOTA_PLANS_URL.split('://', 1)[1].split('?', 1)[0]
+
+
 CASES: tuple[Case, ...] = (
     # ── The eight OpenAI submission cases, verbatim ───────────────────
     Case(
@@ -1323,6 +1374,33 @@ CASES: tuple[Case, ...] = (
             'that matter. What the case judges: no retry loop on a refused call (at most one call '
             'per claim), and, when the turn ends without a call, a reply that tells the user the '
             'balance ran out.'
+        ),
+    ),
+    Case(
+        id='out-of-credits-gives-the-way-forward',
+        group='tool_results',
+        history=DEEP_CHECK_REFUSED,
+        prompt='',
+        expect=NONE,
+        reply=lambda text: _PLANS_PAGE in text and _names_the_reset(text) and _offers_what_the_balance_covers(text),
+        why=(
+            'A deep check the user asked for was refused for credits. The result carries the link '
+            'where the user adds credits, the date the balance resets and the cheaper checks the '
+            'balance still covers. The reply gives the user all three, and makes no call: the same '
+            'call is refused again, and a cheaper check spends credits the user has not agreed to.'
+        ),
+    ),
+    Case(
+        id='out-of-credits-without-a-link',
+        group='tool_results',
+        history=DEEP_CHECK_REFUSED_OPENAI,
+        prompt='',
+        expect=NONE,
+        reply=lambda text: '/plans' not in text and _names_the_reset(text) and _offers_what_the_balance_covers(text),
+        why=(
+            'The same refusal as an OpenAI client gets it: no link to add credits, by the app '
+            'directory rules, but the same facts. The reply names the reset date and the cheaper '
+            'check, makes no call, and gives no link the result did not carry.'
         ),
     ),
     Case(
