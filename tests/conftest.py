@@ -26,3 +26,19 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if leaked:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
         sys.stderr.write(f'\nconnector tests imported a web framework: {leaked[:5]}\n')
+
+
+@pytest.fixture(autouse=True)
+def _no_price_list_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An out-of-credits result may read the account's price list, a real API call.
+
+    The tests here stub the API one function at a time, so a refusal test that
+    did not stub `me_usage` would reach for the network. A test about that
+    lookup puts the real one back (`tests/test_refusals.py`).
+    """
+    from lenz_mcp import server
+
+    async def _none(_ctx: object) -> None:
+        return None
+
+    monkeypatch.setattr(server, '_price_list', _none)
