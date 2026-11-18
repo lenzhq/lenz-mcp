@@ -398,3 +398,26 @@ GOOD_WALL_REPLY = (
 def test_the_out_of_credits_replies_are_judged_on_link_date_and_option(reply, with_link, without_link):
     assert _case('out-of-credits-gives-the-way-forward').reply(reply) is with_link
     assert _case('out-of-credits-without-a-link').reply(reply) is without_link
+
+
+@pytest.mark.parametrize(
+    'reply',
+    [
+        'Buy more credits. Your credits reset on 1 December 2026. A quick check is available now.',
+        'You can upgrade your plan; credits reset on 1 December 2026, or I can run a quick check.',
+        'Credits reset on 1 December 2026; top up at https://example.org/billing or try a quick check.',
+    ],
+)
+def test_the_reply_without_a_link_also_carries_no_call_to_buy(reply):
+    assert _case('out-of-credits-without-a-link').reply(reply) is False
+
+
+def test_a_reset_date_in_another_year_is_not_the_reset_date():
+    text = 'Your credits reset on December 1, 2027. A quick check still fits.'
+    assert _case('out-of-credits-without-a-link').reply(text) is False
+    assert _case('out-of-credits-without-a-link').reply(text.replace('2027', '2026')) is True
+
+
+def test_a_paraphrased_cheaper_check_counts():
+    text = 'Your credits reset on 1 December 2026. A shallow investigation costing 5 credits still fits.'
+    assert _case('out-of-credits-without-a-link').reply(text) is True

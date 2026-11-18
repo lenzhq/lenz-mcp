@@ -591,15 +591,30 @@ _RESET_DATE = re.compile(
 )
 
 
+_RESET_YEAR = '2026'
+
+
 def _names_the_reset(text: str) -> bool:
-    return bool(_RESET_DATE.search(text))
+    """The reset date is named, and no other year is written beside it."""
+    for match in _RESET_DATE.finditer(text):
+        year = re.match(r'[^\d\n]{0,4}(\d{4})', text[match.end() :])
+        if year is None or year.group(1) == _RESET_YEAR:
+            return True
+    return False
+
+
+# A way to buy, which a client without a link must not be steered to either.
+_CALL_TO_BUY = re.compile(
+    r'https?://|\bbuy\b|\bpurchas|\bupgrad|\bsubscri|\btop[- ]?up\b|\badd (?:more )?credits\b',
+    re.IGNORECASE,
+)
 
 
 # A cheaper way to run it, as the result lists: the deep check at a lower depth,
 # or the quick check.
 _CHEAPER_CHECK = re.compile(
-    r'\b(?:low|lower|lighter|shallower|cheaper|smaller|reduced)\b[^.\n]{0,40}'
-    r'\b(?:depth|check|verification|version|pass|research)\b'
+    r'\b(?:low|lower|lighter|shallow|shallower|cheaper|smaller|reduced)\b[^.\n]{0,40}'
+    r'\b(?:depth|check|verification|version|pass|research|investigation)\b'
     r'|\bdepth\b[^.\n]{0,20}\blow\b'
     r'|\bquick(?:er)?\s+(?:check|read|first read|verdict|assessment)\b',
     re.IGNORECASE,
@@ -1396,11 +1411,13 @@ CASES: tuple[Case, ...] = (
         history=DEEP_CHECK_REFUSED_OPENAI,
         prompt='',
         expect=NONE,
-        reply=lambda text: '/plans' not in text and _names_the_reset(text) and _offers_what_the_balance_covers(text),
+        reply=lambda text: (
+            not _CALL_TO_BUY.search(text) and _names_the_reset(text) and _offers_what_the_balance_covers(text)
+        ),
         why=(
             'The same refusal as an OpenAI client gets it: no link to add credits, by the app '
             'directory rules, but the same facts. The reply names the reset date and the cheaper '
-            'check, makes no call, and gives no link the result did not carry.'
+            'check, makes no call, and neither links to nor asks the user to buy anything.'
         ),
     ),
     Case(

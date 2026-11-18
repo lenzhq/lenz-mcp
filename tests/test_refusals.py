@@ -522,8 +522,9 @@ def test_a_citation_check_short_of_credits_without_the_price_list_still_says_so(
     out = _run(server.get_citation_check('ab12cd34', _ctx()))
 
     assert out['status'] == 'quota_exhausted'
-    assert out['message'].startswith('Not enough Lenz credits')
-    assert 'Out of' not in out['message']
+    assert 'did not cover its 3 citations' in out['message']
+    # The balance now is unknown: neither "out of" nor "not enough" can be said of it.
+    assert 'Out of' not in out['message'] and 'Not enough' not in out['message']
 
 
 def test_a_citation_check_with_no_credits_at_all_gives_the_numbers(monkeypatch):
@@ -578,3 +579,21 @@ def test_a_refused_sign_in_at_the_exchange_is_told_to_reconnect():
     """The exchange runs only for a signed-in caller, so its refusal never talks about keys."""
     out = server._exchange_failure_result(exchange.ExchangeFailed('reauth', 'invalid_grant'))
     assert out == {'status': 'auth_required', 'message': server.OAUTH_REAUTH_MESSAGE}
+
+
+def test_a_citation_shortfall_read_without_a_balance_speaks_of_when_it_was_submitted(monkeypatch, price_list):
+    """With no balance to read now, the result says what happened then, and
+    predicts nothing about a retry: the balance may have changed since."""
+    _patch_api(monkeypatch, 'citecheck_status', _short_citecheck())
+    price_list(ApiResponse(status=0, data={}))
+
+    out = _run(server.get_citation_check('ab12cd34', _ctx()))
+
+    assert 'when it was submitted' in out['message']
+    assert 'refused again' not in out['next_step']
+
+
+def test_a_running_check_is_not_said_to_be_charged_already():
+    """A deep check is charged when it completes, as every failed check now says."""
+    assert 'already been charged' not in server.CREDENTIAL_LOST_MID_RUN
+    assert 'charged when it completes' in server.CREDENTIAL_LOST_MID_RUN
