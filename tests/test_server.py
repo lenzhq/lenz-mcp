@@ -1238,7 +1238,7 @@ def test_get_verification_failed_passes_the_retry_contract_through(monkeypatch):
         ),
     )
     out = _run(server.get_verification('tid', _ctx()))
-    assert out['message'] == 'Pipeline stopped at: research_failed'
+    assert out['message'] == f'Search providers were unavailable. {server.FAILED_NOT_CHARGED}'
     assert out['failure_reason'] == 'research_failed'
     assert out['failure_class'] == 'upstream_unavailable'
     assert out['retryable'] is True

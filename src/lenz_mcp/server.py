@@ -891,12 +891,15 @@ _ASSESS_ERROR_TEXT = {_NO_CHECKABLE_CLAIM: 'No verifiable claim detected'}
 # What a deep check that found too few public sources says.
 INSUFFICIENT_EVIDENCE_MESSAGE = 'Lenz found too few public sources to check this claim; nothing was charged.'
 
-# The tools' message on a failed deep check, by failure code; any other code
-# reads "Pipeline stopped at: <code>".
+# Beside every failed deep check: the debit happens only when a run completes.
+FAILED_NOT_CHARGED = 'Nothing was charged: a deep check is charged only when it completes.'
+
+# The tools' message on a failed deep check whose body carries no sentence of
+# its own (`failure.detail`), by failure code.
 _VERIFY_ERROR_TEXT = {
     _NO_CHECKABLE_CLAIM: 'Not a verifiable claim.',
     'cancelled': 'Cancelled.',
-    'task_error': 'Pipeline failed.',
+    'task_error': 'The deep check stopped on an error.',
     'task_stuck': 'The task was never completed and has been marked failed.',
     'research_empty': INSUFFICIENT_EVIDENCE_MESSAGE,
     'research_insufficient': INSUFFICIENT_EVIDENCE_MESSAGE,
@@ -993,10 +996,22 @@ def _failed_verification(data: dict[str, Any]) -> dict[str, Any]:
     """
     failure = _failure_block(data)
     code = failure.get('code')
-    message = _VERIFY_ERROR_TEXT.get(code, f'Pipeline stopped at: {code}') if isinstance(code, str) and code else None
-    out: dict[str, Any] = {'status': 'failed', 'message': message or 'The verification failed.'}
+    # The API's own sentence first: it says what happened in words a person
+    # reads. An older body without one falls back to the table, then to a
+    # sentence about the stage.
+    message = (
+        _text_or_none(failure.get('detail'))
+        or (_VERIFY_ERROR_TEXT.get(code) if isinstance(code, str) else None)
+        or (f'The deep check stopped before it finished ({code}).' if isinstance(code, str) and code else None)
+        or 'The verification failed.'
+    )
+    out: dict[str, Any] = {'status': 'failed', 'message': f'{message} {FAILED_NOT_CHARGED}'}
     if failure.get('failure_class') == 'insufficient_evidence':
         out['message'] = INSUFFICIENT_EVIDENCE_MESSAGE
+    # A deep check is charged when it completes, so a failed one never is.
+    # `failure.hint` stays out: it is written for an API integrator and can
+    # name endpoints the model has no tool for.
+    out['credits_charged'] = 0
     if 'code' in failure:
         out['failure_reason'] = 'not_a_claim' if code == _NO_CHECKABLE_CLAIM else code
     for key in ('failure_class', 'retryable'):

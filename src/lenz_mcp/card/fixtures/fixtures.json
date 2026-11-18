@@ -979,6 +979,7 @@
     "_card": {
      "deliver": "context"
     },
+    "credits_charged": 0,
     "failure_class": "insufficient_evidence",
     "failure_reason": "research_empty",
     "message": "Lenz found too few public sources to check this claim; nothing was charged.",
@@ -992,9 +993,10 @@
     "_card": {
      "deliver": "context"
     },
+    "credits_charged": 0,
     "failure_class": "invalid_input",
     "failure_reason": "framing_failed",
-    "message": "Pipeline stopped at: framing_failed",
+    "message": "The check stopped before it finished. Nothing was charged: a deep check is charged only when it completes.",
     "retryable": false,
     "status": "failed"
    }
@@ -1005,9 +1007,10 @@
     "_card": {
      "deliver": "context"
     },
+    "credits_charged": 0,
     "failure_class": "internal",
     "failure_reason": "conclusion_failed",
-    "message": "Pipeline stopped at: conclusion_failed",
+    "message": "The check stopped before it finished. Nothing was charged: a deep check is charged only when it completes.",
     "retryable": false,
     "status": "failed"
    }
@@ -1018,9 +1021,10 @@
     "_card": {
      "deliver": "context"
     },
+    "credits_charged": 0,
     "failure_class": "upstream_unavailable",
     "failure_reason": "research_failed",
-    "message": "Pipeline stopped at: research_failed",
+    "message": "The check stopped before it finished. Nothing was charged: a deep check is charged only when it completes.",
     "next_step": "A service the deep check depends on was unavailable, so this attempt has no verdict. Tell the user that source verification is unavailable right now and, when `retryable` is true, that the check can be run again later; any earlier quick verdict still stands as a first read.",
     "retryable": true,
     "status": "failed"

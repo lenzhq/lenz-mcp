@@ -14,8 +14,10 @@ the SDK's models order the keys they dump.
 The oracle comes from commit 5e2ec90b563571b7fbf225dc886979b38c74ad3d, the last
 release that also read the API's older shape. That commit's own tests held the
 same outputs equal to the outputs its predecessor gave for the older bodies
-(b8da55d069e31e81dc7c6d61574a3dd722aeb5db), so what the tools say has not
-moved since then. The writer refuses to run on any other source. To rebuild it:
+(b8da55d069e31e81dc7c6d61574a3dd722aeb5db). What a tool says on purpose
+differently since then is listed in `CHANGED_SINCE_THE_ORACLE` below and laid
+over the oracle, never written into it. The writer refuses to run on any other
+source. To rebuild it:
 
     git worktree add --detach /tmp/lenz-mcp-oracle 5e2ec90b563571b7fbf225dc886979b38c74ad3d
     cp tests/test_api_shapes.py tests/api_shapes.json tests/citecheck_shapes.json /tmp/lenz-mcp-oracle/tests/
@@ -274,6 +276,57 @@ def _oracle() -> dict[str, Any]:
     return json.loads(ORACLE_PATH.read_text(encoding='utf-8'))
 
 
+# What a tool says on purpose differently from the oracle commit, by scenario.
+# The oracle file stays as that commit wrote it; each entry here overlays the
+# fields that changed, so every deliberate change is listed in one place.
+_NOT_CHARGED = 'Nothing was charged: a deep check is charged only when it completes.'
+CHANGED_SINCE_THE_ORACLE: dict[str, dict[str, Any]] = {
+    # A failed deep check gives the API's own sentence and says it was not charged.
+    'verify__status_cancelled_durable': {'message': f'The check was cancelled. {_NOT_CHARGED}', 'credits_charged': 0},
+    'verify__status_failed_durable': {
+        'message': f'The check stopped while writing the conclusion. {_NOT_CHARGED}',
+        'credits_charged': 0,
+    },
+    'verify__status_failed_durable_framing': {
+        'message': f'The input could not be read as a claim. {_NOT_CHARGED}',
+        'credits_charged': 0,
+    },
+    'verify__status_failed_live': {'credits_charged': 0},
+    'verify__status_failed_live_retryable': {
+        'message': f'The check stopped while the reviewers scored the evidence. {_NOT_CHARGED}',
+        'credits_charged': 0,
+    },
+    'verify__status_not_a_claim': {
+        'message': f'No claim in the input could be checked against public evidence. {_NOT_CHARGED}',
+        'credits_charged': 0,
+    },
+    'verify__status_not_a_claim_durable': {
+        'message': f'No claim in the input could be checked against public evidence. {_NOT_CHARGED}',
+        'credits_charged': 0,
+    },
+    'verify__status_task_stuck': {
+        'message': f'The check stopped responding before it finished. {_NOT_CHARGED}',
+        'credits_charged': 0,
+    },
+    'verify__stored_progress_failed_crashed': {
+        'message': f'The check stopped on an error on our side. {_NOT_CHARGED}',
+        'credits_charged': 0,
+    },
+    'verify__stored_progress_failed_insufficient_evidence': {'credits_charged': 0},
+}
+
+
+def _expected(scenario: str) -> Any:
+    """The oracle's output for a scenario, with the deliberate changes laid over it."""
+    expected = _oracle()[scenario]
+    for key, value in CHANGED_SINCE_THE_ORACLE.get(scenario, {}).items():
+        if value is None:
+            expected.pop(key, None)
+        else:
+            expected[key] = value
+    return expected
+
+
 @pytest.mark.skipif(not WRITE_ORACLE, reason='writes the oracle only when asked')
 def test_write_the_oracle():
     # Provenance: the server under test must be exactly the oracle commit's.
@@ -307,13 +360,23 @@ def test_every_scenario_has_an_oracle_entry_and_a_body():
 @skip_while_writing
 @pytest.mark.parametrize('scenario', sorted(SCENARIOS))
 def test_the_body_gives_what_it_gave_before(scenario):
-    assert _serialized(_output(scenario)) == _serialized(_oracle()[scenario])
+    if scenario in CHANGED_SINCE_THE_ORACLE:
+        # A key the overlay adds lands at the end of the oracle's order, not where
+        # the tool writes it, so a changed scenario is compared by content.
+        assert sorted_json(_output(scenario)) == sorted_json(_expected(scenario))
+    else:
+        assert _serialized(_output(scenario)) == _serialized(_oracle()[scenario])
+
+
+@skip_while_writing
+def test_every_change_since_the_oracle_names_a_scenario():
+    assert set(CHANGED_SINCE_THE_ORACLE) <= set(SCENARIOS)
 
 
 @skip_while_writing
 @pytest.mark.parametrize('scenario', sorted(SCENARIOS))
 def test_the_body_through_the_sdk_gives_the_same(scenario):
-    assert sorted_json(_wire_output(scenario)) == sorted_json(_oracle()[scenario])
+    assert sorted_json(_wire_output(scenario)) == sorted_json(_expected(scenario))
 
 
 # ── an answer in the older shape never reaches the tools ─────────────
