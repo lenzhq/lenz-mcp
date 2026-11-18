@@ -313,6 +313,23 @@ CHANGED_SINCE_THE_ORACLE: dict[str, dict[str, Any]] = {
         'credits_charged': 0,
     },
     'verify__stored_progress_failed_insufficient_evidence': {'credits_charged': 0},
+    # Out of credits forwards the 402's facts and names the options the result carries.
+    'errors__payment_required_verify': {
+        'message': (
+            'Out of Lenz credits: this call costs 10 and the account has 0. '
+            'The balance resets on 3 October 2026 at 12:00 UTC.'
+        ),
+        'cost': 10,
+        'credits_remaining': 0,
+        'resets_at': '2026-10-03T12:00:00.000000+00:00',
+        'next_step': (
+            'This call did not run and nothing was charged; any check already started keeps running and its '
+            'result still arrives. Tell the user what was not checked and why, and what they can do: '
+            '`manage_url` is the page where the user can add credits or change plan, so give the user that '
+            'link; the balance resets on the date in the message. The same call made again before the '
+            'balance changes is refused again.'
+        ),
+    },
 }
 
 

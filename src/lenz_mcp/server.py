@@ -16,6 +16,7 @@ import inspect
 import logging
 import re
 import time
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
@@ -30,7 +31,13 @@ from starlette.responses import JSONResponse
 
 from lenz_mcp import client, config, exchange, links
 from lenz_mcp.card_identity import with_mounting_identity
-from lenz_mcp.mcp_card import CARD_ONLY_TOOL_META, CARD_TOOL_NAMES, register_card_resources, with_delivery
+from lenz_mcp.mcp_card import (
+    CARD_ONLY_TOOL_META,
+    CARD_ONLY_TOOL_NAMES,
+    CARD_TOOL_NAMES,
+    register_card_resources,
+    with_delivery,
+)
 from lenz_mcp.middleware import lenz_middleware
 from lenz_mcp.widget_resource import request_is_chatgpt
 
@@ -247,12 +254,13 @@ USAGE_NEXT_NOTE = (
 
 # On every out-of-credits result. In a batch of deep checks some calls start
 # and later ones run out; nothing ties the calls together, so the result says
-# what happened to the others and what the user needs to hear.
-QUOTA_NEXT_STEP = (
-    'This call did not run and was not charged; any check already started keeps running and '
-    'its result still arrives. Tell the user which claims were not checked and why. Calling '
-    'again will not help until the balance allows it.'
+# what happened to the others. The rest of its `next_step` names the options
+# the result itself carries (see `_quota_next_step`).
+QUOTA_NOT_RUN = (
+    'This call did not run and nothing was charged; any check already started keeps running and '
+    'its result still arrives.'
 )
+QUOTA_REFUSED_AGAIN = 'The same call made again before the balance changes is refused again.'
 
 # On a deep check that failed because Lenz could not reach its sources.
 SOURCES_UNAVAILABLE_NEXT_STEP = (
@@ -786,6 +794,14 @@ def requires_auth(fn):
         credential_token = _CALL_CREDENTIAL.set(None)
         try:
             result = await _gated(fn, ctx, args, kwargs)
+            # Out of credits: add what the balance still covers, which needs the
+            # tool and its arguments. Card-only tools carry their own short form.
+            if (
+                isinstance(result, dict)
+                and result.get('status') == 'quota_exhausted'
+                and fn.__name__ not in CARD_ONLY_TOOL_NAMES
+            ):
+                await _with_balance_options(result, fn.__name__, ctx, kwargs)
             # Every result that MOUNTS a card, an error envelope included (the card
             # renders those too), says which conversation and which call it is.
             if fn.__name__ in CARD_TOOL_NAMES:
@@ -808,8 +824,29 @@ def _humanize_seconds(seconds: int) -> str:
     return f'{round(seconds / 3600)} hours'
 
 
+def _resets_on(value: Any) -> str | None:
+    """``resets_at`` as a person reads it: a date, and the time when it is not midnight UTC."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        moment = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(UTC)
+    day = f'{moment.day} {moment:%B %Y}'
+    if (moment.hour, moment.minute) == (0, 0):
+        return day
+    return f'{day} at {moment:%H:%M} UTC'
+
+
+def _int(value: Any) -> int | None:
+    """A whole number from a response, never a bool."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
 def _quota_message(data: dict[str, Any]) -> str:
-    """The out-of-credits sentence an MCP caller sees.
+    """The out-of-credits sentences an MCP caller sees.
 
     Built from the 402's structured fields rather than passed through from
     ``detail``. The API's ``detail`` is developer copy and is deliberately
@@ -819,31 +856,81 @@ def _quota_message(data: dict[str, Any]) -> str:
     ``credits_remaining`` is the real one) and mean nothing to someone who
     asked a chat client to check a fact and has never seen the API.
 
-    ``cost`` and ``credits_remaining`` say the same thing in the vocabulary
-    ``check_usage`` already uses, and they are numbers from the response, never
-    hardcoded prices. Both are omitted when unresolvable rather than sent as
-    null, so absence is the signal to fall back.
+    ``cost``, ``credits_remaining``, ``requested`` and ``resets_at`` are
+    numbers and dates from the response, never hardcoded prices, and so is
+    anything ``balance_covers`` lists. Each is omitted when unresolvable rather
+    than sent as null, so absence is the signal to fall back.
     """
-    cost = data.get('cost')
-    remaining = data.get('credits_remaining')
+    cost = _int(data.get('cost'))
+    remaining = _int(data.get('credits_remaining'))
+    requested = _int(data.get('requested'))
+    price = f'{cost:,}' if cost is not None else ''
+    if cost is not None and requested is not None and requested > 1 and cost % requested == 0:
+        price = f'{cost:,} ({cost // requested:,} for each of {requested:,} claims)'
     # "Out of" only when the balance really is empty. A 402 also fires when a
     # balance is non-zero but too small for THIS call (a 10-credit verify on 3
     # credits), and "Out of Lenz credits: the account has 3." contradicts
     # itself.
-    if isinstance(remaining, int) and remaining > 0:
-        if isinstance(cost, int):
-            return f'Not enough Lenz credits: this call costs {cost:,} and the account has {remaining:,}.'
-        return f'Not enough Lenz credits: the account has {remaining:,}.'
+    if remaining is not None and remaining > 0:
+        if cost is not None:
+            text = f'Not enough Lenz credits: this call costs {price} and the account has {remaining:,}.'
+        else:
+            text = f'Not enough Lenz credits: the account has {remaining:,}.'
     # Empty balance, or no usable numbers in the body. The generic sentence
     # beats echoing `detail`, which is the jargon this function exists to keep
     # out — including on the legacy-403 path, where `detail` is all there is.
-    if isinstance(remaining, int) and isinstance(cost, int):
-        return f'Out of Lenz credits: this call costs {cost} and the account has 0.'
-    return 'Out of Lenz credits for this call.'
+    elif remaining is not None and cost is not None:
+        text = f'Out of Lenz credits: this call costs {price} and the account has 0.'
+    else:
+        text = 'Out of Lenz credits for this call.'
+    resets = _resets_on(data.get('resets_at'))
+    if resets:
+        text += f' The balance resets on {resets}.'
+    covers = data.get('balance_covers')
+    if isinstance(covers, list) and covers and remaining:
+        listed = '; '.join(_covers_phrase(c, requested) for c in covers)
+        text += f' The {remaining:,} credits left still pay for: {listed}.'
+    return text
+
+
+def _covers_phrase(entry: dict[str, Any], requested: int | None) -> str:
+    """One ``balance_covers`` entry in words."""
+    each = f'{entry["cost_each"]:,} credit{"s" if entry["cost_each"] != 1 else ""} each'
+    check = str(entry['check'])
+    if check.endswith(' of this call') and requested:
+        noun = check.removesuffix(' of this call')
+        return f'{entry["count"]:,} of the {requested:,} {noun} in this call ({each})'
+    return f'{check} ({each}), up to {entry["count"]:,}'
+
+
+def _quota_next_step(result: dict[str, Any]) -> str:
+    """What the model is told to do with an out-of-credits result.
+
+    It names only the options the result itself carries, so it can never send
+    the model to a link, a date or a cheaper check that is not there.
+    """
+    options = []
+    if result.get('manage_url'):
+        options.append(
+            '`manage_url` is the page where the user can add credits or change plan, so give the user that link'
+        )
+    if _resets_on(result.get('resets_at')):
+        options.append('the balance resets on the date in the message')
+    if result.get('balance_covers'):
+        options.append('`balance_covers` lists the checks the remaining balance still pays for')
+    say = 'Tell the user what was not checked and why'
+    if options:
+        say += ', and what they can do: ' + '; '.join(options)
+    return f'{QUOTA_NOT_RUN} {say}. {QUOTA_REFUSED_AGAIN}'
 
 
 def _quota_exhausted(data: dict[str, Any]) -> dict[str, Any]:
     """The out-of-quota tool result, shared by the 402 and legacy-403 paths.
+
+    It forwards what the 402 body knows (the call's price and size, the balance,
+    when it resets), so the model can tell the user exactly where they stand.
+    ``requires_auth`` then adds what the balance still covers
+    (``_with_balance_options``), which needs the tool and its arguments.
 
     ``manage_url`` points at the plans page, not the API-credentials page: the caller
     has a working key, so sending them to key creation was a dead end. The
@@ -853,18 +940,128 @@ def _quota_exhausted(data: dict[str, Any]) -> dict[str, Any]:
     OMITTED ENTIRELY FOR CHATGPT. OpenAI's app guidelines forbid commerce in
     digital goods — an app "cannot initiate new subscriptions or display upgrade
     options" — and a pricing URL handed to the model renders as an upgrade CTA
-    in the conversation, which is exactly what those guidelines rule out.
+    in the conversation, which is exactly what those guidelines rule out. With
+    no link, ``next_step`` names no way to buy either; the balance, the reset
+    date and what the balance still covers are facts, and every client gets them.
     Every other client keeps the link: a developer reading a 402
     over the SDK needs the actionable destination, and no policy covers them.
     """
-    result = {
-        'status': 'quota_exhausted',
-        'message': _quota_message(data),
-    }
+    result: dict[str, Any] = {'status': 'quota_exhausted', 'message': ''}
+    for key in ('cost', 'credits_remaining', 'requested'):
+        if _int(data.get(key)) is not None:
+            result[key] = data[key]
+    if isinstance(data.get('resets_at'), str) and data['resets_at']:
+        result['resets_at'] = data['resets_at']
     if not request_is_chatgpt():
         result['manage_url'] = data.get('upgrade_url') or config.PLANS_URL
-    result['next_step'] = QUOTA_NEXT_STEP
+    _word_quota(result)
     return result
+
+
+def _word_quota(result: dict[str, Any]) -> None:
+    """(Re)write an out-of-credits result's ``message`` and ``next_step`` from its fields."""
+    result['message'] = _quota_message(result)
+    result['next_step'] = _quota_next_step(result)
+
+
+# The capability whose price a tool's refusal is in (`check_usage`'s `costs`).
+_TOOL_CAPABILITY = {
+    'assess_claim': 'assess',
+    'verify_claim': 'verify',
+    'select_claims': 'verify',
+    'ask_followup': 'ask',
+    'check_citations': 'citation',
+    'get_citation_check': 'citation',
+}
+# A refusal's price-list lookup is a courtesy: it never holds the answer up long.
+PRICE_LIST_TIMEOUT_S = 5.0
+
+
+async def _price_list(ctx: Context) -> dict[str, Any] | None:
+    """The account's live balance and prices (``GET /me/usage``), or None.
+
+    Read only on a refusal, to say what the balance still covers. A signed-in
+    caller's tool credential carries only that tool's permissions, so the
+    lookup takes its own, with exactly the ones ``check_usage`` asks for.
+    Never raises: without it the refusal still says everything the 402 said.
+    """
+    try:
+        authorization: client.Authorization
+        if _caller_signed_in():
+            from mcp.server.auth.middleware.auth_context import get_access_token
+
+            access_token = get_access_token()
+            if access_token is None:
+                return None
+            authorization = exchange.CallCredential(access_token.token, exchange.scopes_for('check_usage'))
+        else:
+            authorization = _authorization(ctx)
+        if not authorization:
+            return None
+        resp = await asyncio.wait_for(client.me_usage(authorization), PRICE_LIST_TIMEOUT_S)
+    except Exception:  # noqa: BLE001 — an optional lookup on a refusal must not replace the refusal
+        logger.warning('mcp_refusal_price_list_unavailable', exc_info=True)
+        return None
+    return resp.data if resp.ok and isinstance(resp.data, dict) else None
+
+
+def _covers(check: str, cost_each: int | None, balance: int, how: str, ceiling: int | None = None) -> list:
+    """One ``balance_covers`` entry, or none when the balance does not pay for one."""
+    if cost_each is None or cost_each <= 0 or balance < cost_each:
+        return []
+    count = balance // cost_each
+    if ceiling is not None:
+        count = min(count, ceiling)
+    return [{'check': check, 'cost_each': cost_each, 'count': count, 'how': how}]
+
+
+async def _with_balance_options(result: dict[str, Any], tool: str, ctx: Context, kwargs: dict[str, Any]) -> None:
+    """Say what the remaining balance still pays for, on an out-of-credits result.
+
+    From the refused call's own numbers first (a list of claims at a price each
+    is covered in part), then from the live price list for the cheaper ways to
+    run what was asked (a deep check at a lower depth, a quick check, fewer
+    citations). The price list is read only when there is a balance to spend,
+    or when the refusal did not state the balance at all.
+    """
+    capability = _TOOL_CAPABILITY.get(tool)
+    if capability is None:
+        return
+    balance = _int(result.get('credits_remaining'))
+    wants_prices = (balance is None and capability == 'citation') or (
+        balance is not None and balance > 0 and capability in ('verify', 'citation')
+    )
+    prices = await _price_list(ctx) if wants_prices else None
+    costs = _dict(prices.get('costs')) if prices else {}
+    if prices:
+        credits = _dict(prices.get('credits'))
+        if balance is None and _int(credits.get('remaining')) is not None:
+            balance = credits['remaining']
+            result['credits_remaining'] = balance
+        if 'resets_at' not in result and isinstance(credits.get('resets_at'), str):
+            result['resets_at'] = credits['resets_at']
+    requested = _int(result.get('requested'))
+    if 'cost' not in result and requested and _int(costs.get(capability)):
+        result['cost'] = requested * costs[capability]
+
+    covers: list[dict[str, Any]] = []
+    cost = _int(result.get('cost'))
+    if balance and requested and requested > 1 and cost and cost % requested == 0:
+        noun = 'citations' if capability == 'citation' else 'claims'
+        how = 'pass fewer citations' if capability == 'citation' else 'send fewer claims in the same call'
+        covers += _covers(f'{noun} of this call', cost // requested, balance, how, ceiling=requested - 1)
+    if balance and capability == 'verify':
+        if kwargs.get('depth') != 'low':
+            depth_prices = _dict(_dict(_dict(prices.get('cost_options')).get('verify')).get('depth')) if prices else {}
+            covers += _covers(
+                'deep check at depth "low"', _int(depth_prices.get('low')), balance, '`verify_claim` with depth "low"'
+            )
+        covers += _covers('quick check of one claim', _int(costs.get('assess')), balance, '`assess_claim`')
+    if balance and capability == 'citation' and not covers:
+        covers += _covers('citations', _int(costs.get('citation')), balance, '`check_citations` with fewer citations')
+    if covers:
+        result['balance_covers'] = covers
+    _word_quota(result)
 
 
 # ── reading the API's response shape ─────────────────────────────────
@@ -1628,6 +1825,23 @@ def _batch_verify_envelope(
     return out
 
 
+def _batch_quota_body(bodies: list[dict[str, Any]]) -> dict[str, Any]:
+    """One 402 body for a batch of deep checks that were all refused for credits.
+
+    Each claim is its own call and its own 402, priced for one check; the
+    refusal the model reads is priced for all of them, with the latest balance
+    any of them stated.
+    """
+    body = dict(bodies[0])
+    costs = [_int(b.get('cost')) for b in bodies]
+    if all(cost is not None for cost in costs):
+        body['cost'] = sum(cost for cost in costs if cost is not None)
+    else:
+        body.pop('cost', None)
+    body['requested'] = len(bodies)
+    return body
+
+
 @_tool(
     title='Deep fact-check',
     # idempotentHint=False: the same claim sent again inside the 24-hour replay window
@@ -1732,6 +1946,7 @@ async def verify_claim(
         by_index: dict[int, dict[str, Any]] = {}
         first_err_resp: client.ApiResponse | None = None
         first_exc: BaseException | None = None
+        quota_bodies: list[dict[str, Any]] = []
         for idx, (c, resp) in enumerate(zip(to_start, resps, strict=True)):
             if isinstance(resp, BaseException):
                 if first_exc is None:
@@ -1762,6 +1977,7 @@ async def verify_claim(
             elif resp.status == 402 or (resp.status == 403 and resp.data.get('code') in _QUOTA_CODES):
                 partial = True
                 unstarted.append(c)
+                quota_bodies.append(resp.data)
                 if first_err_resp is None:
                     first_err_resp = resp
             else:
@@ -1773,6 +1989,9 @@ async def verify_claim(
 
         if not started_runs and first_exc is not None and first_err_resp is None:
             raise first_exc
+        if not started_runs and not by_index and quota_bodies:
+            # Every claim refused for credits: one refusal, priced for all of them.
+            return _quota_exhausted(_batch_quota_body(quota_bodies))
         if not started_runs and not by_index and first_err_resp is not None:
             return _error_result(first_err_resp)
         if not started_runs and len(by_index) == len(to_start) and first_err_resp is not None and not partial:

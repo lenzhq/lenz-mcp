@@ -2487,7 +2487,7 @@ def test_the_picker_selects_every_claim_when_the_user_asked_for_all():
 
 def test_an_out_of_credits_result_says_what_happened_to_the_rest():
     out = server._quota_exhausted({'cost': 10, 'credits_remaining': 3})
-    assert out['next_step'] == server.QUOTA_NEXT_STEP
+    assert out['next_step'].startswith(server.QUOTA_NOT_RUN)
     assert 'already started keeps running' in out['next_step']
 
 
@@ -2564,7 +2564,9 @@ def test_verify_claim_batch_validation_and_single_item_unwrapping(monkeypatch):
 
 def test_verify_claim_batch_handles_per_item_402_without_me_usage(monkeypatch):
     """Per-item 402 responses return `quota_exhausted` when 0 claims start and
-    `partial` with `unstarted_claims` when some start, without calling `me_usage`."""
+    `partial` with `unstarted_claims` when some start, without a balance read
+    before the submissions. (A refusal's own price-list lookup is stubbed for the
+    whole suite and tested in `test_refusals.py`.)"""
     me_usage_called = False
 
     async def _forbid_me_usage(_auth):
