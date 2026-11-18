@@ -357,3 +357,44 @@ def test_a_submission_tools_line_names_every_tool_the_case_asserts(visible):
         named_tools = set(re.findall(r'`(\w+)`', case.tools_line)) & visible
         unasserted = named_tools - set(case.expected_tools) - set(_LATER_TURN_ONLY)
         assert not unasserted, f'{case.id} promises {unasserted}, which the eval does not assert'
+
+
+def _case(case_id):
+    return next(case for case in cases.CASES if case.id == case_id)
+
+
+def test_the_out_of_credits_histories_carry_what_their_replies_are_judged_on():
+    """A reply can only give the user what the result gave the model."""
+    with_link = cases.DEEP_CHECK_REFUSED[-1].result
+    without_link = cases.DEEP_CHECK_REFUSED_OPENAI[-1].result
+    for result in (with_link, without_link):
+        assert result['status'] == 'quota_exhausted'
+        assert result['resets_at']
+        assert {c['check'] for c in result['balance_covers']} >= {'deep check at depth "low"'}
+    assert cases._PLANS_PAGE in with_link['manage_url']
+    assert 'manage_url' not in without_link
+    assert cases._PLANS_PAGE not in str(without_link)
+
+
+GOOD_WALL_REPLY = (
+    "Lenz couldn't run that deep check: it costs 10 credits and you have 7. Your credits reset on "
+    'December 1, 2026. You can add credits at https://lenz.io/plans?wall=x, or I can run a lower-depth '
+    'deep check for 5 credits now.'
+)
+
+
+@pytest.mark.parametrize(
+    ('reply', 'with_link', 'without_link'),
+    [
+        (GOOD_WALL_REPLY, True, False),
+        (GOOD_WALL_REPLY.replace(' You can add credits at https://lenz.io/plans?wall=x, or', ' Or'), False, True),
+        (GOOD_WALL_REPLY.replace('December 1, 2026', 'next month'), False, False),
+        (GOOD_WALL_REPLY.replace('a lower-depth deep check for 5 credits now', 'nothing else'), False, False),
+        ('Out of credits. Credits reset on 1 Dec. A quick check of the claim still fits.', False, True),
+        # "below" and "allow" are not a cheaper check.
+        ('You are below the balance this needs; your plan does not allow it until 2026-12-01.', False, False),
+    ],
+)
+def test_the_out_of_credits_replies_are_judged_on_link_date_and_option(reply, with_link, without_link):
+    assert _case('out-of-credits-gives-the-way-forward').reply(reply) is with_link
+    assert _case('out-of-credits-without-a-link').reply(reply) is without_link
