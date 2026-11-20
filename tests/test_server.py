@@ -2066,7 +2066,7 @@ def test_protocol_ask_followup_question_declares_the_api_length_cap():
 
 
 def test_protocol_unsupported_language_never_reaches_the_api(monkeypatch):
-    """The whole point of the enum: FastMCP rejects `ko` during schema
+    """The whole point of the enum: FastMCP rejects `zh` during schema
     validation, so the model self-corrects locally instead of burning a call
     on a 422 the user sees as a failed tool invocation."""
     called = []
@@ -2078,7 +2078,7 @@ def test_protocol_unsupported_language_never_reaches_the_api(monkeypatch):
     monkeypatch.setattr(client, 'assess', _explode)
 
     with pytest.raises(Exception) as excinfo:
-        _run(server.mcp.call_tool('assess_claim', {'claim': 'the earth is round', 'language': 'ko'}))
+        _run(server.mcp.call_tool('assess_claim', {'claim': 'the earth is round', 'language': 'zh'}))
 
     assert not called
     # The error names the legal values, which is what lets the model recover

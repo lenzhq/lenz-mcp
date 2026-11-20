@@ -270,7 +270,7 @@ def test_the_start_tool_takes_only_a_served_language(api):
         wire = harness.wire(user_agent=CHATGPT, authorization=KEY, capabilities=DECLARES_APPS)
         response = wire.rpc(
             'tools/call',
-            {'name': 'start_verification_widget', 'arguments': {'claim': 'x', 'language': 'ko'}},
+            {'name': 'start_verification_widget', 'arguments': {'claim': 'x', 'language': 'zh'}},
             era=MODERN,
             name='start_verification_widget',
         )

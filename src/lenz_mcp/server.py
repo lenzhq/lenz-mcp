@@ -54,8 +54,8 @@ CONFIDENCE_NOTE = (
 #
 # The type and the wording exist to stop the client filling this in unasked.
 # Typed as a bare `str` and described as an "ISO 639-1 code", it advertised ~180
-# codes against the twelve the API serves and read as an invitation to be
-# helpful. A client could pass a code the API does not serve, for example `ko`,
+# codes beyond the set the API serves and read as an invitation to be
+# helpful. A client could pass a code the API does not serve, for example `zh`,
 # and get a 422 it could only escape by reading the error and retrying, several
 # failed tool calls into the user's first session. A client inferring the
 # locale would get a verdict in a language nobody asked for, at no error.
@@ -65,11 +65,11 @@ CONFIDENCE_NOTE = (
 # model's part is to pass the claim in the user's own words and language, and
 # to set `language` only for a user who asked for the answer in another one.
 #
-# The enum is built from `config.SUPPORTED_LANGUAGES`, so a thirteenth
-# language is a one-line change; `''` is "unset". `auto` is deliberately NOT a
+# The enum is built from `config.SUPPORTED_LANGUAGES`, so adding a
+# language updates the schema from the same list; `''` is "unset". `auto` is deliberately NOT a
 # value: the connector sends it, the model never does. Rejecting an unsupported
 # code here costs the model one local self-correction instead of an API round
-# trip, and tells a user who genuinely wants Korean that we don't serve it
+# trip, and tells a user who wants an unsupported language that we don't serve it
 # rather than hiding it in a 422 they never see.
 #
 # Deliberate narrowing: the API lowercases the code, so it accepts 'EN'

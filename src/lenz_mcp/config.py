@@ -274,7 +274,47 @@ ASSESS_MAX_CLAIMS = 20
 ASK_MESSAGE_MAX_CHARS = 500
 # The `language` codes the API accepts, in the API's order, which the tool
 # schema lists.
-SUPPORTED_LANGUAGES: tuple[str, ...] = ('en', 'es', 'de', 'fr', 'it', 'pt', 'nl', 'sv', 'da', 'no', 'fi', 'bg', 'sr')
+SUPPORTED_LANGUAGES: tuple[str, ...] = (
+    'en',
+    'es',
+    'de',
+    'fr',
+    'it',
+    'pt',
+    'nl',
+    'sv',
+    'da',
+    'no',
+    'fi',
+    'bg',
+    'sr',
+    'ko',
+    'pl',
+    'ru',
+    'uk',
+    'hi',
+    'ar',
+    'ro',
+    'el',
+    'hu',
+    'cs',
+    'sk',
+    'sl',
+    'mk',
+    'hr',
+    'tr',
+    'sq',
+    'lt',
+    'lv',
+    'et',
+    'be',
+    'ca',
+    'eu',
+    'is',
+    'ga',
+    'cy',
+    'mt',
+)
 # The path of a verification's result page on the frontend.
 CLAIM_PATH_TEMPLATE = '/c/{slug}'
 

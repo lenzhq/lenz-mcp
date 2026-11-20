@@ -126,14 +126,15 @@ def test_the_tools_send_auto_for_an_unset_language(api):
     assert _bodies(api, 'abcd1234')[0]['language'] == 'auto'
 
 
-def test_an_explicit_code_is_never_replaced(api):
+@pytest.mark.parametrize('language', ['en', 'ko', 'ar', 'hi', 'uk', 'mk'])
+def test_an_explicit_code_is_never_replaced(api, language):
     text = 'Der Rhein ist der längste Fluss Deutschlands.'
-    _run(server.assess_claim(text, _ctx(), language='en'))
-    _run(server.verify_claim(text, _ctx(), language='en'))
-    _run(server.ask_followup('abcd1234', 'Which source is strongest?', _ctx(), language='en'))
-    assert _bodies(api, '/assess')[0]['language'] == 'en'
-    assert _bodies(api, '/verify')[0]['language'] == 'en'
-    assert _bodies(api, 'abcd1234')[0]['language'] == 'en'
+    _run(server.assess_claim(text, _ctx(), language=language))
+    _run(server.verify_claim(text, _ctx(), language=language))
+    _run(server.ask_followup('abcd1234', 'Which source is strongest?', _ctx(), language=language))
+    assert _bodies(api, '/assess')[0]['language'] == language
+    assert _bodies(api, '/verify')[0]['language'] == language
+    assert _bodies(api, 'abcd1234')[0]['language'] == language
 
 
 def test_the_claim_text_goes_to_the_api_as_it_was_given(api):
@@ -151,7 +152,7 @@ def test_an_unsupported_code_never_reaches_the_api(api, tool):
         'ask_followup': {'verification_id': 'abcd1234', 'question': 'q'},
     }[tool]
     with pytest.raises(Exception) as excinfo:  # noqa: PT011
-        _run(server.mcp.call_tool(tool, {**arguments, 'language': 'ko'}))
+        _run(server.mcp.call_tool(tool, {**arguments, 'language': 'zh'}))
     assert api == []
     assert "'en'" in str(excinfo.value)
 
