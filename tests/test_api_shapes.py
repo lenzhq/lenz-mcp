@@ -294,9 +294,23 @@ _NO_CLAIM_NOT_CHECKED = f'Nothing was checked and nothing was charged. {_NO_CLAI
 _NO_CLAIM_ITEM_NOT_CHECKED = f'This item was not checked and was not charged. {_NO_CLAIM_WHAT_TO_DO}'
 
 
+# The API's advice for an integrator at the end of a no-claim row's hint: it names a
+# path the model has no tool for, so the tools leave that sentence out.
+_API_NO_CLAIM_ADVICE = ' Send one factual claim, or run the text through /extract to enumerate its claims.'
+
+
 def _no_claim_rows_say_what_to_do(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The oracle's rows, with the next step on the rows that held no claim and nothing else changed."""
-    return [{**row, 'next_step': _NO_CLAIM_ITEM_NOT_CHECKED} if row.get('error') == 'no_claim' else row for row in rows]
+    """The oracle's rows, with the next step on the rows that held no claim and their hint
+    without the sentence that names an API path; nothing else changed."""
+    out = []
+    for row in rows:
+        if row.get('error') == 'no_claim':
+            row = {**row, 'next_step': _NO_CLAIM_ITEM_NOT_CHECKED}
+            if 'hint' in row:
+                assert row['hint'].endswith(_API_NO_CLAIM_ADVICE), row['hint']
+                row['hint'] = row['hint'].removesuffix(_API_NO_CLAIM_ADVICE)
+        out.append(row)
+    return out
 
 
 CHANGED_SINCE_THE_ORACLE: dict[str, dict[str, Any]] = {

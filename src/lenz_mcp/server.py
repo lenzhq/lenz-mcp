@@ -1035,6 +1035,22 @@ _NO_CHECKABLE_CLAIM = 'no_checkable_claim'
 # claims). The API carries no hint on such a row.
 _COMPOUND_ROW_HINT = 'Assessed the main claim only. Send identified_claims as their own items to check the rest.'
 
+# The API writes a row's hint for an integrator, and can end it with advice that
+# names an API path ("... or run the text through /extract ..."). The model has
+# no tool for a path and the card shows the hint to the user, so a sentence that
+# names one stays out; the sentences around it (why the item was not checked)
+# are kept as written.
+_API_PATH = re.compile(r'(?<![\w/:])/[a-z][a-z_/-]+')
+_SENTENCE_END = re.compile(r'(?<=[.!?])\s+')
+
+
+def _hint_without_api_paths(hint: Any) -> Any:
+    """A row's hint without the sentences that name an API path; not a string, as given."""
+    if not isinstance(hint, str):
+        return hint
+    return ' '.join(s for s in _SENTENCE_END.split(hint.strip()) if not _API_PATH.search(s))
+
+
 # The tools' message on an assess answer with no rows, by failure code.
 _ASSESS_ERROR_TEXT = {_NO_CHECKABLE_CLAIM: 'No verifiable claim detected'}
 
@@ -1409,9 +1425,11 @@ async def assess_claim(
         if c.get('identified_claims'):
             entry['identified_claims'] = list(c['identified_claims'])
         # One sentence on what to send next; the API sets it on every error
-        # row and on a compound row, never on a plain verdict.
-        if c.get('hint'):
-            entry['hint'] = c['hint']
+        # row and on a compound row, never on a plain verdict. Advice that
+        # names an API path is left out (see `_hint_without_api_paths`).
+        hint = _hint_without_api_paths(c.get('hint'))
+        if hint:
+            entry['hint'] = hint
         # The reviewer notes, forwarded only when set: a null note adds
         # nothing, and a row from an older API or a replayed stored body has
         # no such keys at all (the MCP server and the API deploy independently).
