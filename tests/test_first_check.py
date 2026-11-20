@@ -467,6 +467,35 @@ def test_a_low_confidence_row_carries_the_recommendation(monkeypatch):
     assert error['next_step'] == server._no_claim_next_step(server.NO_CLAIM_ITEM_NOT_CHECKED)
 
 
+@pytest.mark.parametrize(
+    ('api_hint', 'shown'),
+    [
+        # The API's advice for an integrator names a path the model has no tool for.
+        (
+            'The input is a greeting. Send one factual claim, or run the text through /extract to enumerate its claims.',
+            'The input is a greeting.',
+        ),
+        # A hint that names no path reads as the API wrote it.
+        ('This is a string of letters, not a statement. Send a factual claim.', None),
+        # A web address or an "and/or" is not an API path.
+        ('See https://lenz.io/docs for what can be checked and/or sent.', None),
+        # Nothing left to say: no hint at all.
+        ('Run the text through /extract first.', ''),
+    ],
+)
+def test_a_row_hint_never_names_an_api_path(monkeypatch, api_hint, shown):
+    row = {**_ASSESS['claims'][-1], 'failure': {**_ASSESS['claims'][-1]['failure'], 'hint': api_hint}}
+    _patch_api(monkeypatch, 'assess', ApiResponse(status=200, data={**_ASSESS, 'claims': [row]}))
+    out = _run(server.assess_claim(ctx=_ctx(), claims=[row['claim']]))
+    (entry,) = out['claims']
+    assert entry['error'] == 'no_claim'
+    expected = api_hint if shown is None else shown
+    if expected:
+        assert entry['hint'] == expected
+    else:
+        assert 'hint' not in entry
+
+
 def test_the_recommendation_never_assumes_reviewer_notes_exist(monkeypatch):
     """The next step is derived from confidence alone: it may not refer to a
     reviewer's reasoning, which is absent on many rows and on every API that
