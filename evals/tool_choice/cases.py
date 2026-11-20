@@ -572,7 +572,7 @@ NO_CLAIM_FOUND = (
 # The reply says nothing was checked, in the ways a person would put it.
 _NOTHING_CHECKED = re.compile(
     r'\bnothing (?:was|got|has been) (?:checked|verified|run)\b|\bnothing to (?:check|verify)\b'
-    r'|\bno (?:verifiable|checkable|factual) claims?\b|\bnot (?:a )?(?:verifiable|checkable|factual)\b'
+    r'|\bno (?:(?:verifiable|checkable|factual) ){1,2}claims?\b|\bnot (?:a )?(?:verifiable|checkable|factual)\b'
     r"|\b(?:wasn't|was not|isn't|is not|hasn't been|has not been|aren't|are not|can't be|cannot be|couldn't be|"
     r'could not be) (?:\w+ ){0,2}?(?:checked|verified|fact-checked)\b'
     r"|\b(?:didn't|did not|couldn't|could not|can't|cannot|unable to|not able to) (?:\w+ ){0,2}?(?:check|verify|find a claim)"
