@@ -803,6 +803,7 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
                 onClick={() => {
                   if (!allRows && i >= LIST_ROWS_SHOWN) setAllRows(true);
                   if (b === 'ok' && !showOk) setShowOk(true);
+                  setOpenId(id);
                   setTimeout(() => {
                     const el = globalThis.document?.getElementById(`mcp-row-${i}`);
                     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
