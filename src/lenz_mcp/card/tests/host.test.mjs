@@ -53,7 +53,6 @@ test('press → running → the deep result in place → one context push → te
   const button = frame.getByRole('button', { name: 'Check against sources' });
   await button.waitFor();
   assert.match(await button.getAttribute('class'), /filled/);
-  assert.ok(await frame.getByText("Reviewers' reasoning").isVisible());
   assert.ok(await frame.getByText(/^One reviewer disagreed: The figure depends/).isVisible());
 
   await button.click();

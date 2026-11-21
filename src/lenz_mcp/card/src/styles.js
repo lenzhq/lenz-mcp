@@ -211,7 +211,7 @@ a.lz-link { display: inline-block; }
 .lz-pages-list { margin-top: 6px; }
 .lz-pages-list > li { overflow-wrap: anywhere; }
 .lz-pages > .lz-link { margin-top: 8px; }
-.lz-quote { margin-top: 6px; font-size: 15px; line-height: 1.6; text-indent: -0.4em; }
+.lz-quote { margin-top: 6px; font-size: 15px; line-height: 1.6; text-indent: 0; }
 /* A non-English quote's language, before it: the quote no longer starts the
    line, so its opening mark does not hang. */
 .lz-quote-foreign { text-indent: 0; }
@@ -223,7 +223,7 @@ a.lz-link { display: inline-block; }
    under the claim only when there is one. The rule between rows is the whole gap:
    the header's own padding, nothing added. */
 .lz-rows > li + li { margin-top: 0; padding-top: 0; }
-.lz-rows-region { margin-top: 12px; padding-top: 0; }
+.lz-rows-region { margin-top: 8px; padding-top: 0; border-top: 0; }
 /* A row header IS the disclosure: the whole line is the target, and the
    affordance is on the claim's text, never a box. */
 .lz-row-head {
@@ -246,6 +246,7 @@ a.lz-link { display: inline-block; }
 .lz-row-head .row-score { font-size: 13px; font-variant-numeric: tabular-nums; margin-left: 6px; }
 @media (pointer: coarse) { .lz-row-head { min-height: 44px; } }
 .lz-row-panel { margin-top: 0; padding-bottom: 8px; }
+.lz-row-panel .lz-finding { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--lz-hair); }
 .lz-row-changed { margin-top: -4px; }
 .lz-tally { margin-top: 6px; color: var(--lz-meta); }
 /* The list card's title and its tally share one line when they fit. */
@@ -262,19 +263,19 @@ a.lz-link { display: inline-block; }
 }
 .lz-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
-/* Claim strip: 10px square indicators */
+/* Claim strip: 12px square indicators */
 .claim-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin: 8px 0 12px 0;
+  gap: 5px;
+  margin: 10px 0 8px 0;
   align-items: center;
 }
 .strip-cell {
-  width: 10px;
-  height: 10px;
-  min-width: 10px;
-  min-height: 10px;
+  width: 12px;
+  height: 12px;
+  min-width: 12px;
+  min-height: 12px;
   border-radius: 2px;
   border: 0;
   padding: 0;
@@ -283,6 +284,7 @@ a.lz-link { display: inline-block; }
   background: var(--lz-hair);
 }
 .strip-cell:hover { opacity: 0.85; }
+.strip-cell.is-open { outline: 2px solid var(--lz-ink); outline-offset: 1px; }
 .strip-cell.strip-bad { background: var(--lz-false); }
 .strip-cell.strip-look { background: var(--lz-mostly-true); }
 .strip-cell.strip-ok { background: var(--lz-true); }
@@ -296,30 +298,34 @@ a.lz-link { display: inline-block; }
   letter-spacing: 0.02em;
   color: var(--lz-meta);
   margin-top: 16px;
-  margin-bottom: 4px;
-  padding-bottom: 4px;
+  margin-bottom: 2px;
+  padding-bottom: 5px;
   border-top: 0;
-  border-bottom: 1px solid var(--lz-hair);
+  border-bottom: 1.5px solid var(--lz-hair);
 }
 .lz-rows > li.lz-bucket-head:first-child { margin-top: 4px; }
+.lz-rows > li.lz-bucket-head + li { border-top: 0; }
 .lz-bucket-toggle {
   background: none;
   border: 0;
   padding: 0;
   margin: 0;
+  width: 100%;
   font: inherit;
   color: inherit;
   cursor: pointer;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
 }
+@media (pointer: coarse) { .lz-bucket-toggle { min-height: 44px; } }
 .lz-bucket-toggle:hover { text-decoration: underline; }
 
 /* Mini-trace in DeepResult */
 .audit-trace {
-  margin-top: 12px;
-  padding-top: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid var(--lz-hair);
 }
 .audit-trace-summary {
@@ -331,6 +337,7 @@ a.lz-link { display: inline-block; }
   user-select: none;
 }
 .audit-trace-summary:hover { color: var(--lz-ink); }
+@media (pointer: coarse) { .audit-trace-summary { min-height: 44px; display: flex; align-items: center; } }
 .audit-trace-body {
   margin-top: 8px;
   font-size: 13px;
@@ -353,26 +360,39 @@ a.lz-link { display: inline-block; }
   padding: 2px 8px;
   border-radius: 4px;
   background: var(--lz-off);
+  border: 1px solid var(--lz-hair);
   color: var(--lz-ink);
 }
 
 /* Citation check card */
 .citecheck-summary { margin-top: 4px; color: var(--lz-meta); font-size: 14px; }
 .citecheck-section { margin-top: 16px; }
-.citecheck-section-title {
+.citecheck-section-title,
+.citecheck-toggle {
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.02em;
   color: var(--lz-meta);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   border-bottom: 1px solid var(--lz-hair);
   padding-bottom: 4px;
 }
 .citecheck-list { list-style: none; padding: 0; margin: 0; }
 .citecheck-row {
+  display: grid;
+  grid-template-columns: 2ch minmax(0, 1fr);
+  gap: 0 10px;
   padding: 10px 0;
-  border-bottom: 1px solid var(--lz-hair);
+  border-bottom: 1px dotted var(--lz-hair);
 }
 .citecheck-row:last-child { border-bottom: 0; }
+.citecheck-row > .num {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--lz-meta);
+  padding-top: 2px;
+}
+.citecheck-row-body { min-width: 0; }
 .citecheck-row-head {
   display: flex;
   align-items: baseline;
@@ -391,7 +411,11 @@ a.lz-link { display: inline-block; }
   color: var(--lz-ink);
 }
 .cite-badge.badge-issue {
-  background: var(--lz-mostly-false);
+  background: var(--lz-false);
+  color: var(--lz-on-primary);
+}
+.cite-badge.badge-look {
+  background: var(--lz-mostly-true);
   color: var(--lz-on-primary);
 }
 .cite-badge.badge-support {
@@ -403,18 +427,20 @@ a.lz-link { display: inline-block; }
   color: var(--lz-primary);
   text-decoration: none;
   overflow-wrap: anywhere;
+  padding: 0;
+  min-height: 0;
 }
 .cite-ref:hover { text-decoration: underline; }
 .cite-statement {
   margin: 6px 0 2px 0;
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 15px;
+  line-height: 1.5;
   color: var(--lz-ink);
 }
 .cite-rationale {
   margin: 4px 0 0 0;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.45;
   color: var(--lz-meta);
 }
 

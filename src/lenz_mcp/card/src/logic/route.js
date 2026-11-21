@@ -66,13 +66,23 @@ export function modelRanIt(payload) {
   return DEEP_STATUSES.has(payload.status);
 }
 
+const CITECHECK_REFUSAL_STATUSES = new Set([
+  'auth_required',
+  'quota_exhausted',
+  'service_unavailable',
+  'rate_limited',
+  'in_progress',
+  'already_resolved',
+]);
+
 export function routePayload(payload) {
   if (!payload || typeof payload !== 'object') return { view: 'waiting' };
   if (
-    typeof payload.citation_check_id === 'string' ||
-    typeof payload.citecheck_id === 'string' ||
-    payload.source === 'Lenz citation check' ||
-    (Array.isArray(payload.citations) && !Array.isArray(payload.claims))
+    !CITECHECK_REFUSAL_STATUSES.has(payload.status) &&
+    (typeof payload.citation_check_id === 'string' ||
+      typeof payload.citecheck_id === 'string' ||
+      payload.source === 'Lenz citation check' ||
+      (Array.isArray(payload.citations) && !Array.isArray(payload.claims)))
   ) {
     const polling = payload.status === 'queued' || payload.status === 'running' || payload.status === 'reading';
     return { view: 'citecheck', payload, polling };

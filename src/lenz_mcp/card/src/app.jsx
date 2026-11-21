@@ -146,7 +146,6 @@ function Reasoning({ row, host, idSuffix = '' }) {
           <Clamped id="lz-rationale">
             {row.rationale}
           </Clamped>
-          <p class="lz-label">{copy.REASONING_LABEL}</p>
         </div>
       ) : null}
       {row.dissent ? (
@@ -367,49 +366,39 @@ function Quote({ quote, language }) {
 
 function AuditTrace({ audit }) {
   if (!audit || typeof audit !== 'object') return null;
-  const queries = audit.queries_count || 0;
   const sources = audit.sources_researched || 0;
   const evidence = audit.evidence_count || 0;
-  const forClaim = audit.for_claim;
-  const againstClaim = audit.against_claim;
   const panel = Array.isArray(audit.panel) ? audit.panel : [];
 
   const countsParts = [];
-  if (queries > 0) {
-    countsParts.push(`${queries} ${queries === 1 ? 'query' : 'queries'}`);
+  if (sources > 0) {
+    countsParts.push(`${sources} ${sources === 1 ? 'source' : 'sources'} searched`);
   }
-  countsParts.push(`${sources} ${sources === 1 ? 'source' : 'sources'} searched`);
-  countsParts.push(`${evidence} in evidence pool`);
+  if (evidence > 0) {
+    countsParts.push(`${evidence} in evidence pool`);
+  }
   const countsLine = countsParts.join(' · ');
 
-  if (!countsLine && !forClaim && !againstClaim && !panel.length) return null;
+  if (!countsLine && !panel.length) return null;
 
   return (
     <details class="audit-trace">
       <summary class="audit-trace-summary">{copy.AUDIT_TRACE_SUMMARY}</summary>
       <div class="audit-trace-body">
         {countsLine ? <p class="audit-counts">{countsLine}</p> : null}
-        {forClaim || againstClaim ? (
-          <div class="audit-debate">
-            {forClaim ? (
-              <p class="audit-argument">
-                <strong>{copy.AUDIT_FOR_CLAIM}</strong> {forClaim}
-              </p>
-            ) : null}
-            {againstClaim ? (
-              <p class="audit-argument">
-                <strong>{copy.AUDIT_AGAINST_CLAIM}</strong> {againstClaim}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
         {panel.length > 0 ? (
           <div class="audit-panel">
-            {panel.map((seat, i) => (
-              <span key={i} class="audit-pill">
-                {seat.name}: {seat.verdict}
-              </span>
-            ))}
+            {panel.map((seat, i) => {
+              const rawName = String(seat.name || 'Reviewer').split(' · ')[0].trim();
+              const scoreText =
+                typeof seat.score === 'number' && !Number.isNaN(seat.score) ? `${seat.score}/10` : '';
+              const detail = [seat.verdict, scoreText ? `(${scoreText})` : ''].filter(Boolean).join(' ');
+              return (
+                <span key={i} class="audit-pill">
+                  {detail ? `${rawName}: ${detail}` : rawName}
+                </span>
+              );
+            })}
           </div>
         ) : null}
       </div>
@@ -793,13 +782,16 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
             const v = verdicts[id] || r.verdict;
             const c = confidences[id] || r.confidence;
             const b = bucketOf(v, c, r.error);
+            const isOpen = openId === id;
+            const vLabel = v || copy.ROW_ERROR[r.error] || copy.ROW_ERROR_DEFAULT;
             return (
               <button
                 key={`${id}#${i}`}
                 type="button"
-                class={`strip-cell strip-${b}`}
-                title={`Claim ${i + 1}: ${r.claim}`}
-                aria-label={`Claim ${i + 1}`}
+                class={`strip-cell strip-${b}${isOpen ? ' is-open' : ''}`}
+                aria-expanded={isOpen}
+                title={`Claim ${i + 1} (${vLabel}): ${r.claim}`}
+                aria-label={`Claim ${i + 1}: ${vLabel}`}
                 onClick={() => {
                   if (!allRows && i >= LIST_ROWS_SHOWN) setAllRows(true);
                   if (b === 'ok' && !showOk) setShowOk(true);
@@ -865,7 +857,12 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
                 type="button"
                 class="lz-bucket-toggle"
                 aria-expanded={showOk}
-                onClick={() => setShowOk(!showOk)}
+                onClick={() => {
+                  if (showOk && buckets.ok.some((idx) => rowId(rows[idx]) === openId)) {
+                    setOpenId('');
+                  }
+                  setShowOk(!showOk);
+                }}
               >
                 <span>{copy.bucketOkToggle(buckets.ok.length)}</span>
                 <span aria-hidden="true">{showOk ? '▴' : '▾'}</span>
@@ -878,7 +875,7 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
               index={i}
               row={rows[i]}
               host={host}
-              hidden={(!showOk && openId !== rowId(rows[i])) || (!allRows && i >= LIST_ROWS_SHOWN)}
+              hidden={!showOk || (!allRows && i >= LIST_ROWS_SHOWN)}
               open={openId === rowId(rows[i])}
               onToggle={() => setOpenId(openId === rowId(rows[i]) ? '' : rowId(rows[i]))}
               announce={announce}
@@ -1492,15 +1489,20 @@ function normalizeCitation(c) {
     row.finding_label ||
     CITECHECK_FINDING_LABELS[finding] ||
     (finding ? finding.replace(/_/g, ' ') : 'Not checked');
-  const rationale =
+  const snippet = text(row.snippet || chk.snippet);
+  const rationale = text(
     row.rationale ||
-    chk.rationale ||
-    row.reason ||
-    row.hint ||
-    chk.hint ||
-    row.snippet ||
-    chk.snippet ||
-    '';
+      chk.rationale ||
+      row.reason ||
+      row.hint ||
+      chk.hint ||
+      (!snippet ? row.snippet || chk.snippet : ''),
+  );
+  const rawUrl = text(row.cited_url || row.url || chk.source_url);
+  const doi = text(row.doi);
+  const url = rawUrl || (doi ? `https://doi.org/${doi.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')}` : '');
+  const reference = text(row.reference);
+  const ref = reference || domainOf(url) || doi || url;
   return {
     index: row.index ?? row.citation_index,
     finding,
@@ -1508,8 +1510,12 @@ function normalizeCitation(c) {
     isSupport,
     isIssue,
     isUnchecked,
-    ref: row.cited_url || row.reference || row.doi || '',
-    statement: row.statement || '',
+    url,
+    doi,
+    reference,
+    ref,
+    statement: text(row.statement),
+    snippet,
     rationale,
   };
 }
@@ -1517,6 +1523,13 @@ function normalizeCitation(c) {
 function CitecheckCard({ payload: initialPayload, host }) {
   const [data, setData] = useState(initialPayload || {});
   const [showHoldsUp, setShowHoldsUp] = useState(false);
+
+  useEffect(() => {
+    if (initialPayload && typeof initialPayload === 'object') {
+      setData(initialPayload);
+    }
+  }, [initialPayload]);
+
   const citationCheckId =
     data.citation_check_id || data.citecheck_id || initialPayload?.citation_check_id || initialPayload?.citecheck_id || '';
 
@@ -1564,11 +1577,16 @@ function CitecheckCard({ payload: initialPayload, host }) {
   }, [isRunning, citationCheckId, host]);
 
   if (isFailed) {
+    const code = text(data.failure?.code || data.error_code || data.code);
+    const line =
+      code === 'no_checkable_citations' || code === 'no_citations'
+        ? copy.CITECHECK_NO_CITATIONS
+        : copy.FAILED_DEFAULT;
     return (
       <Frame
         eyebrow={copy.CITECHECK_EYEBROW}
         heading={copy.FAILED_HEADING}
-        lines={[data.message || data.detail || copy.ASK_AGAIN, data.next_step].filter(Boolean)}
+        lines={[line, copy.ASK_AGAIN]}
       />
     );
   }
@@ -1592,6 +1610,16 @@ function CitecheckCard({ payload: initialPayload, host }) {
     ? copy.CITECHECK_CHECKING
     : copy.citecheckSummary(checkedCount, issuesCount);
 
+  const progDone = data.progress?.citation_checks?.done ?? data.progress?.done;
+  const progTotal = data.progress?.citations ?? data.progress?.total;
+  const progressLine =
+    isRunning && Number.isInteger(progDone) && Number.isInteger(progTotal) && progTotal > 0
+      ? copy.citecheckProgress(progDone, progTotal)
+      : '';
+
+  const allClean = !isRunning && issues.length === 0 && unchecked.length === 0 && supports.length > 0;
+  const effectiveShowHoldsUp = showHoldsUp || allClean;
+
   return (
     <div class="lz citecheck-card">
       <p class="lz-eyebrow">{copy.CITECHECK_EYEBROW}</p>
@@ -1600,45 +1628,56 @@ function CitecheckCard({ payload: initialPayload, host }) {
           {heading}
         </h1>
       </div>
+      {isRunning ? (
+        <div class="lz-running" style={{ marginTop: '6px' }}>
+          {progressLine ? <p class="lz-meta">{progressLine}</p> : null}
+          <p class="lz-meta">{copy.USUALLY}</p>
+        </div>
+      ) : null}
 
       {issues.length > 0 ? (
         <div class="citecheck-section">
           <h2 class="citecheck-section-title">{copy.CITECHECK_ISSUES_HEADING}</h2>
-          <ul class="citecheck-list">
+          <ol class="citecheck-list">
             {issues.map((c, i) => (
-              <CitationRow key={c.index ?? i} citation={c} host={host} />
+              <CitationRow key={c.index ?? i} citation={c} fallbackIndex={i} host={host} />
             ))}
-          </ul>
+          </ol>
         </div>
       ) : null}
 
       {unchecked.length > 0 ? (
         <div class="citecheck-section">
           <h2 class="citecheck-section-title">{copy.BUCKET_NONE}</h2>
-          <ul class="citecheck-list">
+          <ol class="citecheck-list">
             {unchecked.map((c, i) => (
-              <CitationRow key={c.index ?? i} citation={c} host={host} />
+              <CitationRow key={c.index ?? i} citation={c} fallbackIndex={i} host={host} />
             ))}
-          </ul>
+          </ol>
         </div>
       ) : null}
 
       {supports.length > 0 ? (
         <div class="citecheck-section">
-          <button
-            type="button"
-            class="lz-link citecheck-toggle"
-            aria-expanded={showHoldsUp}
-            onClick={() => setShowHoldsUp(!showHoldsUp)}
-          >
-            {copy.citecheckHoldsUpToggle(supports.length)}
-          </button>
-          {showHoldsUp ? (
-            <ul class="citecheck-list" style={{ marginTop: '8px' }}>
+          {allClean ? (
+            <h2 class="citecheck-section-title">{copy.citecheckHoldsUpToggle(supports.length)}</h2>
+          ) : (
+            <button
+              type="button"
+              class="lz-bucket-toggle citecheck-toggle"
+              aria-expanded={effectiveShowHoldsUp}
+              onClick={() => setShowHoldsUp(!showHoldsUp)}
+            >
+              <span>{copy.citecheckHoldsUpToggle(supports.length)}</span>
+              <span aria-hidden="true">{effectiveShowHoldsUp ? '▴' : '▾'}</span>
+            </button>
+          )}
+          {effectiveShowHoldsUp ? (
+            <ol class="citecheck-list" style={{ marginTop: '8px' }}>
               {supports.map((c, i) => (
-                <CitationRow key={c.index ?? i} citation={c} host={host} />
+                <CitationRow key={c.index ?? i} citation={c} fallbackIndex={i} host={host} />
               ))}
-            </ul>
+            </ol>
           ) : null}
         </div>
       ) : null}
@@ -1646,33 +1685,45 @@ function CitecheckCard({ payload: initialPayload, host }) {
   );
 }
 
-function CitationRow({ citation, host }) {
+function CitationRow({ citation, fallbackIndex, host }) {
   const c = citation && typeof citation.isSupport === 'boolean' ? citation : normalizeCitation(citation);
-  const badgeClass = c.isSupport ? 'badge-support' : c.isUnchecked ? 'badge-neutral' : 'badge-issue';
+  const isPartly = c.finding === 'partly_supported' || c.finding === 'partial_support';
+  const badgeClass = c.isSupport
+    ? 'badge-support'
+    : c.isUnchecked
+      ? 'badge-neutral'
+      : isPartly
+        ? 'badge-look'
+        : 'badge-issue';
   const ref = c.ref;
-  const isUrl = isWebUrl(ref);
+  const href = isWebUrl(c.url) ? c.url : isWebUrl(ref) ? ref : '';
   const canOpen = host?.capabilities?.openLinks;
+  const rowNum = Number.isInteger(c.index) ? c.index + 1 : Number.isInteger(fallbackIndex) ? fallbackIndex + 1 : null;
 
   return (
     <li class="citecheck-row">
-      <div class="citecheck-row-head">
-        <span class={`cite-badge ${badgeClass}`}>{c.label}</span>
-        {ref ? (
-          isUrl && canOpen ? (
-            <button
-              type="button"
-              class="lz-link cite-ref"
-              onClick={() => host.openLink(ref).catch(() => {})}
-            >
-              {ref}
-            </button>
-          ) : (
-            <span class="cite-ref">{ref}</span>
-          )
-        ) : null}
+      <span class="num">{rowNum != null ? rowNum : ''}</span>
+      <div class="citecheck-row-body">
+        <div class="citecheck-row-head">
+          <span class={`cite-badge ${badgeClass}`}>{c.label}</span>
+          {ref ? (
+            href && canOpen ? (
+              <button
+                type="button"
+                class="lz-link cite-ref"
+                onClick={() => host.openLink(href).catch(() => {})}
+              >
+                {ref}
+              </button>
+            ) : (
+              <span class="cite-ref">{ref}</span>
+            )
+          ) : null}
+        </div>
+        {c.statement ? <p class="cite-statement">{c.statement}</p> : null}
+        {c.snippet ? <Quote quote={c.snippet} /> : null}
+        {c.rationale && c.rationale !== c.snippet ? <p class="cite-rationale">{c.rationale}</p> : null}
       </div>
-      {c.statement ? <p class="cite-statement">{c.statement}</p> : null}
-      {c.rationale ? <p class="cite-rationale">{c.rationale}</p> : null}
     </li>
   );
 }
@@ -1681,7 +1732,13 @@ export function App({ host, payload, announce, registerCompleted, reportState })
   const route = routePayload(payload);
   switch (route.view) {
     case 'citecheck':
-      return <CitecheckCard payload={route.payload} host={host} />;
+      return (
+        <CitecheckCard
+          key={route.payload?.citation_check_id || route.payload?.citecheck_id || 'citecheck'}
+          payload={route.payload}
+          host={host}
+        />
+      );
     case 'waiting':
       return <Frame heading={copy.WAITING} />;
     case 'single':

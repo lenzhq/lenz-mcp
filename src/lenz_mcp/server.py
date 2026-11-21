@@ -2702,9 +2702,10 @@ def _build_card_audit(raw: dict[str, Any]) -> dict[str, Any] | None:
     panel: list[dict[str, Any]] = []
     for seat in adj.get('assessments') or []:
         if isinstance(seat, dict) and seat.get('verdict'):
+            raw_name = str(seat.get('panelist_name') or 'Reviewer').split(' · ')[0].strip()
             panel.append(
                 {
-                    'name': str(seat.get('panelist_name') or seat.get('model') or 'Reviewer'),
+                    'name': raw_name or 'Reviewer',
                     'verdict': str(seat.get('verdict') or ''),
                     'score': seat.get('factual_accuracy_score'),
                 }

@@ -66,6 +66,8 @@ export const AUDIT_AGAINST_CLAIM = 'Against:';
 // Citation check card
 export const CITECHECK_EYEBROW = 'Citation check';
 export const CITECHECK_CHECKING = 'Checking citations…';
+export const CITECHECK_NO_CITATIONS = 'Lenz found no checkable citations in this text.';
+export const citecheckProgress = (done, total) => `${done} of ${total} citations checked`;
 export const citecheckSummary = (checked, issues) => {
   const cWord = checked === 1 ? '1 citation checked' : `${checked} citations checked`;
   const iWord =
