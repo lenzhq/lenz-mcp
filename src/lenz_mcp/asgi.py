@@ -101,7 +101,7 @@ class ServerStreamGuard:
                         'type': 'http.response.start',
                         'status': 302,
                         'headers': [
-                            (b'location', config.CONNECT_PAGE_URL.encode()),
+                            (b'location', config.SETUP_PAGE_URL.encode()),
                             (b'cache-control', b'no-store'),
                             (b'vary', b'Accept'),
                             (b'content-length', b'0'),

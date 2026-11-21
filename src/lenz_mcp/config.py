@@ -79,9 +79,11 @@ UTM_CAMPAIGN = 'mcp-server'
 API_CREDENTIALS_URL: str = f'{FRONTEND_URL}/api-credentials'
 
 # Where a person who opens the connector address in a browser is sent (see
-# ``asgi.ServerStreamGuard``): the page that says how to add Lenz to Claude or
-# ChatGPT. A client never reaches it.
-CONNECT_PAGE_URL: str = f'{FRONTEND_URL}/integrations/claude-chatgpt'
+# ``asgi.ServerStreamGuard``): the setup page for the MCP server, which covers
+# every client. Someone who opens this address by hand is most likely wiring a
+# client up, and that page also links the Claude and ChatGPT click-path. A
+# client never reaches it.
+SETUP_PAGE_URL: str = f'{FRONTEND_URL}/integrations/mcp-server'
 
 # Where an out-of-quota caller is sent. Fallback for the API's own
 # ``upgrade_url``, which is authoritative when present — the MCP and the API

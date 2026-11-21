@@ -138,16 +138,16 @@ def test_guard_is_tied_to_stateless_mode():
 
 
 # A browser asks for HTML; an MCP client opening the server stream asks for
-# an event stream. Only the first is sent to the connector page.
+# an event stream. Only the first is sent to the setup page.
 _BROWSER_ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,*/*;q=0.8'
 
 
-def test_a_browser_visit_to_the_endpoint_lands_on_the_connector_page():
+def test_a_browser_visit_to_the_endpoint_lands_on_the_setup_page():
     resp = _run(_request('GET', '/mcp', headers={'accept': _BROWSER_ACCEPT}))
 
     assert resp.status_code == 302
-    assert resp.headers['location'] == asgi.config.CONNECT_PAGE_URL
-    assert resp.headers['location'].endswith('/integrations/claude-chatgpt')
+    assert resp.headers['location'] == asgi.config.SETUP_PAGE_URL
+    assert resp.headers['location'].endswith('/integrations/mcp-server')
     assert resp.headers['cache-control'] == 'no-store'
     assert 'accept' in resp.headers['vary'].lower()
 
