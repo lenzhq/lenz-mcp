@@ -40,6 +40,9 @@ class ServerStreamGuard:
     (the liveness route under the same prefix) must stay reachable.
     """
 
+    #: Answered to a browser that navigates to the endpoint. See ``_is_browser_visit``.
+    _REDIRECT_BODY = b''
+
     #: JSON-RPC error body, matching what the SDK returns for an unsupported method.
     _BODY = json.dumps(
         {
@@ -63,6 +66,25 @@ class ServerStreamGuard:
         # Starlette app for anything that introspects the entrypoint.
         return getattr(self._app, name)
 
+    @staticmethod
+    def _is_browser_visit(scope) -> bool:
+        """True for a person who pasted the address into a browser's location bar.
+
+        A browser navigation asks for ``text/html``; an MCP client opening the
+        server stream asks for ``text/event-stream`` (and ``application/json``
+        on its POSTs). So the test is: the Accept header names ``text/html``
+        and does not name ``text/event-stream``. A bare ``*/*`` (curl, most HTTP
+        libraries) is not a browser. This only ever changes the answer to a GET
+        that was already going to be refused with 405 below, so no client that
+        works today can see a difference.
+        """
+        accept = b''
+        for name, value in scope.get('headers') or []:
+            if name == b'accept':
+                accept = value.lower()
+                break
+        return b'text/html' in accept and b'text/event-stream' not in accept
+
     async def __call__(self, scope, receive, send) -> None:
         if (
             self.reject_server_stream
@@ -70,6 +92,24 @@ class ServerStreamGuard:
             and scope['method'] == 'GET'
             and scope['path'] in self._paths
         ):
+            if self._is_browser_visit(scope):
+                # 302, not 301: a browser caches a permanent redirect for good,
+                # and the page it points at may move. `vary` keeps any cache
+                # from handing this redirect to a client.
+                await send(
+                    {
+                        'type': 'http.response.start',
+                        'status': 302,
+                        'headers': [
+                            (b'location', config.SETUP_PAGE_URL.encode()),
+                            (b'cache-control', b'no-store'),
+                            (b'vary', b'Accept'),
+                            (b'content-length', b'0'),
+                        ],
+                    }
+                )
+                await send({'type': 'http.response.body', 'body': self._REDIRECT_BODY})
+                return
             await send(
                 {
                     'type': 'http.response.start',

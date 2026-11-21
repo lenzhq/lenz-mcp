@@ -58,13 +58,14 @@ def _guarded_stub(enabled=True):
     return guard, reached
 
 
-async def _drive(guard, method, path):
+async def _drive(guard, method, path, accept=None):
     sent = []
 
     async def _send(message):
         sent.append(message)
 
-    await guard({'type': 'http', 'method': method, 'path': path, 'headers': []}, None, _send)
+    headers = [(b'accept', accept.encode())] if accept is not None else []
+    await guard({'type': 'http', 'method': method, 'path': path, 'headers': headers}, None, _send)
     return sent
 
 
@@ -134,3 +135,71 @@ def test_guard_is_tied_to_stateless_mode():
     """
     assert asgi.STATELESS is True
     assert asgi.application.reject_server_stream is True
+
+
+# A browser asks for HTML; an MCP client opening the server stream asks for
+# an event stream. Only the first is sent to the setup page.
+_BROWSER_ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,*/*;q=0.8'
+
+
+def test_a_browser_visit_to_the_endpoint_lands_on_the_setup_page():
+    resp = _run(_request('GET', '/mcp', headers={'accept': _BROWSER_ACCEPT}))
+
+    assert resp.status_code == 302
+    assert resp.headers['location'] == asgi.config.SETUP_PAGE_URL
+    assert resp.headers['location'].endswith('/integrations/mcp-server')
+    assert resp.headers['cache-control'] == 'no-store'
+    assert 'accept' in resp.headers['vary'].lower()
+
+
+def test_trailing_slash_browser_visit_is_redirected_too():
+    guard, reached = _guarded_stub()
+
+    sent = _run(_drive(guard, 'GET', '/mcp/', accept=_BROWSER_ACCEPT))
+
+    assert reached == []
+    assert sent[0]['status'] == 302
+
+
+def test_no_client_shaped_get_is_redirected():
+    """Every kind of GET an MCP client or tool can make keeps the 405: the
+    server-stream request, a header that names both types, a bare */*, no
+    Accept at all, and JSON."""
+    guard, reached = _guarded_stub()
+    for accept in (
+        'text/event-stream',
+        'text/html, text/event-stream',
+        'application/json, text/event-stream',
+        '*/*',
+        'application/json',
+        None,
+    ):
+        sent = _run(_drive(guard, 'GET', '/mcp', accept=accept))
+        assert sent[0]['status'] == 405, accept
+
+    assert reached == []
+
+
+def test_post_with_a_browser_accept_header_is_not_redirected():
+    guard, reached = _guarded_stub()
+
+    sent = _run(_drive(guard, 'POST', '/mcp', accept=_BROWSER_ACCEPT))
+
+    assert reached == [('POST', '/mcp')]
+    assert sent == []
+
+
+def test_healthz_in_a_browser_is_not_redirected():
+    guard, reached = _guarded_stub()
+
+    _run(_drive(guard, 'GET', '/mcp/healthz', accept=_BROWSER_ACCEPT))
+
+    assert reached == [('GET', '/mcp/healthz')]
+
+
+def test_stateful_mode_does_not_redirect_a_browser_either():
+    guard, reached = _guarded_stub(enabled=False)
+
+    _run(_drive(guard, 'GET', '/mcp', accept=_BROWSER_ACCEPT))
+
+    assert reached == [('GET', '/mcp')]

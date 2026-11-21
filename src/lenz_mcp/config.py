@@ -78,6 +78,13 @@ UTM_CAMPAIGN = 'mcp-server'
 # someone out of quota needs the pricing page.
 API_CREDENTIALS_URL: str = f'{FRONTEND_URL}/api-credentials'
 
+# Where a person who opens the connector address in a browser is sent (see
+# ``asgi.ServerStreamGuard``): the setup page for the MCP server, which covers
+# every client. Someone who opens this address by hand is most likely wiring a
+# client up, and that page also links the Claude and ChatGPT click-path. A
+# client never reaches it.
+SETUP_PAGE_URL: str = f'{FRONTEND_URL}/integrations/mcp-server'
+
 # Where an out-of-quota caller is sent. Fallback for the API's own
 # ``upgrade_url``, which is authoritative when present — the MCP and the API
 # are separate services and deploy independently, so the MCP must
