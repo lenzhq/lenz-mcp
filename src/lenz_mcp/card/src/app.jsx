@@ -630,7 +630,7 @@ function Row({ index, row, host, open, hidden, onToggle, announce, registerCompl
   const busy = state.kind === 'submitting' || state.kind === 'running';
 
   useEffect(() => {
-    if (result) onVerdict(index, result.verdict, result.confidence);
+    if (result) onVerdict(rowId(row), result.verdict, result.confidence);
   }, [result && result.verdict, result && result.confidence]);
   useEffect(() => {
     if (!open) setFull(false);
@@ -738,36 +738,43 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
   const [allRows, setAllRows] = useState(false);
   const [openId, setOpenId] = useState('');
   // A row's deep verdict replaces its quick one in the tally as well as in the
-  // row, remembered by row index and verdict/confidence.
+  // row, remembered by rowId(row) so a replaced or reordered list never applies
+  // a previous claim's verdict to a new claim at the same index.
   const [verdicts, setVerdicts] = useState({});
   const [confidences, setConfidences] = useState({});
 
-  const onVerdict = (i, v, conf) => {
-    const idx = typeof i === 'number' ? i : rows.indexOf(i);
-    if (idx < 0) return;
-    setVerdicts((prev) => (prev[idx] === v ? prev : { ...prev, [idx]: v }));
-    if (conf) setConfidences((prev) => (prev[idx] === conf ? prev : { ...prev, [idx]: conf }));
+  const onVerdict = (keyOrIndex, v, conf) => {
+    const id =
+      typeof keyOrIndex === 'string'
+        ? keyOrIndex
+        : typeof keyOrIndex === 'number' && rows[keyOrIndex]
+          ? rowId(rows[keyOrIndex])
+          : '';
+    if (!id) return;
+    setVerdicts((prev) => (prev[id] === v ? prev : { ...prev, [id]: v }));
+    if (conf) setConfidences((prev) => (prev[id] === conf ? prev : { ...prev, [id]: conf }));
   };
 
   const hidden = rows.length - LIST_ROWS_SHOWN;
-  const counted = rows.map((row, i) => {
-    const deep = verdicts[i];
+  const counted = rows.map((row) => {
+    const deep = verdicts[rowId(row)];
     return deep ? { ...row, verdict: deep, error: '' } : row;
   });
 
+  // Bucket grouping uses each row's initial assessment so rows never jump
+  // between sections or vanish into a collapsed group when an in-place deep
+  // check finishes; the row header, Claim Strip, and tally update in place.
   const buckets = useMemo(() => {
     const b = { bad: [], look: [], ok: [], none: [] };
     rows.forEach((row, i) => {
-      const v = verdicts[i] || row.verdict;
-      const c = confidences[i] || row.confidence;
-      const bucket = bucketOf(v, c, row.error);
+      const bucket = bucketOf(row.verdict, row.confidence, row.error);
       b[bucket].push(i);
     });
     return b;
-  }, [rows, verdicts, confidences]);
+  }, [rows]);
 
   const hasAttention = buckets.bad.length > 0 || buckets.look.length > 0;
-  const [showOk, setShowOk] = useState(() => !hasAttention);
+  const [showOk, setShowOk] = useState(() => !hasAttention || rows.length <= LIST_ROWS_SHOWN);
 
   return (
     <div class="lz">
@@ -782,19 +789,24 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
       {rows.length > 1 ? (
         <div class="claim-strip" role="navigation" aria-label="Claims overview">
           {rows.map((r, i) => {
-            const v = verdicts[i] || r.verdict;
-            const c = confidences[i] || r.confidence;
+            const id = rowId(r);
+            const v = verdicts[id] || r.verdict;
+            const c = confidences[id] || r.confidence;
             const b = bucketOf(v, c, r.error);
             return (
               <button
-                key={i}
+                key={`${id}#${i}`}
                 type="button"
                 class={`strip-cell strip-${b}`}
                 title={`Claim ${i + 1}: ${r.claim}`}
                 aria-label={`Claim ${i + 1}`}
                 onClick={() => {
-                  const el = globalThis.document?.getElementById(`mcp-row-${i}`);
-                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                  if (!allRows && i >= LIST_ROWS_SHOWN) setAllRows(true);
+                  if (b === 'ok' && !showOk) setShowOk(true);
+                  setTimeout(() => {
+                    const el = globalThis.document?.getElementById(`mcp-row-${i}`);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                  }, 0);
                 }}
               />
             );
@@ -811,7 +823,7 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
           ) : null}
           {buckets.bad.map((i) => (
             <Row
-              key={i}
+              key={`${rowId(rows[i])}#${i}`}
               index={i}
               row={rows[i]}
               host={host}
@@ -832,7 +844,7 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
           ) : null}
           {buckets.look.map((i) => (
             <Row
-              key={i}
+              key={`${rowId(rows[i])}#${i}`}
               index={i}
               row={rows[i]}
               host={host}
@@ -861,7 +873,7 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
           ) : null}
           {buckets.ok.map((i) => (
             <Row
-              key={i}
+              key={`${rowId(rows[i])}#${i}`}
               index={i}
               row={rows[i]}
               host={host}
@@ -882,7 +894,7 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
           ) : null}
           {buckets.none.map((i) => (
             <Row
-              key={i}
+              key={`${rowId(rows[i])}#${i}`}
               index={i}
               row={rows[i]}
               host={host}
@@ -1417,12 +1429,19 @@ function DeepBatchRow({ index, item, host, announce, registerCompleted, reportSt
 }
 
 const ISSUE_FINDINGS = new Set([
+  'doi_not_found',
+  'page_not_found',
   'not_found',
   'misattributed',
+  'metadata_mismatch',
+  'contradicted',
   'contradicts',
   'opposite',
   'fabricated',
+  'quote_not_in_source',
+  'not_in_source',
   'overstates',
+  'partly_supported',
   'partial_support',
   'unverifiable',
   'paywalled',
@@ -1431,14 +1450,84 @@ const ISSUE_FINDINGS = new Set([
   'outdated',
 ]);
 
+const CITECHECK_FINDING_LABELS = {
+  doi_not_found: 'DOI not registered',
+  page_not_found: 'Page not found',
+  not_found: 'Not found',
+  contradicted: 'Contradicted',
+  contradicts: 'Contradicted',
+  quote_not_in_source: 'Quote not in the source',
+  not_in_source: 'Not in the source',
+  metadata_mismatch: 'Reference details differ',
+  misattributed: 'Misattributed',
+  partly_supported: 'Needs a closer look',
+  partial_support: 'Needs a closer look',
+  overstates: 'Overstates source',
+  supported: 'Supported',
+  supports: 'Supported',
+  unchecked: 'Not checked',
+  failed: 'Could not be checked this time.',
+  pending: 'Not checked yet',
+};
+
+function normalizeCitation(c) {
+  const row = c || {};
+  const res = row.result && typeof row.result === 'object' ? row.result : {};
+  const chk = row.check && typeof row.check === 'object' ? row.check : {};
+  const finding =
+    row.finding ||
+    res.finding ||
+    res.verdict ||
+    (chk.status === 'failed' ? 'failed' : chk.status === 'pending' ? 'pending' : '');
+  const isSupport = finding === 'supported' || finding === 'supports';
+  const isIssue =
+    typeof row.is_issue === 'boolean'
+      ? row.is_issue
+      : typeof res.is_issue === 'boolean'
+        ? res.is_issue
+        : ISSUE_FINDINGS.has(finding);
+  const isUnchecked = !isIssue && !isSupport;
+  const label =
+    row.finding_label ||
+    CITECHECK_FINDING_LABELS[finding] ||
+    (finding ? finding.replace(/_/g, ' ') : 'Not checked');
+  const rationale =
+    row.rationale ||
+    chk.rationale ||
+    row.reason ||
+    row.hint ||
+    chk.hint ||
+    row.snippet ||
+    chk.snippet ||
+    '';
+  return {
+    index: row.index ?? row.citation_index,
+    finding,
+    label,
+    isSupport,
+    isIssue,
+    isUnchecked,
+    ref: row.cited_url || row.reference || row.doi || '',
+    statement: row.statement || '',
+    rationale,
+  };
+}
+
 function CitecheckCard({ payload: initialPayload, host }) {
   const [data, setData] = useState(initialPayload || {});
   const [showHoldsUp, setShowHoldsUp] = useState(false);
   const citationCheckId =
     data.citation_check_id || data.citecheck_id || initialPayload?.citation_check_id || initialPayload?.citecheck_id || '';
 
+  const isFailed =
+    data.status === 'failed' ||
+    data.status === 'not_found' ||
+    data.status === 'error' ||
+    data.status === 'invalid_request';
+
   const isRunning =
-    data.status === 'queued' || data.status === 'running' || data.status === 'reading' || (!data.status && !Array.isArray(data.citations));
+    !isFailed &&
+    (data.status === 'queued' || data.status === 'running' || data.status === 'reading' || (!data.status && !Array.isArray(data.citations)));
 
   useEffect(() => {
     if (!isRunning || !citationCheckId || !host?.capabilities?.serverTools) return undefined;
@@ -1473,18 +1562,30 @@ function CitecheckCard({ payload: initialPayload, host }) {
     };
   }, [isRunning, citationCheckId, host]);
 
-  const citations = Array.isArray(data.citations) ? data.citations : [];
-  const rawIssues = Array.isArray(data.citation_issues) ? data.citation_issues : [];
-  const issues = citations.length > 0
-    ? citations.filter((c) => c.is_issue || ISSUE_FINDINGS.has(c.finding) || c.finding !== 'supports')
-    : rawIssues;
-  const supports = citations.filter((c) => c.finding === 'supports');
+  if (isFailed) {
+    return (
+      <Frame
+        eyebrow={copy.CITECHECK_EYEBROW}
+        heading={copy.FAILED_HEADING}
+        lines={[data.message || data.detail || copy.ASK_AGAIN, data.next_step].filter(Boolean)}
+      />
+    );
+  }
+
+  const citations = (Array.isArray(data.citations) ? data.citations : []).map(normalizeCitation);
+  const rawIssues = (Array.isArray(data.citation_issues) ? data.citation_issues : []).map((r) => ({
+    ...normalizeCitation(r),
+    isIssue: true,
+  }));
+  const issues = citations.length > 0 ? citations.filter((c) => c.isIssue) : rawIssues;
+  const supports = citations.filter((c) => c.isSupport);
+  const unchecked = citations.filter((c) => c.isUnchecked);
 
   const checkedCount =
     data.summary?.citation_checks?.checked ??
     data.summary?.checked ??
-    citations.length;
-  const issuesCount = data.summary?.citation_issues ?? issues.length;
+    (issues.length + supports.length);
+  const issuesCount = data.summary?.issues ?? data.summary?.citation_issues ?? issues.length;
 
   const heading = isRunning
     ? copy.CITECHECK_CHECKING
@@ -1504,6 +1605,17 @@ function CitecheckCard({ payload: initialPayload, host }) {
           <h2 class="citecheck-section-title">{copy.CITECHECK_ISSUES_HEADING}</h2>
           <ul class="citecheck-list">
             {issues.map((c, i) => (
+              <CitationRow key={c.index ?? i} citation={c} host={host} />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {unchecked.length > 0 ? (
+        <div class="citecheck-section">
+          <h2 class="citecheck-section-title">{copy.BUCKET_NONE}</h2>
+          <ul class="citecheck-list">
+            {unchecked.map((c, i) => (
               <CitationRow key={c.index ?? i} citation={c} host={host} />
             ))}
           </ul>
@@ -1534,21 +1646,16 @@ function CitecheckCard({ payload: initialPayload, host }) {
 }
 
 function CitationRow({ citation, host }) {
-  const c = citation || {};
-  const finding = c.finding || '';
-  const isSupport = finding === 'supports';
-  const badgeClass = isSupport ? 'badge-support' : 'badge-issue';
-  const label = c.finding_label || finding.replace(/_/g, ' ');
-  const ref = c.cited_url || c.reference || c.doi || '';
+  const c = citation && typeof citation.isSupport === 'boolean' ? citation : normalizeCitation(citation);
+  const badgeClass = c.isSupport ? 'badge-support' : c.isUnchecked ? 'badge-neutral' : 'badge-issue';
+  const ref = c.ref;
   const isUrl = isWebUrl(ref);
   const canOpen = host?.capabilities?.openLinks;
-  const statement = c.statement || '';
-  const rationale = c.rationale || c.reason || c.hint || c.snippet || '';
 
   return (
     <li class="citecheck-row">
       <div class="citecheck-row-head">
-        <span class={`cite-badge ${badgeClass}`}>{label}</span>
+        <span class={`cite-badge ${badgeClass}`}>{c.label}</span>
         {ref ? (
           isUrl && canOpen ? (
             <button
@@ -1563,8 +1670,8 @@ function CitationRow({ citation, host }) {
           )
         ) : null}
       </div>
-      {statement ? <p class="cite-statement">{statement}</p> : null}
-      {rationale ? <p class="cite-rationale">{rationale}</p> : null}
+      {c.statement ? <p class="cite-statement">{c.statement}</p> : null}
+      {c.rationale ? <p class="cite-rationale">{c.rationale}</p> : null}
     </li>
   );
 }

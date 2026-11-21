@@ -1938,7 +1938,7 @@ test('the check label never wraps at 320 px, in every weight, in the card and in
   const { page } = await harness.page({ width: 320, phone: true });
   await page.evaluate((c) => window.startCard('row', c), config({ fullBleed: true, toolResult: F.quick['list-8-with-errors'].toolResult }));
   const frame = await readyFrame(page, 'row');
-  await frame.locator('.lz-row-head').nth(4).click();
+  await frame.locator('#mcp-row-4 .lz-row-head').click();
   const inRow = frame.locator('.lz-row-panel').getByRole('button', { name: 'Check against sources' });
   await inRow.waitFor();
   assert.equal(await lineCount(inRow), 1, 'the open row wraps');

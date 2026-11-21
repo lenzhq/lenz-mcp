@@ -71,14 +71,11 @@ export function routePayload(payload) {
   if (
     typeof payload.citation_check_id === 'string' ||
     typeof payload.citecheck_id === 'string' ||
+    payload.source === 'Lenz citation check' ||
     (Array.isArray(payload.citations) && !Array.isArray(payload.claims))
   ) {
-    if (payload.status === 'queued' || payload.status === 'running' || payload.status === 'reading') {
-      return { view: 'citecheck', payload, polling: true };
-    }
-    if (payload.status === 'completed' || Array.isArray(payload.citations)) {
-      return { view: 'citecheck', payload, polling: false };
-    }
+    const polling = payload.status === 'queued' || payload.status === 'running' || payload.status === 'reading';
+    return { view: 'citecheck', payload, polling };
   }
   if (modelRanIt(payload)) return routeDeep(payload);
   return routeQuick(payload);

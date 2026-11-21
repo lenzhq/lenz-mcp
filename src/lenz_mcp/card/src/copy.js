@@ -66,7 +66,16 @@ export const AUDIT_AGAINST_CLAIM = 'Against:';
 // Citation check card
 export const CITECHECK_EYEBROW = 'Citation check';
 export const CITECHECK_CHECKING = 'Checking citations…';
-export const citecheckSummary = (checked, issues) => `${checked} citations checked · ${issues} need attention`;
+export const citecheckSummary = (checked, issues) => {
+  const cWord = checked === 1 ? '1 citation checked' : `${checked} citations checked`;
+  const iWord =
+    issues === 0
+      ? 'all hold up'
+      : issues === 1
+        ? '1 needs attention'
+        : `${issues} need attention`;
+  return `${cWord} · ${iWord}`;
+};
 export const CITECHECK_ISSUES_HEADING = 'Issues';
 export const citecheckHoldsUpToggle = (n) => `Holds up (${n})`;
 

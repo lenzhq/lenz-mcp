@@ -217,6 +217,7 @@ a.lz-link { display: inline-block; }
 .lz-quote-foreign { text-indent: 0; }
 .lz-quote-lang { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lz-meta); margin-right: 6px; }
 .lz-rows > li { display: grid; grid-template-columns: 2ch minmax(0, 1fr); gap: 0 10px; }
+.lz-rows > li[hidden] { display: none; }
 /* A row is one line: the claim, and its verdict in a right-hand column so the
    verdicts scan down one edge. The meta (not sure, reviewers split, sources) sits
    under the claim only when there is one. The rule between rows is the whole gap:
@@ -288,15 +289,16 @@ a.lz-link { display: inline-block; }
 .strip-cell.strip-none { background: var(--lz-meta); }
 
 /* Bucket headings and toggles in ListCard */
-.lz-bucket-head {
-  grid-column: 1 / -1;
+.lz-rows > li.lz-bucket-head {
+  display: block;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--lz-meta);
   margin-top: 16px;
   margin-bottom: 4px;
-  padding-bottom: 2px;
+  padding-bottom: 4px;
+  border-top: 0;
   border-bottom: 1px solid var(--lz-hair);
 }
 .lz-rows > li.lz-bucket-head:first-child { margin-top: 4px; }
