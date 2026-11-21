@@ -16,6 +16,7 @@ import inspect
 import logging
 import re
 import time
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
@@ -247,11 +248,19 @@ USAGE_NEXT_NOTE = (
 
 # On every out-of-credits result. In a batch of deep checks some calls start
 # and later ones run out; nothing ties the calls together, so the result says
-# what happened to the others and what the user needs to hear.
-QUOTA_NEXT_STEP = (
-    'This call did not run and was not charged; any check already started keeps running and '
-    'its result still arrives. Tell the user which claims were not checked and why. Calling '
-    'again will not help until the balance allows it.'
+# what happened to the others. The rest of its `next_step` names the options
+# the result itself carries (see `_quota_next_step`).
+QUOTA_NOT_RUN = (
+    'This call did not run and nothing was charged; any check already started keeps running and '
+    'its result still arrives.'
+)
+QUOTA_REFUSED_AGAIN = 'The same call made again before the balance changes is refused again.'
+# On every out-of-credits result: whose decision a smaller check is. The model
+# already has the prices from the tool descriptions and the refusal states the
+# cost and the balance, so this names no price and gives no call to make.
+QUOTA_CHEAPER_IS_THE_USERS = (
+    "A cheaper or smaller check than the one the user asked for is the user's choice: offer it if it "
+    'helps, and run it only when the user says yes.'
 )
 
 # On a deep check that failed because Lenz could not reach its sources.
@@ -260,6 +269,30 @@ SOURCES_UNAVAILABLE_NEXT_STEP = (
     'that source verification is unavailable right now and, when `retryable` is true, that the check '
     'can be run again later; any earlier quick verdict still stands as a first read.'
 )
+
+# On every answer that found no checkable claim in what was sent (the quick check,
+# a row of a list, a deep check). It ends in a question to the user, not in a
+# second call: the same text sent again finds the same nothing. What is and is
+# not checkable is said in the words of the server instructions, and a restated
+# claim is the instructions' own rule (what the conversation says it refers to,
+# nothing else changed), allowed only where the conversation settles what the
+# user means. Nothing is charged on any of these paths: the quick check debits
+# only the claims it will answer, and a deep check is charged when it completes.
+NO_CLAIM_NOT_CHECKED = 'Nothing was checked and nothing was charged.'
+NO_CLAIM_ITEM_NOT_CHECKED = 'This item was not checked and was not charged.'
+NO_CLAIM_WHAT_TO_DO = (
+    'Tell the user that Lenz checks factual claims, such as a fact, a figure, a date, a quote or an attribution; '
+    'opinions, predictions, arithmetic, how programming code behaves and text with no checkable claim are outside '
+    'what it can check. Ask them for a claim to check. Do not send the same text again unchanged. Restate the '
+    "user's point as a claim only if the conversation makes clear what they mean: one claim as a statement, with "
+    'what the conversation says it refers to and nothing else changed. Never make up a claim the user did not make.'
+)
+
+
+def _no_claim_next_step(lead: str) -> str:
+    """What the model is told to do with a result that found no checkable claim."""
+    return f'{lead} {NO_CLAIM_WHAT_TO_DO}'
+
 
 # What `assess_claim` read past: the claims a text held beyond one quick
 # check, and a text longer than the API reads.
@@ -287,11 +320,19 @@ OAUTH_REAUTH_MESSAGE = (
     'The Lenz sign-in for this connection is no longer valid. Tell the user to reconnect Lenz in '
     'this app and then ask again. Do not mention tool names to the user.'
 )
-# A check that was submitted and charged, whose credential then failed. The run
-# is untouched by it, so the model is told how to collect the result rather
-# than left to start (and pay for) the same check again.
+# What a signed-in caller is told when the connection is valid but was not
+# granted the permission this request needs. Reconnecting is a new sign-in, and
+# a new sign-in grants what the connector asks for now.
+MISSING_PERMISSION_MESSAGE = (
+    'This Lenz connection does not have the permission this request needs. Reconnecting Lenz in this app '
+    'signs in again and grants the permissions Lenz asks for now. Tell the user to reconnect Lenz in this '
+    'app and then ask again. Do not mention tool names to the user.'
+)
+# A check that was submitted, whose credential then failed. The run is untouched
+# by it and is charged when it completes, so the model is told how to collect
+# the result rather than left to start (and pay for) the same check again.
 CREDENTIAL_LOST_MID_RUN = (
-    'The check itself is running and has already been charged. Once this is resolved, call '
+    'The check itself is running and is charged when it completes. Once this is resolved, call '
     '`get_verification` with this task_id to collect the result. If the conversation moves on first, '
     'call `list_verifications` later to find it. Do not start the same check again. Do not mention '
     'tool names to the user.'
@@ -610,13 +651,12 @@ def _exchange_failure_result(exc: exchange.ExchangeFailed | exchange.ExchangeNot
         return _error_result(client.ApiResponse(status=503, data={'retry_after': exchange.DEFAULT_RETRY_AFTER_S}))
     if exc.kind == 'reauth':
         # The user's sign-in is no longer accepted: the same answer as the API's
-        # own 401, so a host re-authenticates exactly as it does today.
-        return _error_result(client.ApiResponse(status=401, data={}))
+        # own 401 gives a signed-in caller, which is the only kind the exchange
+        # serves, so a host re-authenticates exactly as it does today.
+        logger.info('mcp_auth_401')
+        return _auth_required(rejected=True, signed_in=True)
     if exc.kind == 'scope':
-        return {
-            'status': 'error',
-            'message': 'This Lenz connection is not allowed to do that. Retrying will not help.',
-        }
+        return _missing_permission(signed_in=True)
     if exc.kind == 'approval':
         uri = exc.approval_uri if _is_own_url(exc.approval_uri) else config.API_CREDENTIALS_URL
         return {
@@ -659,21 +699,56 @@ def _is_own_url(value: str | None) -> bool:
     return isinstance(value, str) and value.startswith(f'{config.FRONTEND_URL}/') and not _AUTH_UNSENDABLE.search(value)
 
 
-def _auth_required() -> dict[str, Any]:
+def _auth_required(*, rejected: bool = False, signed_in: bool | None = None) -> dict[str, Any]:
     """What a caller is told when their credential is missing or refused.
 
     The advice has to match the door they came through. Someone who signed in
     has no API key to create, so key-creation advice is a dead end for them:
     what fixes it is signing in again in the app they are using.
+
+    ``rejected`` is a key the API answered 401 on, as opposed to no key at
+    all: telling that caller none was provided sends them looking for a
+    configuration they already have. ``signed_in`` says which door when the
+    caller already knows it (the token exchange serves only signed-in callers).
     """
-    if _caller_signed_in():
+    if signed_in if signed_in is not None else _caller_signed_in():
         return {'status': 'auth_required', 'message': OAUTH_REAUTH_MESSAGE}
+    if rejected:
+        return {
+            'status': 'auth_required',
+            'message': (
+                'Lenz did not accept the API key this connection sent: it may have been revoked, or changed '
+                f'when it was copied. Create a new key at {config.API_CREDENTIALS_URL} and set it as the '
+                'Authorization bearer token in your MCP client configuration.'
+            ),
+        }
     return {
         'status': 'auth_required',
         'message': (
             'No Lenz API key was provided. Create a free key at '
             f'{config.API_CREDENTIALS_URL} and set it as the Authorization bearer '
             'token in your MCP client configuration.'
+        ),
+    }
+
+
+def _missing_permission(*, signed_in: bool | None = None) -> dict[str, Any]:
+    """A credential that is valid but does not cover this request.
+
+    The same ``auth_required`` status as an expired sign-in, because the
+    remedy is the same one: a new authorization. A signed-in connection gets
+    one by reconnecting in the app, which grants the permissions the connector
+    asks for today; a key caller gets one from a new key. The token exchange
+    only ever runs for a signed-in caller, so it says so (``signed_in=True``).
+    """
+    if signed_in if signed_in is not None else _caller_signed_in():
+        return {'status': 'auth_required', 'message': MISSING_PERMISSION_MESSAGE}
+    return {
+        'status': 'auth_required',
+        'message': (
+            'The Lenz API key this connection sent does not allow this request. Create a new key at '
+            f'{config.API_CREDENTIALS_URL} and set it as the Authorization bearer token in your MCP '
+            'client configuration.'
         ),
     }
 
@@ -769,8 +844,29 @@ def _humanize_seconds(seconds: int) -> str:
     return f'{round(seconds / 3600)} hours'
 
 
+def _resets_on(value: Any) -> str | None:
+    """``resets_at`` as a person reads it: a date, and the time when it is not midnight UTC."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        moment = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(UTC)
+    day = f'{moment.day} {moment:%B %Y}'
+    if (moment.hour, moment.minute) == (0, 0):
+        return day
+    return f'{day} at {moment:%H:%M} UTC'
+
+
+def _int(value: Any) -> int | None:
+    """A whole number from a response, never a bool."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
 def _quota_message(data: dict[str, Any]) -> str:
-    """The out-of-credits sentence an MCP caller sees.
+    """The out-of-credits sentences an MCP caller sees.
 
     Built from the 402's structured fields rather than passed through from
     ``detail``. The API's ``detail`` is developer copy and is deliberately
@@ -780,31 +876,81 @@ def _quota_message(data: dict[str, Any]) -> str:
     ``credits_remaining`` is the real one) and mean nothing to someone who
     asked a chat client to check a fact and has never seen the API.
 
-    ``cost`` and ``credits_remaining`` say the same thing in the vocabulary
-    ``check_usage`` already uses, and they are numbers from the response, never
-    hardcoded prices. Both are omitted when unresolvable rather than sent as
-    null, so absence is the signal to fall back.
+    ``cost``, ``credits_remaining``, ``requested`` and ``resets_at`` are
+    numbers and dates from the response, never hardcoded prices. Each is
+    omitted when the body does not carry it rather than sent as null, so
+    absence is the signal to fall back.
     """
-    cost = data.get('cost')
-    remaining = data.get('credits_remaining')
+    cost = _int(data.get('cost'))
+    per_citation = _int(data.get('cost_per_citation'))
+    remaining = _int(data.get('credits_remaining'))
+    requested = _int(data.get('requested'))
+    noun = _quota_noun(data)
+    price = None
+    if cost is not None:
+        price = f'this call costs {cost:,}'
+        if requested is not None and requested > 1 and cost % requested == 0:
+            price += f' ({cost // requested:,} for each of {requested:,} {noun})'
+    elif per_citation is not None:
+        price = f'each citation checked costs {per_citation:,}'
     # "Out of" only when the balance really is empty. A 402 also fires when a
     # balance is non-zero but too small for THIS call (a 10-credit verify on 3
     # credits), and "Out of Lenz credits: the account has 3." contradicts
     # itself.
-    if isinstance(remaining, int) and remaining > 0:
-        if isinstance(cost, int):
-            return f'Not enough Lenz credits: this call costs {cost:,} and the account has {remaining:,}.'
-        return f'Not enough Lenz credits: the account has {remaining:,}.'
+    if remaining is not None and remaining > 0:
+        if price:
+            text = f'Not enough Lenz credits: {price} and the account has {remaining:,}.'
+        else:
+            text = f'Not enough Lenz credits: the account has {remaining:,}.'
+    elif remaining is not None and price:
+        text = f'Out of Lenz credits: {price} and the account has 0.'
+    # A call the balance did not cover, with the balance unknown: "Out of"
+    # would claim an empty balance nobody stated.
+    elif requested is not None:
+        text = f'Not enough Lenz credits: {price}.' if price else 'Not enough Lenz credits for this call.'
     # Empty balance, or no usable numbers in the body. The generic sentence
     # beats echoing `detail`, which is the jargon this function exists to keep
     # out — including on the legacy-403 path, where `detail` is all there is.
-    if isinstance(remaining, int) and isinstance(cost, int):
-        return f'Out of Lenz credits: this call costs {cost} and the account has 0.'
-    return 'Out of Lenz credits for this call.'
+    else:
+        text = 'Out of Lenz credits for this call.'
+    resets = _resets_on(data.get('resets_at'))
+    if resets:
+        text += f' Monthly credits renew on {resets}.'
+    return text
+
+
+def _quota_noun(result: dict[str, Any]) -> str:
+    """What a refused call's ``requested`` counts."""
+    return 'citations' if 'citecheck_id' in result or 'cost_per_citation' in result else 'claims'
+
+
+def _quota_next_step(result: dict[str, Any], *, lead: str = QUOTA_NOT_RUN, refused_again: bool = True) -> str:
+    """What the model is told to do with an out-of-credits result.
+
+    It names only the options the result itself carries, so it can never send
+    the model to a link or a date that is not there. A cheaper or smaller check
+    is named only as the user's choice, never with a price or a call to make.
+    """
+    options = []
+    if result.get('manage_url'):
+        options.append(
+            '`manage_url` is the page where the user can add credits or change plan, so give the user that link'
+        )
+    if _resets_on(result.get('resets_at')):
+        options.append('monthly credits renew on the date in the message')
+    say = 'Tell the user what was not checked and why'
+    if options:
+        say += ', and what they can do: ' + '; '.join(options)
+    step = f'{lead} {say}. {QUOTA_CHEAPER_IS_THE_USERS}'
+    return f'{step} {QUOTA_REFUSED_AGAIN}' if refused_again else step
 
 
 def _quota_exhausted(data: dict[str, Any]) -> dict[str, Any]:
     """The out-of-quota tool result, shared by the 402 and legacy-403 paths.
+
+    It forwards what the 402 body knows (the call's price and size, the balance,
+    when it resets), so the model can tell the user exactly where they stand.
+    It reads nothing else: no extra API call is made on a refusal.
 
     ``manage_url`` points at the plans page, not the API-credentials page: the caller
     has a working key, so sending them to key creation was a dead end. The
@@ -814,18 +960,61 @@ def _quota_exhausted(data: dict[str, Any]) -> dict[str, Any]:
     OMITTED ENTIRELY FOR CHATGPT. OpenAI's app guidelines forbid commerce in
     digital goods — an app "cannot initiate new subscriptions or display upgrade
     options" — and a pricing URL handed to the model renders as an upgrade CTA
-    in the conversation, which is exactly what those guidelines rule out.
+    in the conversation, which is exactly what those guidelines rule out. With
+    no link, ``next_step`` names no way to buy either; the balance and the
+    reset date are facts, and every client gets them.
     Every other client keeps the link: a developer reading a 402
     over the SDK needs the actionable destination, and no policy covers them.
     """
-    result = {
-        'status': 'quota_exhausted',
-        'message': _quota_message(data),
-    }
+    result: dict[str, Any] = {'status': 'quota_exhausted', 'message': ''}
+    for key in ('cost', 'cost_per_citation', 'credits_remaining', 'requested'):
+        if _int(data.get(key)) is not None:
+            result[key] = data[key]
+    if isinstance(data.get('resets_at'), str) and data['resets_at']:
+        result['resets_at'] = data['resets_at']
     if not request_is_chatgpt():
         result['manage_url'] = data.get('upgrade_url') or config.PLANS_URL
-    result['next_step'] = QUOTA_NEXT_STEP
+    _word_quota(result)
     return result
+
+
+# The order an out-of-credits result's own fields are given in: the facts, then
+# what to do. Anything else a tool adds (a check's id, what was not checked) follows.
+_QUOTA_KEY_ORDER = (
+    'status',
+    'message',
+    'cost',
+    'cost_per_citation',
+    'credits_remaining',
+    'requested',
+    'resets_at',
+    'manage_url',
+    'next_step',
+)
+
+
+def _citecheck_short_then(result: dict[str, Any]) -> str:
+    """Why a citation check did not run, in the past tense."""
+    requested = _int(result.get('requested'))
+    what = f'its {requested:,} citations' if requested else 'it'
+    return f'This citation check did not run: the balance did not cover {what} when it was submitted.'
+
+
+def _word_quota(result: dict[str, Any]) -> None:
+    """(Re)write an out-of-credits result's ``message`` and ``next_step`` from its fields."""
+    if 'citecheck_id' in result and _int(result.get('credits_remaining')) is None:
+        # A citation check that ran short is read back from its own record, which
+        # states neither the balance nor a renewal date, and nothing else is
+        # asked for them: what happened then is known, the balance since is not.
+        result['message'] = _citecheck_short_then(result)
+        result['next_step'] = _quota_next_step(result, lead='Nothing was charged.', refused_again=False)
+    else:
+        result['message'] = _quota_message(result)
+        result['next_step'] = _quota_next_step(result)
+    ordered = {key: result[key] for key in _QUOTA_KEY_ORDER if key in result}
+    ordered.update((key, value) for key, value in result.items() if key not in ordered)
+    result.clear()
+    result.update(ordered)
 
 
 # ── reading the API's response shape ─────────────────────────────────
@@ -846,18 +1035,37 @@ _NO_CHECKABLE_CLAIM = 'no_checkable_claim'
 # claims). The API carries no hint on such a row.
 _COMPOUND_ROW_HINT = 'Assessed the main claim only. Send identified_claims as their own items to check the rest.'
 
+# The API writes a row's hint for an integrator, and can end it with advice that
+# names an API path ("... or run the text through /extract ..."). The model has
+# no tool for a path and the card shows the hint to the user, so a sentence that
+# names one stays out; the sentences around it (why the item was not checked)
+# are kept as written.
+_API_PATH = re.compile(r'(?<![\w/:])/[a-z][a-z_/-]+')
+_SENTENCE_END = re.compile(r'(?<=[.!?])\s+')
+
+
+def _hint_without_api_paths(hint: Any) -> Any:
+    """A row's hint without the sentences that name an API path; not a string, as given."""
+    if not isinstance(hint, str):
+        return hint
+    return ' '.join(s for s in _SENTENCE_END.split(hint.strip()) if not _API_PATH.search(s))
+
+
 # The tools' message on an assess answer with no rows, by failure code.
 _ASSESS_ERROR_TEXT = {_NO_CHECKABLE_CLAIM: 'No verifiable claim detected'}
 
 # What a deep check that found too few public sources says.
 INSUFFICIENT_EVIDENCE_MESSAGE = 'Lenz found too few public sources to check this claim; nothing was charged.'
 
-# The tools' message on a failed deep check, by failure code; any other code
-# reads "Pipeline stopped at: <code>".
+# Beside every failed deep check: the debit happens only when a run completes.
+FAILED_NOT_CHARGED = 'Nothing was charged: a deep check is charged only when it completes.'
+
+# The tools' message on a failed deep check whose body carries no sentence of
+# its own (`failure.detail`), by failure code.
 _VERIFY_ERROR_TEXT = {
     _NO_CHECKABLE_CLAIM: 'Not a verifiable claim.',
     'cancelled': 'Cancelled.',
-    'task_error': 'Pipeline failed.',
+    'task_error': 'The deep check stopped on an error.',
     'task_stuck': 'The task was never completed and has been marked failed.',
     'research_empty': INSUFFICIENT_EVIDENCE_MESSAGE,
     'research_insufficient': INSUFFICIENT_EVIDENCE_MESSAGE,
@@ -954,10 +1162,22 @@ def _failed_verification(data: dict[str, Any]) -> dict[str, Any]:
     """
     failure = _failure_block(data)
     code = failure.get('code')
-    message = _VERIFY_ERROR_TEXT.get(code, f'Pipeline stopped at: {code}') if isinstance(code, str) and code else None
-    out: dict[str, Any] = {'status': 'failed', 'message': message or 'The verification failed.'}
+    # The API's own sentence first: it says what happened in words a person
+    # reads. An older body without one falls back to the table, then to a
+    # sentence about the stage.
+    message = (
+        _text_or_none(failure.get('detail'))
+        or (_VERIFY_ERROR_TEXT.get(code) if isinstance(code, str) else None)
+        or (f'The deep check stopped before it finished ({code}).' if isinstance(code, str) and code else None)
+        or 'The verification failed.'
+    )
+    out: dict[str, Any] = {'status': 'failed', 'message': f'{message} {FAILED_NOT_CHARGED}'}
     if failure.get('failure_class') == 'insufficient_evidence':
         out['message'] = INSUFFICIENT_EVIDENCE_MESSAGE
+    # A deep check is charged when it completes, so a failed one never is.
+    # `failure.hint` stays out: it is written for an API integrator and can
+    # name endpoints the model has no tool for.
+    out['credits_charged'] = 0
     if 'code' in failure:
         out['failure_reason'] = 'not_a_claim' if code == _NO_CHECKABLE_CLAIM else code
     for key in ('failure_class', 'retryable'):
@@ -967,6 +1187,11 @@ def _failed_verification(data: dict[str, Any]) -> dict[str, Any]:
     # where it happens, instead of in the instructions ChatGPT never reads.
     if failure.get('failure_class') == 'upstream_unavailable':
         out['next_step'] = SOURCES_UNAVAILABLE_NEXT_STEP
+    # A text with nothing checkable in it is a dead end unless the model is told
+    # what the user can do next. Nothing was charged: the run ended before it
+    # could be.
+    elif code == _NO_CHECKABLE_CLAIM:
+        out['next_step'] = _no_claim_next_step(NO_CLAIM_NOT_CHECKED)
     return out
 
 
@@ -1001,7 +1226,7 @@ def _error_result(resp: client.ApiResponse) -> dict[str, Any]:
         return {'status': 'error', 'message': "Couldn't reach the Lenz API — please retry shortly."}
     if status == 401:
         logger.info('mcp_auth_401')  # friction gauge: real attempts blocked by the key wall
-        return _auth_required()
+        return _auth_required(rejected=True)
     if status == 402:
         # Unambiguous: out of credits, or the tier doesn't cover this
         # capability. No code inspection needed — that's the point of 402.
@@ -1031,6 +1256,10 @@ def _error_result(resp: client.ApiResponse) -> dict[str, Any]:
         code = data.get('code', '')
         if code in _QUOTA_CODES:
             return _quota_exhausted(data)
+        if code == 'insufficient_scope':
+            # A valid credential without this route's permission: a new
+            # authorization fixes it, which the API's own sentence does not say.
+            return _missing_permission()
         return {'status': 'forbidden', 'message': detail or 'Access denied.'}
     if status == 429:
         # Pass the real wait through when the server states one — "shortly" is
@@ -1163,10 +1392,15 @@ async def assess_claim(
     data = resp.data
     raw_claims = data.get('claims') or []
     if not raw_claims:
-        return {
+        none_found: dict[str, Any] = {
             'status': 'no_claim',
             'message': _assess_failure_text(data) or 'No verifiable factual claim was detected in the text.',
         }
+        # Only the answer that says no claim was found: any other reason an
+        # answer has no rows is not known to be uncharged, or to be the text's.
+        if _failure_block(data).get('code', _NO_CHECKABLE_CLAIM) == _NO_CHECKABLE_CLAIM:
+            none_found['next_step'] = _no_claim_next_step(NO_CLAIM_NOT_CHECKED)
+        return none_found
 
     claims_out = []
     for c in map(_assess_row, raw_claims):
@@ -1182,14 +1416,20 @@ async def assess_claim(
         # passes through untouched).
         if c.get('error_code'):
             entry['error'] = c['error_code']
+        # What to do with an item that held no claim, on that item's row only:
+        # the rows that were checked read as they always did.
+        if c.get('error_code') == 'no_claim':
+            entry['next_step'] = _no_claim_next_step(NO_CLAIM_ITEM_NOT_CHECKED)
         # Claims found in the same item that were NOT assessed — resubmit
         # them as their own items if they matter.
         if c.get('identified_claims'):
             entry['identified_claims'] = list(c['identified_claims'])
         # One sentence on what to send next; the API sets it on every error
-        # row and on a compound row, never on a plain verdict.
-        if c.get('hint'):
-            entry['hint'] = c['hint']
+        # row and on a compound row, never on a plain verdict. Advice that
+        # names an API path is left out (see `_hint_without_api_paths`).
+        hint = _hint_without_api_paths(c.get('hint'))
+        if hint:
+            entry['hint'] = hint
         # The reviewer notes, forwarded only when set: a null note adds
         # nothing, and a row from an older API or a replayed stored body has
         # no such keys at all (the MCP server and the API deploy independently).
@@ -1570,6 +1810,23 @@ def _batch_verify_envelope(
     return out
 
 
+def _batch_quota_body(bodies: list[dict[str, Any]]) -> dict[str, Any]:
+    """One 402 body for a batch of deep checks that were all refused for credits.
+
+    Each claim is its own call and its own 402, priced for one check; the
+    refusal the model reads is priced for all of them, with the latest balance
+    any of them stated.
+    """
+    body = dict(bodies[0])
+    costs = [_int(b.get('cost')) for b in bodies]
+    if all(cost is not None for cost in costs):
+        body['cost'] = sum(cost for cost in costs if cost is not None)
+    else:
+        body.pop('cost', None)
+    body['requested'] = len(bodies)
+    return body
+
+
 @_tool(
     title='Deep fact-check',
     # idempotentHint=False: the same claim sent again inside the 24-hour replay window
@@ -1674,6 +1931,7 @@ async def verify_claim(
         by_index: dict[int, dict[str, Any]] = {}
         first_err_resp: client.ApiResponse | None = None
         first_exc: BaseException | None = None
+        quota_bodies: list[dict[str, Any]] = []
         for idx, (c, resp) in enumerate(zip(to_start, resps, strict=True)):
             if isinstance(resp, BaseException):
                 if first_exc is None:
@@ -1704,6 +1962,7 @@ async def verify_claim(
             elif resp.status == 402 or (resp.status == 403 and resp.data.get('code') in _QUOTA_CODES):
                 partial = True
                 unstarted.append(c)
+                quota_bodies.append(resp.data)
                 if first_err_resp is None:
                     first_err_resp = resp
             else:
@@ -1715,6 +1974,9 @@ async def verify_claim(
 
         if not started_runs and first_exc is not None and first_err_resp is None:
             raise first_exc
+        if not started_runs and not by_index and quota_bodies:
+            # Every claim refused for credits: one refusal, priced for all of them.
+            return _quota_exhausted(_batch_quota_body(quota_bodies))
         if not started_runs and not by_index and first_err_resp is not None:
             return _error_result(first_err_resp)
         if not started_runs and len(by_index) == len(to_start) and first_err_resp is not None and not partial:
@@ -3004,6 +3266,8 @@ def _finished_citecheck(data: dict[str, Any], citecheck_id: str, offset: int = 0
             'more_citations': _more_citations(data, offset, always=True),
             'source': 'Lenz citation check',
         }
+    if data.get('status') == 'failed' and _failure_code(_failure_block(data)) == 'insufficient_credits':
+        return _citecheck_short_of_credits(data, citecheck_id)
     rows = [_citation_row(r) for r in data.get('citations') or [] if isinstance(r, dict)]
     issues = [_citation_issue_row(r) for r in data.get('citation_issues') or [] if isinstance(r, dict)]
     credits = _dict(data.get('credits'))
@@ -3134,6 +3398,44 @@ def _stated_wait(data: dict[str, Any], resp: client.ApiResponse, default: int) -
     return default
 
 
+def _citecheck_quota_body(data: dict[str, Any]) -> dict[str, Any]:
+    """A citation check's 402 in the fields every out-of-credits result reads.
+
+    The API states the balance as ``remaining`` here (citations left, at one
+    credit each, so the same number as the credits), and its ``cost`` prices
+    ONE citation: the refused check was never sized, so the price stays per
+    citation rather than reading as the whole call's.
+    """
+    body = dict(data)
+    if _int(body.get('credits_remaining')) is None and _int(body.get('remaining')) is not None:
+        body['credits_remaining'] = body['remaining']
+    if _int(body.get('cost')) is not None and _int(body.get('requested')) is None:
+        body['cost_per_citation'] = body.pop('cost')
+    return body
+
+
+def _citecheck_short_of_credits(data: dict[str, Any], citecheck_id: str) -> dict[str, Any]:
+    """A check the balance did not cover, as the same refusal every tool gives.
+
+    The API ends such a check as ``failed`` with ``insufficient_credits``, after
+    it counted the citations, and charges nothing. It is a credit problem, not a
+    problem with the input, so it is not worded as a failed check. The record
+    states the number of citations it counted and nothing about the balance, the
+    price or a renewal date, so the result leaves those out rather than asking
+    the API for them.
+    """
+    selected = _int(_citecheck_summary(data).get('citations_selected'))
+    result = _quota_exhausted({'requested': selected} if selected else {})
+    result['citecheck_id'] = citecheck_id
+    result['not_checked'] = [
+        {key: row[key] for key in ('index', 'reference', 'statement') if row.get(key) is not None}
+        for row in data.get('citations') or []
+        if isinstance(row, dict)
+    ]
+    _word_quota(result)
+    return result
+
+
 def _citecheck_submit_error(resp: client.ApiResponse) -> dict[str, Any]:
     """A start that was refused, as a tool result."""
     status, data = resp.status, resp.data
@@ -3141,6 +3443,8 @@ def _citecheck_submit_error(resp: client.ApiResponse) -> dict[str, Any]:
     detail = data.get('detail') if isinstance(data.get('detail'), str) and data.get('detail') else None
     if status == 0:
         return {'status': 'error', 'message': CITECHECK_UNREACHABLE}
+    if status == 402:
+        return _quota_exhausted(_citecheck_quota_body(data))
     if status == 422:
         out = {'status': 'invalid_request', 'message': detail or 'The request was invalid.'}
         if code:

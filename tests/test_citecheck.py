@@ -483,6 +483,9 @@ def test_a_failed_check_is_a_result_not_an_error(monkeypatch):
     # A failed check replays as failed for a day, so the input has to change.
     assert out['next_step'] == server.CITECHECK_FAILED_NEXT_STEP
     assert 'change' in out['next_step']
+    # A citation check reads no claims, so it never answers "no claim": a draft with no
+    # citation is its own failure and keeps its own next step.
+    assert 'checks factual claims' not in str(out)
     assert 'presentation' not in out
 
 

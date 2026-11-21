@@ -357,3 +357,187 @@ def test_a_submission_tools_line_names_every_tool_the_case_asserts(visible):
         named_tools = set(re.findall(r'`(\w+)`', case.tools_line)) & visible
         unasserted = named_tools - set(case.expected_tools) - set(_LATER_TURN_ONLY)
         assert not unasserted, f'{case.id} promises {unasserted}, which the eval does not assert'
+
+
+def _case(case_id):
+    return next(case for case in cases.CASES if case.id == case_id)
+
+
+def test_the_out_of_credits_histories_carry_what_their_replies_are_judged_on():
+    """A reply can only give the user what the result gave the model: the cost and
+    balance, the renewal date, and where there is one the link. It carries no list
+    of cheaper checks to run."""
+    with_link = cases.DEEP_CHECK_REFUSED[-1].result
+    without_link = cases.DEEP_CHECK_REFUSED_OPENAI[-1].result
+    for result in (with_link, without_link):
+        assert result['status'] == 'quota_exhausted'
+        assert result['resets_at']
+        assert result['cost'] == 10 and result['credits_remaining'] == 7
+        assert 'balance_covers' not in result
+        assert 'how' not in str(result)
+        assert 'Monthly credits renew on 1 December 2026' in result['message']
+        assert "the user's choice" in result['next_step']
+    assert cases._PLANS_PAGE in with_link['manage_url']
+    assert 'manage_url' not in without_link
+    assert cases._PLANS_PAGE not in str(without_link)
+
+
+GOOD_WALL_REPLY = (
+    "Lenz couldn't run that deep check: it costs 10 credits and you have 7. Your credits renew on "
+    'December 1, 2026. You can add credits at https://lenz.io/plans?wall=x.'
+)
+NO_LINK_REPLY = (
+    "Lenz couldn't run that deep check: it costs 10 credits and you have 7. Your credits renew on December 1, 2026."
+)
+
+
+@pytest.mark.parametrize(
+    ('reply', 'with_link', 'without_link'),
+    [
+        (GOOD_WALL_REPLY, True, False),
+        (NO_LINK_REPLY, False, True),
+        # An offer of a cheaper check is allowed, and not required.
+        (NO_LINK_REPLY + ' I can run a quick check instead if you want.', False, True),
+        (GOOD_WALL_REPLY + ' A lower-depth deep check would also fit; want me to run it?', True, False),
+        # The date is required.
+        (GOOD_WALL_REPLY.replace('December 1, 2026', 'next month'), False, False),
+        # Saying the check did not run is required: the price and the balance alone do not.
+        ('A deep check costs 10 credits; you have 7. Credits renew on 1 December 2026.', False, False),
+        # Other ways to say it did not run, or why.
+        ("I wasn't able to run that. Credits renew on 1 Dec 2026.", False, True),
+        ('That check did not run. Credits renew on 2026-12-01.', False, True),
+        ('You do not have enough credits for a deep check. Credits renew on 1 December 2026.', False, True),
+        ('The deep check didn\u2019t go through. Credits renew on 1 December 2026.', False, True),
+        # "below" and "allow" are not a refusal.
+        ('You are below the balance this needs; your plan does not allow it until 2026-12-01.', False, False),
+    ],
+)
+def test_the_out_of_credits_replies_are_judged_on_not_run_date_and_link(reply, with_link, without_link):
+    assert _case('out-of-credits-gives-the-way-forward').reply(reply) is with_link
+    assert _case('out-of-credits-without-a-link').reply(reply) is without_link
+
+
+@pytest.mark.parametrize(
+    'reply',
+    [
+        "I couldn't run that. Buy more credits. Your credits renew on 1 December 2026.",
+        "I couldn't run it; you can upgrade your plan, and credits renew on 1 December 2026.",
+        "I couldn't run it; top up at https://example.org/billing. Credits renew on 1 December 2026.",
+    ],
+)
+def test_the_reply_without_a_link_also_carries_no_call_to_buy(reply):
+    assert _case('out-of-credits-without-a-link').reply(reply) is False
+
+
+def test_a_reset_date_in_another_year_is_not_the_reset_date():
+    text = "I couldn't run it. Your credits renew on December 1, 2027."
+    assert _case('out-of-credits-without-a-link').reply(text) is False
+    assert _case('out-of-credits-without-a-link').reply(text.replace('2027', '2026')) is True
+
+
+@pytest.mark.parametrize('tool', ['verify_claim', 'assess_claim'])
+def test_a_check_run_on_its_own_after_the_refusal_fails_whatever_the_reply_says(tool):
+    from types import SimpleNamespace
+
+    from evals.tool_choice import scoring
+
+    call = SimpleNamespace(name=tool, arguments={'claim': 'x', 'text': 'x'}, batches=())
+    for case_id, reply in (
+        ('out-of-credits-gives-the-way-forward', GOOD_WALL_REPLY),
+        ('out-of-credits-without-a-link', NO_LINK_REPLY),
+    ):
+        turn = SimpleNamespace(calls=[call], text=reply, batches=())
+        ok, note = scoring.judge(_case(case_id), turn)
+        assert not ok and tool in note
+
+
+def test_a_reply_that_says_it_all_and_calls_nothing_passes():
+    from types import SimpleNamespace
+
+    from evals.tool_choice import scoring
+
+    for case_id, reply in (
+        ('out-of-credits-gives-the-way-forward', GOOD_WALL_REPLY),
+        ('out-of-credits-without-a-link', NO_LINK_REPLY),
+    ):
+        ok, _ = scoring.judge(_case(case_id), SimpleNamespace(calls=[], text=reply, batches=()))
+        assert ok
+
+
+# ── a quick check that found no claim ────────────────────────────────
+
+NO_CLAIM_CASE = 'no-claim-found-asks-for-one'
+
+GOOD_NO_CLAIM_REPLY = (
+    "Lenz didn't check that: it's an opinion, and nothing was charged. Lenz checks factual claims, such as a "
+    'fact, a figure, a date, a quote or an attribution. Is there a claim like that you would like me to check?'
+)
+
+
+def test_the_no_claim_history_carries_what_its_reply_is_judged_on():
+    """The result the model answers is the connector's own: nothing checked or charged, what
+    Lenz checks in the instructions' words, to ask for a claim, and not to send the text again."""
+    case = _case(NO_CLAIM_CASE)
+    assert case.group == 'tool_results'
+    assert case.expects_none and not case.prompt.strip()
+    exchange = case.history[-1]
+    assert isinstance(exchange, cases.ToolExchange) and exchange.name == 'assess_claim'
+    result = exchange.result
+    assert result['status'] == 'no_claim'
+    step = result['next_step']
+    assert step.startswith('Nothing was checked and nothing was charged.')
+    assert 'a fact, a figure, a date, a quote or an attribution' in step
+    assert 'Ask them for a claim to check' in step
+    assert 'Do not send the same text again unchanged' in step
+    # The text sent is the opinion the user asked about, and the API's integrator hint stays out.
+    assert exchange.arguments == {'claim': cases._OPINION}
+    assert '/extract' not in str(result)
+    assert case.forbid == ('assess_claim', 'verify_claim')
+
+
+@pytest.mark.parametrize(
+    ('reply', 'passes'),
+    [
+        (GOOD_NO_CLAIM_REPLY, True),
+        # Naming what Lenz checks alone, or asking for a claim alone, with nothing checked said.
+        ("I didn't check it: that's an opinion. Lenz checks factual claims, like a date or a figure.", True),
+        ('Nothing was checked. Send me a statement you want checked and I will run it.', True),
+        ('That was not checked: it is a matter of taste. Which claim should I check instead?', True),
+        ('Lenz couldn’t check that. Share a factual claim and I will.', True),
+        # Saying only that nothing was checked leaves the user with nowhere to go.
+        ('Nothing was checked.', False),
+        ('Lenz did not check it because it is an opinion.', False),
+        # Describing what Lenz checks without saying this was not checked reads as an answer.
+        ('Lenz checks factual claims such as a date or a figure.', False),
+        # An opinion answered as if it were a verdict.
+        ('Lenz says that is false, and you should check the figure on the label.', False),
+        ('', False),
+    ],
+)
+def test_the_no_claim_reply_is_judged_on_nothing_checked_and_what_lenz_checks(reply, passes):
+    assert bool(_case(NO_CLAIM_CASE).reply(reply)) is passes
+
+
+@pytest.mark.parametrize('tool', ['assess_claim', 'verify_claim'])
+@pytest.mark.parametrize('claim', [cases._OPINION, 'Many people dislike pineapple on pizza.'])
+def test_any_check_after_a_no_claim_fails_whatever_the_reply_says(tool, claim):
+    """The same text finds the same nothing, and a reworded claim is one the user did not make."""
+    from types import SimpleNamespace
+
+    from evals.tool_choice import scoring
+
+    call = SimpleNamespace(name=tool, arguments={'claim': claim}, batches=())
+    turn = SimpleNamespace(calls=[call], text=GOOD_NO_CLAIM_REPLY, batches=())
+    ok, note = scoring.judge(_case(NO_CLAIM_CASE), turn)
+    assert not ok and tool in note
+
+
+def test_a_reply_that_says_it_and_calls_nothing_passes_the_no_claim_case():
+    from types import SimpleNamespace
+
+    from evals.tool_choice import scoring
+
+    ok, _ = scoring.judge(_case(NO_CLAIM_CASE), SimpleNamespace(calls=[], text=GOOD_NO_CLAIM_REPLY, batches=()))
+    assert ok
+    ok, note = scoring.judge(_case(NO_CLAIM_CASE), SimpleNamespace(calls=[], text='Nothing was checked.', batches=()))
+    assert not ok
