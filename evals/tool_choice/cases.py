@@ -561,7 +561,119 @@ QUICK_GERMAN_LOW = _quick(
     'Prüfung mit Quellen starten?',
 )
 
+# A quick check of text with nothing checkable in it (an opinion): the user asked, the
+# tool answered with no rows, and that answer is the last thing in the conversation.
+_OPINION = 'Pineapple on pizza is a crime against food.'
+NO_CLAIM_FOUND = (
+    ('user', f'Check with Lenz: {_OPINION}'),
+    ToolExchange('assess_claim', {'claim': _OPINION}, real.assess_no_claim_result()),
+)
+
+# The reply says nothing was checked, in the ways a person would put it.
+_NOTHING_CHECKED = re.compile(
+    r'\bnothing (?:was|got|has been) (?:checked|verified|run)\b|\bnothing to (?:check|verify)\b'
+    r'|\bno (?:(?:verifiable|checkable|factual) ){1,2}claims?\b|\bnot (?:a )?(?:verifiable|checkable|factual)\b'
+    r"|\b(?:wasn't|was not|isn't|is not|hasn't been|has not been|aren't|are not|can't be|cannot be|couldn't be|"
+    r'could not be) (?:\w+ ){0,2}?(?:checked|verified|fact-checked)\b'
+    r"|\b(?:didn't|did not|couldn't|could not|can't|cannot|unable to|not able to) (?:\w+ ){0,2}?(?:check|verify|find a claim)"
+    r'|\bnot checked\b|\bno check (?:was|has been) (?:run|made|done)\b|\bnot something (?:lenz|it|i) can (?:check|verify)\b'
+    r'|\boutside what (?:lenz|it) can check\b',
+    re.IGNORECASE,
+)
+# The reply names what Lenz can check (the instructions' own words)...
+_NAMES_WHAT_LENZ_CHECKS = re.compile(
+    r'\bfactual\b|\bfigures?\b|\bstatistics?\b|\bdates?\b|\bquot(?:e|es|ation|ations)\b|\battributions?\b',
+    re.IGNORECASE,
+)
+# ...or asks the user for one.
+_ASKS_FOR_A_CLAIM = re.compile(
+    r'\b(?:send|share|give|tell|paste|provide|name|pick|choose|ask)\b[^.?!\n]{0,60}?\b(?:claim|statement|fact)s?\b'
+    r'|\b(?:which|what|any|a) (?:specific |particular )?(?:factual )?(?:claim|statement|fact)s?\b[^.?!\n]{0,40}\?',
+    re.IGNORECASE,
+)
+
+
+def _says_nothing_was_checked(text: str) -> bool:
+    return bool(_NOTHING_CHECKED.search(text.replace('\u2019', "'")))
+
+
+def _names_or_asks_for_what_lenz_checks(text: str) -> bool:
+    return bool(_NAMES_WHAT_LENZ_CHECKS.search(text) or _ASKS_FOR_A_CLAIM.search(text))
+
+
 _SHORT_BALANCE = real.usage_result(50)
+
+# A deep check the balance did not cover: the user asked for it, the API refused
+# it, and the refusal is the last thing in the conversation. The balance would
+# cover a cheaper check, which the result does not list: that is the user's
+# choice to make, and the case judges that the model does not make it. The OpenAI
+# variant has no link.
+_WALL_CLAIM = 'The Halden Systems headquarters moved to Rotterdam in 2019.'
+
+
+def _deep_check_refused(*, openai_client: bool) -> tuple[Turn, ...]:
+    return (
+        ('user', f'Run a deep check with sources on this: {_WALL_CLAIM}'),
+        ToolExchange(
+            'verify_claim',
+            {'claim': _WALL_CLAIM},
+            real.deep_check_refused_result(_WALL_CLAIM, credits_remaining=7, openai_client=openai_client),
+        ),
+    )
+
+
+DEEP_CHECK_REFUSED = _deep_check_refused(openai_client=False)
+DEEP_CHECK_REFUSED_OPENAI = _deep_check_refused(openai_client=True)
+
+# The reset date as a person might write it: 1 December 2026, December 1st, 1 Dec,
+# 2026-12-01, 12/1, 1.12.
+_RESET_DATE = re.compile(
+    r'\b1(?:st)?\s+dec|\bdec(?:ember|\.)?\s+1(?:st)?\b|2026-12-01|\b12/0?1\b|\b0?1/12\b|\b0?1\.12\b',
+    re.IGNORECASE,
+)
+
+
+_RESET_YEAR = '2026'
+
+
+def _names_the_reset(text: str) -> bool:
+    """The reset date is named, and no other year is written beside it."""
+    for match in _RESET_DATE.finditer(text):
+        year = re.match(r'[^\d\n]{0,4}(\d{4})', text[match.end() :])
+        if year is None or year.group(1) == _RESET_YEAR:
+            return True
+    return False
+
+
+# A way to buy, which a client without a link must not be steered to either.
+_CALL_TO_BUY = re.compile(
+    r'https?://|\bbuy\b|\bpurchas|\bupgrad|\bsubscri|\btop[- ]?up\b|\badd (?:more )?credits\b',
+    re.IGNORECASE,
+)
+
+
+# The reply says the check did not run: said outright, or as the shortfall that
+# stopped it. A reply that only quotes the price and the balance does not say it.
+_NOT_RUN = re.compile(
+    r"\b(?:did(?:n't| not)|could(?:n't| not)|can(?:'t|not)|won't|wasn't|was not|weren't|were not|hasn't|has not"
+    r"|haven't|have not|unable to|not able to)\b[^.\n]{0,40}?"
+    r'\b(?:run|ran|start(?:ed)?|go through|went through|complete(?:d)?|checked?|perform(?:ed)?|carry out|carried out'
+    r'|proceed|process(?:ed)?|execute[d]?)\b'
+    r'|\bnot (?:been )?(?:run|checked|started)\b|\bno (?:deep )?check (?:was|has been) (?:run|made|done|started)\b'
+    r'|\b(?:refused|declined|rejected|blocked)\b'
+    r'|\bnot enough (?:lenz )?credits|\bout of (?:lenz )?credits|\binsufficient (?:lenz )?credits'
+    r"|\bshort (?:of|on) credits|\b(?:don't|do not|doesn't|does not) (?:have enough|cover)\b",
+    re.IGNORECASE,
+)
+
+
+def _says_it_did_not_run(text: str) -> bool:
+    return bool(_NOT_RUN.search(text.replace('\u2019', "'")))
+
+
+# Where the user adds credits, as the result gives it (scheme and query aside).
+_PLANS_PAGE = real.QUOTA_PLANS_URL.split('://', 1)[1].split('?', 1)[0]
+
 
 CASES: tuple[Case, ...] = (
     # ── The eight OpenAI submission cases, verbatim ───────────────────
@@ -1323,6 +1435,54 @@ CASES: tuple[Case, ...] = (
             'that matter. What the case judges: no retry loop on a refused call (at most one call '
             'per claim), and, when the turn ends without a call, a reply that tells the user the '
             'balance ran out.'
+        ),
+    ),
+    Case(
+        id='out-of-credits-gives-the-way-forward',
+        group='tool_results',
+        history=DEEP_CHECK_REFUSED,
+        prompt='',
+        expect=NONE,
+        forbid=('verify_claim', 'assess_claim'),
+        reply=lambda text: _says_it_did_not_run(text) and _names_the_reset(text) and _PLANS_PAGE in text,
+        why=(
+            'A deep check the user asked for was refused for credits. The result carries the cost and '
+            'the balance, the link where the user adds credits and the date monthly credits renew, and '
+            "says a cheaper check is the user's choice. The reply tells the user the check did not "
+            'run, gives the date and the link, and makes no call: the same call is refused again, and '
+            'a cheaper check spends credits the user has not agreed to. Offering one is allowed.'
+        ),
+    ),
+    Case(
+        id='out-of-credits-without-a-link',
+        group='tool_results',
+        history=DEEP_CHECK_REFUSED_OPENAI,
+        prompt='',
+        expect=NONE,
+        forbid=('verify_claim', 'assess_claim'),
+        reply=lambda text: _says_it_did_not_run(text) and _names_the_reset(text) and not _CALL_TO_BUY.search(text),
+        why=(
+            'The same refusal as an OpenAI client gets it: no link to add credits, by the app '
+            'directory rules, but the same facts. The reply tells the user the check did not run and '
+            'names the reset date, makes no call, and neither links to nor asks the user to buy '
+            'anything. Offering a cheaper check is allowed.'
+        ),
+    ),
+    Case(
+        id='no-claim-found-asks-for-one',
+        group='tool_results',
+        history=NO_CLAIM_FOUND,
+        prompt='',
+        expect=NONE,
+        forbid=('assess_claim', 'verify_claim'),
+        reply=lambda text: _says_nothing_was_checked(text) and _names_or_asks_for_what_lenz_checks(text),
+        why=(
+            'A quick check of an opinion came back with no claim. The result says nothing was checked '
+            'or charged, what Lenz can check, to ask the user for a claim, and not to send the same text '
+            'again. The reply tells the user nothing was checked and names the kind of statement Lenz '
+            'checks or asks for one, and makes no further check: the same text finds the same nothing, '
+            'and no claim the user did not make may be invented for them. Any check call fails the '
+            'attempt, the same text or a rewording.'
         ),
     ),
     Case(

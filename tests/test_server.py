@@ -395,7 +395,11 @@ def test_assess_no_claim(monkeypatch):
         ),
     )
     out = _run(server.assess_claim('hello there', _ctx()))
-    assert out == {'status': 'no_claim', 'message': 'No verifiable claim detected'}
+    assert out == {
+        'status': 'no_claim',
+        'message': 'No verifiable claim detected',
+        'next_step': server._no_claim_next_step(server.NO_CLAIM_NOT_CHECKED),
+    }
 
 
 def test_assess_claims_list_one_row_per_item_in_position(monkeypatch):
@@ -1238,7 +1242,7 @@ def test_get_verification_failed_passes_the_retry_contract_through(monkeypatch):
         ),
     )
     out = _run(server.get_verification('tid', _ctx()))
-    assert out['message'] == 'Pipeline stopped at: research_failed'
+    assert out['message'] == f'Search providers were unavailable. {server.FAILED_NOT_CHARGED}'
     assert out['failure_reason'] == 'research_failed'
     assert out['failure_class'] == 'upstream_unavailable'
     assert out['retryable'] is True
@@ -2487,7 +2491,7 @@ def test_the_picker_selects_every_claim_when_the_user_asked_for_all():
 
 def test_an_out_of_credits_result_says_what_happened_to_the_rest():
     out = server._quota_exhausted({'cost': 10, 'credits_remaining': 3})
-    assert out['next_step'] == server.QUOTA_NEXT_STEP
+    assert out['next_step'].startswith(server.QUOTA_NOT_RUN)
     assert 'already started keeps running' in out['next_step']
 
 

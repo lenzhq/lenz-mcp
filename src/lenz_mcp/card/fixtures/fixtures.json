@@ -979,6 +979,7 @@
     "_card": {
      "deliver": "context"
     },
+    "credits_charged": 0,
     "failure_class": "insufficient_evidence",
     "failure_reason": "research_empty",
     "message": "Lenz found too few public sources to check this claim; nothing was charged.",
@@ -992,9 +993,10 @@
     "_card": {
      "deliver": "context"
     },
+    "credits_charged": 0,
     "failure_class": "invalid_input",
     "failure_reason": "framing_failed",
-    "message": "Pipeline stopped at: framing_failed",
+    "message": "The check stopped before it finished. Nothing was charged: a deep check is charged only when it completes.",
     "retryable": false,
     "status": "failed"
    }
@@ -1005,9 +1007,10 @@
     "_card": {
      "deliver": "context"
     },
+    "credits_charged": 0,
     "failure_class": "internal",
     "failure_reason": "conclusion_failed",
-    "message": "Pipeline stopped at: conclusion_failed",
+    "message": "The check stopped before it finished. Nothing was charged: a deep check is charged only when it completes.",
     "retryable": false,
     "status": "failed"
    }
@@ -1018,9 +1021,10 @@
     "_card": {
      "deliver": "context"
     },
+    "credits_charged": 0,
     "failure_class": "upstream_unavailable",
     "failure_reason": "research_failed",
-    "message": "Pipeline stopped at: research_failed",
+    "message": "The check stopped before it finished. Nothing was charged: a deep check is charged only when it completes.",
     "next_step": "A service the deep check depends on was unavailable, so this attempt has no verdict. Tell the user that source verification is unavailable right now and, when `retryable` is true, that the check can be run again later; any earlier quick verdict still stands as a first read.",
     "retryable": true,
     "status": "failed"
@@ -1531,6 +1535,7 @@
       "confidence": null,
       "error": "no_claim",
       "hint": "This is a request to write something, not a statement that can be checked. Send a statement instead.",
+      "next_step": "This item was not checked and was not charged. Tell the user that Lenz checks factual claims, such as a fact, a figure, a date, a quote or an attribution; opinions, predictions, arithmetic, how programming code behaves and text with no checkable claim are outside what it can check. Ask them for a claim to check. Do not send the same text again unchanged. Restate the user's point as a claim only if the conversation makes clear what they mean: one claim as a statement, with what the conversation says it refers to and nothing else changed. Never make up a claim the user did not make.",
       "verdict": "Error"
      }
     ],
@@ -1544,6 +1549,7 @@
    "provenance": "hand-built (API body with no claims)",
    "toolResult": {
     "message": "No verifiable claim detected",
+    "next_step": "Nothing was checked and nothing was charged. Tell the user that Lenz checks factual claims, such as a fact, a figure, a date, a quote or an attribution; opinions, predictions, arithmetic, how programming code behaves and text with no checkable claim are outside what it can check. Ask them for a claim to check. Do not send the same text again unchanged. Restate the user's point as a claim only if the conversation makes clear what they mean: one claim as a statement, with what the conversation says it refers to and nothing else changed. Never make up a claim the user did not make.",
     "status": "no_claim"
    }
   },
@@ -1931,16 +1937,17 @@
   "quota-on-quick": {
    "provenance": "hand-built (API 402)",
    "toolResult": {
+    "credits_remaining": 0,
     "manage_url": "https://lenz.io/plans",
     "message": "Out of Lenz credits for this call.",
-    "next_step": "This call did not run and was not charged; any check already started keeps running and its result still arrives. Tell the user which claims were not checked and why. Calling again will not help until the balance allows it.",
+    "next_step": "This call did not run and nothing was charged; any check already started keeps running and its result still arrives. Tell the user what was not checked and why, and what they can do: `manage_url` is the page where the user can add credits or change plan, so give the user that link. A cheaper or smaller check than the one the user asked for is the user's choice: offer it if it helps, and run it only when the user says yes. The same call made again before the balance changes is refused again.",
     "status": "quota_exhausted"
    }
   },
   "reconnect": {
    "provenance": "hand-built (API 401)",
    "toolResult": {
-    "message": "No Lenz API key was provided. Create a free key at https://lenz.io/api-credentials and set it as the Authorization bearer token in your MCP client configuration.",
+    "message": "Lenz did not accept the API key this connection sent: it may have been revoked, or changed when it was copied. Create a new key at https://lenz.io/api-credentials and set it as the Authorization bearer token in your MCP client configuration.",
     "status": "auth_required"
    }
   },

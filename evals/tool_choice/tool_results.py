@@ -101,6 +101,27 @@ def assess_result(rows: list[dict[str, Any]], more: list[str] = ()) -> dict[str,
     return _run('assess_claim', ('x',), {'assess': (200, body)})
 
 
+def assess_no_claim_result() -> dict[str, Any]:
+    """What `assess_claim` returns for a text with nothing checkable in it: the API's answer with no rows."""
+    body = {
+        'status': 'no_checkable_claim',
+        'claims': [],
+        'failure': {
+            'code': 'no_checkable_claim',
+            'detail': 'No claim in the input could be checked against public evidence.',
+            'hint': (
+                'The input is an opinion, not a statement that can be checked. Send one factual claim, '
+                'or run the text through /extract to enumerate its claims.'
+            ),
+            'failure_class': 'invalid_input',
+            'retryable': False,
+            'docs_url': f'{PROD_FRONTEND}/docs/errors#invalid-input',
+        },
+        'more_claims': [],
+    }
+    return _run('assess_claim', ('x',), {'assess': (200, body)})
+
+
 def verification_running_result(arguments: dict[str, Any]) -> dict[str, Any]:
     """What `get_verification` returns for a check the eval answers: still running."""
     from lenz_mcp import config
@@ -144,6 +165,35 @@ def list_recent_result(arguments: dict[str, Any]) -> dict[str, Any]:
     return _run(
         'list_verifications', (), {'list_verifications': (200, {'items': [], 'total': 0, 'page': 1, 'page_size': 10})}
     )
+
+
+# What the eval's out-of-credits answers say about the account: one reset date
+# (the refusal's own body carries it) and the page where credits are added.
+QUOTA_RESETS_AT = '2026-12-01T00:00:00+00:00'
+QUOTA_PLANS_URL = f'{PROD_FRONTEND}/plans?wall=0f0e0d0c-0b0a-4908-8706-050403020100'
+
+
+def deep_check_refused_result(claim: str, *, credits_remaining: int, openai_client: bool) -> dict[str, Any]:
+    """What `verify_claim` returns when the balance does not cover a standard deep check.
+
+    The 402 is the API's own body for that refusal; `openai_client` builds the
+    result an OpenAI client gets, which carries no link to add credits.
+    """
+    body = {
+        'detail': 'No remaining claim checks.',
+        'code': 'no_credits',
+        'docs_url': f'{PROD_FRONTEND}/docs/errors#quota',
+        'upgrade_url': QUOTA_PLANS_URL,
+        'wall_id': '0f0e0d0c-0b0a-4908-8706-050403020100',
+        'remaining': 0,
+        'resets_at': QUOTA_RESETS_AT,
+        'credits_remaining': credits_remaining,
+        'cost': 10,
+    }
+    from lenz_mcp import server
+
+    with mock.patch.object(server, 'request_is_chatgpt', lambda: openai_client):
+        return _run('verify_claim', (claim,), {'verify': (402, body)})
 
 
 def quota_exhausted_result(arguments: dict[str, Any]) -> dict[str, Any]:

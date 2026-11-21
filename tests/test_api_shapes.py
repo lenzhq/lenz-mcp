@@ -14,8 +14,10 @@ the SDK's models order the keys they dump.
 The oracle comes from commit 5e2ec90b563571b7fbf225dc886979b38c74ad3d, the last
 release that also read the API's older shape. That commit's own tests held the
 same outputs equal to the outputs its predecessor gave for the older bodies
-(b8da55d069e31e81dc7c6d61574a3dd722aeb5db), so what the tools say has not
-moved since then. The writer refuses to run on any other source. To rebuild it:
+(b8da55d069e31e81dc7c6d61574a3dd722aeb5db). What a tool says on purpose
+differently since then is listed in `CHANGED_SINCE_THE_ORACLE` below and laid
+over the oracle, never written into it. The writer refuses to run on any other
+source. To rebuild it:
 
     git worktree add --detach /tmp/lenz-mcp-oracle 5e2ec90b563571b7fbf225dc886979b38c74ad3d
     cp tests/test_api_shapes.py tests/api_shapes.json tests/citecheck_shapes.json /tmp/lenz-mcp-oracle/tests/
@@ -274,6 +276,117 @@ def _oracle() -> dict[str, Any]:
     return json.loads(ORACLE_PATH.read_text(encoding='utf-8'))
 
 
+# What a tool says on purpose differently from the oracle commit, by scenario.
+# The oracle file stays as that commit wrote it; each entry here overlays the
+# fields that changed, so every deliberate change is listed in one place.
+_NOT_CHARGED = 'Nothing was charged: a deep check is charged only when it completes.'
+# An answer that found no checkable claim tells the model what to do next. The
+# wording is the server instructions' own for what Lenz can and cannot check.
+_NO_CLAIM_WHAT_TO_DO = (
+    'Tell the user that Lenz checks factual claims, such as a fact, a figure, a date, a quote or an '
+    'attribution; opinions, predictions, arithmetic, how programming code behaves and text with no '
+    'checkable claim are outside what it can check. Ask them for a claim to check. Do not send the same '
+    "text again unchanged. Restate the user's point as a claim only if the conversation makes clear what "
+    'they mean: one claim as a statement, with what the conversation says it refers to and nothing else '
+    'changed. Never make up a claim the user did not make.'
+)
+_NO_CLAIM_NOT_CHECKED = f'Nothing was checked and nothing was charged. {_NO_CLAIM_WHAT_TO_DO}'
+_NO_CLAIM_ITEM_NOT_CHECKED = f'This item was not checked and was not charged. {_NO_CLAIM_WHAT_TO_DO}'
+
+
+# The API's advice for an integrator at the end of a no-claim row's hint: it names a
+# path the model has no tool for, so the tools leave that sentence out.
+_API_NO_CLAIM_ADVICE = ' Send one factual claim, or run the text through /extract to enumerate its claims.'
+
+
+def _no_claim_rows_say_what_to_do(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The oracle's rows, with the next step on the rows that held no claim and their hint
+    without the sentence that names an API path; nothing else changed."""
+    out = []
+    for row in rows:
+        if row.get('error') == 'no_claim':
+            row = {**row, 'next_step': _NO_CLAIM_ITEM_NOT_CHECKED}
+            if 'hint' in row:
+                assert row['hint'].endswith(_API_NO_CLAIM_ADVICE), row['hint']
+                row['hint'] = row['hint'].removesuffix(_API_NO_CLAIM_ADVICE)
+        out.append(row)
+    return out
+
+
+CHANGED_SINCE_THE_ORACLE: dict[str, dict[str, Any]] = {
+    # A failed deep check gives the API's own sentence and says it was not charged.
+    'verify__status_cancelled_durable': {'message': f'The check was cancelled. {_NOT_CHARGED}', 'credits_charged': 0},
+    'verify__status_failed_durable': {
+        'message': f'The check stopped while writing the conclusion. {_NOT_CHARGED}',
+        'credits_charged': 0,
+    },
+    'verify__status_failed_durable_framing': {
+        'message': f'The input could not be read as a claim. {_NOT_CHARGED}',
+        'credits_charged': 0,
+    },
+    'verify__status_failed_live': {'credits_charged': 0},
+    'verify__status_failed_live_retryable': {
+        'message': f'The check stopped while the reviewers scored the evidence. {_NOT_CHARGED}',
+        'credits_charged': 0,
+    },
+    'verify__status_not_a_claim': {
+        'message': f'No claim in the input could be checked against public evidence. {_NOT_CHARGED}',
+        'credits_charged': 0,
+        'next_step': _NO_CLAIM_NOT_CHECKED,
+    },
+    'verify__status_not_a_claim_durable': {
+        'message': f'No claim in the input could be checked against public evidence. {_NOT_CHARGED}',
+        'credits_charged': 0,
+        'next_step': _NO_CLAIM_NOT_CHECKED,
+    },
+    # A quick check that found no claim says what to do next: on its own answer, or on
+    # the rows of a list that held none (the rows that were checked read as before).
+    'assess__single_no_claim': {'next_step': _NO_CLAIM_NOT_CHECKED},
+    'assess__list_all_error_rows': {'claims': _no_claim_rows_say_what_to_do},
+    'assess__list_mixed_rows': {'claims': _no_claim_rows_say_what_to_do},
+    'verify__status_task_stuck': {
+        'message': f'The check stopped responding before it finished. {_NOT_CHARGED}',
+        'credits_charged': 0,
+    },
+    'verify__stored_progress_failed_crashed': {
+        'message': f'The check stopped on an error on our side. {_NOT_CHARGED}',
+        'credits_charged': 0,
+    },
+    'verify__stored_progress_failed_insufficient_evidence': {'credits_charged': 0},
+    # Out of credits forwards the 402's facts and names the options the result carries.
+    'errors__payment_required_verify': {
+        'message': (
+            'Out of Lenz credits: this call costs 10 and the account has 0. '
+            'Monthly credits renew on 3 October 2026 at 12:00 UTC.'
+        ),
+        'cost': 10,
+        'credits_remaining': 0,
+        'resets_at': '2026-10-03T12:00:00.000000+00:00',
+        'next_step': (
+            'This call did not run and nothing was charged; any check already started keeps running and its '
+            'result still arrives. Tell the user what was not checked and why, and what they can do: '
+            '`manage_url` is the page where the user can add credits or change plan, so give the user that '
+            'link; monthly credits renew on the date in the message. A cheaper or smaller check than the one '
+            "the user asked for is the user's choice: offer it if it helps, and run it only when the user "
+            'says yes. The same call made again before the balance changes is refused again.'
+        ),
+    },
+}
+
+
+def _expected(scenario: str) -> Any:
+    """The oracle's output for a scenario, with the deliberate changes laid over it."""
+    expected = _oracle()[scenario]
+    for key, value in CHANGED_SINCE_THE_ORACLE.get(scenario, {}).items():
+        if value is None:
+            expected.pop(key, None)
+        elif callable(value):
+            expected[key] = value(expected[key])
+        else:
+            expected[key] = value
+    return expected
+
+
 @pytest.mark.skipif(not WRITE_ORACLE, reason='writes the oracle only when asked')
 def test_write_the_oracle():
     # Provenance: the server under test must be exactly the oracle commit's.
@@ -307,13 +420,23 @@ def test_every_scenario_has_an_oracle_entry_and_a_body():
 @skip_while_writing
 @pytest.mark.parametrize('scenario', sorted(SCENARIOS))
 def test_the_body_gives_what_it_gave_before(scenario):
-    assert _serialized(_output(scenario)) == _serialized(_oracle()[scenario])
+    if scenario in CHANGED_SINCE_THE_ORACLE:
+        # A key the overlay adds lands at the end of the oracle's order, not where
+        # the tool writes it, so a changed scenario is compared by content.
+        assert sorted_json(_output(scenario)) == sorted_json(_expected(scenario))
+    else:
+        assert _serialized(_output(scenario)) == _serialized(_oracle()[scenario])
+
+
+@skip_while_writing
+def test_every_change_since_the_oracle_names_a_scenario():
+    assert set(CHANGED_SINCE_THE_ORACLE) <= set(SCENARIOS)
 
 
 @skip_while_writing
 @pytest.mark.parametrize('scenario', sorted(SCENARIOS))
 def test_the_body_through_the_sdk_gives_the_same(scenario):
-    assert sorted_json(_wire_output(scenario)) == sorted_json(_oracle()[scenario])
+    assert sorted_json(_wire_output(scenario)) == sorted_json(_expected(scenario))
 
 
 # ── an answer in the older shape never reaches the tools ─────────────
