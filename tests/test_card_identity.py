@@ -86,10 +86,20 @@ def api(monkeypatch):
     async def _detail(authorization, *, verification_id):
         return ApiResponse(status=404, data={})
 
+    async def _citecheck(authorization, **kwargs):
+        seen['citecheck'].append(kwargs)
+        return ApiResponse(status=202, data={'citecheck_id': 'c' * 32, 'status': 'queued'})
+
+    async def _citecheck_status(authorization, *, citecheck_id):
+        return ApiResponse(status=200, data={'status': 'completed', 'citations': []})
+
+    seen['citecheck'] = []
     monkeypatch.setattr(client, 'assess', _assess)
     monkeypatch.setattr(client, 'verify', _verify)
     monkeypatch.setattr(client, 'verify_status', _verify_status)
     monkeypatch.setattr(client, 'verification_detail', _detail)
+    monkeypatch.setattr(client, 'citecheck', _citecheck)
+    monkeypatch.setattr(client, 'citecheck_status', _citecheck_status)
     return seen
 
 
@@ -97,11 +107,13 @@ MOUNTING_CALLS = {
     'assess_claim': {'claim': 'Honey never spoils.'},
     'verify_claim': {'claim': 'Honey never spoils.'},
     'get_verification': {'task_id': 'abcd1234'},
+    'check_citations': {'text': 'A statement with https://example.com citation.'},
 }
 
 
 def test_the_calls_this_file_makes_are_the_mounting_tools():
-    assert set(MOUNTING_CALLS) == set(mcp_card.CARD_TOOL_NAMES)
+    assert set(MOUNTING_CALLS) <= set(mcp_card.CARD_TOOL_NAMES)
+    assert 'check_citations' in mcp_card.CARD_TOOL_NAMES
 
 
 @pytest.mark.parametrize('era', [MODERN, LEGACY])

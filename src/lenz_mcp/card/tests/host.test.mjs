@@ -837,7 +837,7 @@ test('a list opens one row at a time, and its rows carry only what is unusual ab
   await card.getByText('8 claims checked').waitFor();
   assert.equal(await card.locator('.lz-tally').textContent(), '2 look wrong · 4 hold up · 2 could not be checked');
   const rows = frame.getByRole('button', { expanded: false });
-  const first = frame.locator('.lz-row-head').nth(4);
+  const first = frame.locator('#mcp-row-4 .lz-row-head');
   assert.match(await first.textContent(), /not sure$/);
   assert.equal(await frame.locator('.lz-row-panel').count(), 0);
 
@@ -849,12 +849,12 @@ test('a list opens one row at a time, and its rows carry only what is unusual ab
   assert.equal(await panel.getByRole('button', { name: /Check against sources/ }).count(), 1);
 
   // Opening another row closes the first: one open row at a time.
-  await frame.locator('.lz-row-head').nth(5).click();
+  await frame.locator('#mcp-row-5 .lz-row-head').click();
   assert.equal(await frame.locator('.lz-row-panel').count(), 1);
   assert.equal(await first.getAttribute('aria-expanded'), 'false');
 
   // An error row says what to do instead, and offers no check.
-  await frame.locator('.lz-row-head').nth(7).click();
+  await frame.locator('#mcp-row-7 .lz-row-head').click();
   assert.match(await frame.locator('.lz-row-panel').textContent(), /not a statement that can be checked/);
   assert.equal(await frame.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).count(), 0);
   assert.ok(rows);
@@ -871,7 +871,7 @@ test('a row keeps its deep verdict, its score and its source count, and the tall
   }));
   const frame = await frameOf(page, 'l2');
   const card = frame.locator('.lz');
-  const row = frame.locator('.lz-row-head').nth(4);
+  const row = frame.locator('#mcp-row-4 .lz-row-head');
   await row.click();
   await frame.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).click();
   await frame.locator('.lz-row-panel').getByText('Checking against sources').waitFor();
@@ -944,12 +944,12 @@ test('a row whose check is running keeps running when the row is collapsed', asy
     tools: { start_verification_widget: [SUBMITTED], get_verification_widget: [PROCESSING('research', 2, 9), COMPLETED] },
   }));
   const frame = await frameOf(page, 'lr');
-  const row = frame.locator('.lz-row-head').nth(4);
+  const row = frame.locator('#mcp-row-4 .lz-row-head');
   await row.click();
   await frame.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).click();
   await frame.locator('.lz-row-panel').getByText('Checking against sources').waitFor();
   // Collapse it by opening another row: the check is not cancelled.
-  await frame.locator('.lz-row-head').nth(0).click();
+  await frame.locator('#mcp-row-5 .lz-row-head').click();
   await frame.getByText('Checked against 14 sources').waitFor({ timeout: 15000 });
   assert.match(await row.textContent(), /False\s*2\/10\s*· Checked against 14 sources/);
   await page.waitForFunction(() => window.log.some((e) => e.method === 'ui/update-model-context'));
@@ -1984,7 +1984,7 @@ for (const width of [440, 480, 735]) {
     const heads = await frame.locator('.lz-row-head').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().right));
     for (const right of heads) assert.ok(right <= card.right + 0.5, `a row ends at ${right}, past the card's ${card.right}`);
     // A known label still reads on one line beside its claim.
-    assert.equal(await lineCount(frame.locator('.lz-row-head .row-line').nth(1)), 1);
+    assert.equal(await lineCount(frame.locator('#mcp-row-1 .row-line')), 1);
     assert.deepEqual(errors, []);
   });
 }

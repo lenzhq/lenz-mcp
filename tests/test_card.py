@@ -41,7 +41,12 @@ from lenz_mcp.testing import (
 )
 from tests import api_wire
 
-CARD_TOOLS = {'start_verification_widget', 'get_verification_widget', 'select_claims_widget'}
+CARD_TOOLS = {
+    'start_verification_widget',
+    'get_verification_widget',
+    'select_claims_widget',
+    'get_citation_check_widget',
+}
 
 # The per-client manifest is no longer something a test can reach by hand: 2.x
 # removed `FastMCP._mcp_server.request_handlers`, and the tailoring moved into
@@ -822,6 +827,7 @@ def test_the_delivery_hint_is_never_shown_to_a_model():
         'start_verification_widget',
         'get_verification_widget',
         'select_claims_widget',
+        'get_citation_check_widget',
     }
 
 
@@ -972,3 +978,61 @@ def test_a_client_we_cannot_parse_never_inherits_a_measured_clients_wait(monkeyp
         _as_client(monkeypatch, ua)
         assert client.client_identity() not in config.VERIFY_WAIT_SECONDS_BY_IDENTITY, ua
         assert server._verify_wait_seconds() == config.VERIFY_WAIT_SECONDS, ua
+
+
+def test_card_audit_built_for_completed_result():
+    raw = {
+        'verification_id': 'abcd1234',
+        'claim': 'Honey never spoils.',
+        'verdict': 'True',
+        'framing': {'search_queries': ['honey shelf life', 'honey spoilage']},
+        'research': {
+            'sources_researched': 15,
+            'evidence_pool': [{'url': 'https://example.com/1'}, {'url': 'https://example.com/2'}],
+        },
+        'debate': {
+            'pro': {'argument': 'Ancient honey remains edible.'},
+            'con': {'argument': 'Improper storage can introduce moisture.'},
+        },
+        'adjudication': {
+            'assessments': [
+                {'panelist_name': 'Reviewer A', 'verdict': 'True', 'factual_accuracy_score': 9},
+                {'panelist_name': 'Reviewer B', 'verdict': 'True', 'factual_accuracy_score': 10},
+            ]
+        },
+    }
+    audit = server._build_card_audit(raw)
+    assert audit is not None
+    assert audit['queries_count'] == 2
+    assert audit['sources_researched'] == 15
+    assert audit['evidence_count'] == 2
+    assert audit['for_claim'] == 'Ancient honey remains edible.'
+    assert audit['against_claim'] == 'Improper storage can introduce moisture.'
+    assert len(audit['panel']) == 2
+    assert audit['panel'][0] == {'name': 'Reviewer A', 'verdict': 'True', 'score': 9}
+
+    completed = server._completed_result(raw)
+    assert completed['card_audit'] == audit
+
+
+def test_check_citations_in_card_tool_names():
+    assert 'check_citations' in mcp_card.CARD_TOOL_NAMES
+    with _app(card=True) as harness:
+        tools = _tools(harness, 'Claude-User/1.0')
+        assert tools['check_citations']['_meta'] == {'ui': {'resourceUri': mcp_card.CARD_URI}}
+
+
+def test_get_citation_check_widget_meta_and_delivery(monkeypatch):
+    monkeypatch.setattr(config, 'CARD_ENABLED', True)
+    monkeypatch.setattr(server, '_authorization', lambda ctx: 'Bearer lenz_x')
+    _as_client(monkeypatch, 'openai-mcp/1.0.0 (ChatGPT)')
+
+    async def _citecheck_status(authorization, *, citecheck_id):
+        return ApiResponse(status=200, data={'status': 'completed', 'citations': []})
+
+    monkeypatch.setattr(client, 'citecheck_status', _citecheck_status)
+
+    out = _run(server.get_citation_check_widget('c' * 32, _Ctx()))
+    assert out['status'] == 'completed'
+    assert out[mcp_card.CARD_RESULT_NAMESPACE] == {'deliver': 'message'}
+    assert out.get('citation_check_id') == 'c' * 32

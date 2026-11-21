@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 # Bump BY HAND, with a new dist file and a versions.json entry, whenever the
 # bundle changes. Never derived from the bundle's bytes (see the module note).
-CARD_URI = 'ui://lenz/card-v10'
+CARD_URI = 'ui://lenz/card-v11'
 CARD_URI_PREFIX = 'ui://lenz/'
 CARD_MIME_TYPE = 'text/html;profile=mcp-app'
 
@@ -82,7 +82,9 @@ CARD_VENDOR_TOKENS = frozenset({CLAUDE_USER_AGENT_PRODUCT, 'openai-mcp'})
 
 # Tools only the card calls: listed to Claude with the card on, hidden from the
 # model by the MCP Apps visibility hint, stripped from every other manifest.
-CARD_ONLY_TOOL_NAMES = frozenset({'start_verification_widget', 'get_verification_widget', 'select_claims_widget'})
+CARD_ONLY_TOOL_NAMES = frozenset(
+    {'start_verification_widget', 'get_verification_widget', 'select_claims_widget', 'get_citation_check_widget'}
+)
 CARD_ONLY_TOOL_META = {'ui': {'visibility': ['app']}}
 
 # ── How the card tells the MODEL what it found ───────────────────────
@@ -155,7 +157,17 @@ def with_delivery(result: dict) -> dict:
 # the model ran itself — `verify_claim` and `get_verification`
 # both answer with a completed result or a submitted task_id, and the card reads
 # the shape, never the tool name.
-CARD_TOOL_NAMES = frozenset({'assess_claim', 'verify_claim', 'get_verification'})
+CARD_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        'assess_claim',
+        'verify_claim',
+        'verify_claims',
+        'assess_claims',
+        'review_text',
+        'check_citations',
+        'get_verification',
+    }
+)
 CARD_TOOL_META = {'ui': {'resourceUri': CARD_URI}}
 
 # The card opens no network connection and loads nothing: its script and styles

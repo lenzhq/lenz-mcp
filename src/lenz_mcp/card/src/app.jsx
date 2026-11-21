@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import * as copy from './copy.js';
 import { createDeepCheck } from './logic/deep-check.js';
 import { domainOf, formatElapsed, isWebUrl, languageName, text, verdictKey } from './logic/format.js';
-import { buttonStrength, changedFrom, deepResult, isSendableId, routePayload, tally } from './logic/route.js';
+import { bucketOf, buttonStrength, changedFrom, deepResult, isSendableId, routePayload, tally } from './logic/route.js';
 import { DELIVER_MESSAGE, readDelivery } from './logic/delivery.js';
 import { buildSnapshot } from './logic/snapshot.js';
 import { createPickStore, createRowStore } from './logic/store.js';
@@ -365,6 +365,58 @@ function Quote({ quote, language }) {
   );
 }
 
+function AuditTrace({ audit }) {
+  if (!audit || typeof audit !== 'object') return null;
+  const queries = audit.queries_count || 0;
+  const sources = audit.sources_researched || 0;
+  const evidence = audit.evidence_count || 0;
+  const forClaim = audit.for_claim;
+  const againstClaim = audit.against_claim;
+  const panel = Array.isArray(audit.panel) ? audit.panel : [];
+
+  const countsParts = [];
+  if (queries > 0) {
+    countsParts.push(`${queries} ${queries === 1 ? 'query' : 'queries'}`);
+  }
+  countsParts.push(`${sources} ${sources === 1 ? 'source' : 'sources'} searched`);
+  countsParts.push(`${evidence} in evidence pool`);
+  const countsLine = countsParts.join(' · ');
+
+  if (!countsLine && !forClaim && !againstClaim && !panel.length) return null;
+
+  return (
+    <details class="audit-trace">
+      <summary class="audit-trace-summary">{copy.AUDIT_TRACE_SUMMARY}</summary>
+      <div class="audit-trace-body">
+        {countsLine ? <p class="audit-counts">{countsLine}</p> : null}
+        {forClaim || againstClaim ? (
+          <div class="audit-debate">
+            {forClaim ? (
+              <p class="audit-argument">
+                <strong>{copy.AUDIT_FOR_CLAIM}</strong> {forClaim}
+              </p>
+            ) : null}
+            {againstClaim ? (
+              <p class="audit-argument">
+                <strong>{copy.AUDIT_AGAINST_CLAIM}</strong> {againstClaim}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {panel.length > 0 ? (
+          <div class="audit-panel">
+            {panel.map((seat, i) => (
+              <span key={i} class="audit-pill">
+                {seat.name}: {seat.verdict}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
 // `compact` is the same block inside a list row, which carries its own claim,
 // verdict line and footer: one component, two frames.
 function DeepResult({ result, quickVerdict, host, headingRef, compact = false }) {
@@ -394,6 +446,7 @@ function DeepResult({ result, quickVerdict, host, headingRef, compact = false })
         </div>
       ) : null}
       <Caveats warnings={result.warnings} />
+      <AuditTrace audit={result.card_audit || result.cardAudit} />
       <Sources result={result} host={host} />
       {/* "Ask a follow-up" PREFILLS the composer and the user finishes the
           sentence. A host that SENDS a message instead would post the
@@ -577,8 +630,8 @@ function Row({ index, row, host, open, hidden, onToggle, announce, registerCompl
   const busy = state.kind === 'submitting' || state.kind === 'running';
 
   useEffect(() => {
-    if (result) onVerdict(row, result.verdict);
-  }, [result && result.verdict]);
+    if (result) onVerdict(index, result.verdict, result.confidence);
+  }, [result && result.verdict, result && result.confidence]);
   useEffect(() => {
     if (!open) setFull(false);
   }, [open]);
@@ -612,7 +665,7 @@ function Row({ index, row, host, open, hidden, onToggle, announce, registerCompl
   ].filter(Boolean);
 
   return (
-    <li hidden={hidden || undefined}>
+    <li id={`mcp-row-${index}`} hidden={hidden || undefined}>
       <span class="num">{index + 1}</span>
       <div>
         <button type="button" class="lz-row-head" ref={headRef} aria-expanded={open} aria-controls={panelId} onClick={onToggle}>
@@ -685,16 +738,36 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
   const [allRows, setAllRows] = useState(false);
   const [openId, setOpenId] = useState('');
   // A row's deep verdict replaces its quick one in the tally as well as in the
-  // row, remembered by the row's own identity: a position would follow the wrong
-  // row when the payload changes under the card.
-  const [deepVerdicts, setDeepVerdicts] = useState({});
+  // row, remembered by row index and verdict/confidence.
+  const [verdicts, setVerdicts] = useState({});
+  const [confidences, setConfidences] = useState({});
+
+  const onVerdict = (i, v, conf) => {
+    const idx = typeof i === 'number' ? i : rows.indexOf(i);
+    if (idx < 0) return;
+    setVerdicts((prev) => (prev[idx] === v ? prev : { ...prev, [idx]: v }));
+    if (conf) setConfidences((prev) => (prev[idx] === conf ? prev : { ...prev, [idx]: conf }));
+  };
+
   const hidden = rows.length - LIST_ROWS_SHOWN;
-  const counted = rows.map((row) => {
-    const deep = deepVerdicts[rowId(row)];
+  const counted = rows.map((row, i) => {
+    const deep = verdicts[i];
     return deep ? { ...row, verdict: deep, error: '' } : row;
   });
-  const onVerdict = (row, verdict) =>
-    setDeepVerdicts((prev) => (prev[rowId(row)] === verdict ? prev : { ...prev, [rowId(row)]: verdict }));
+
+  const buckets = useMemo(() => {
+    const b = { bad: [], look: [], ok: [], none: [] };
+    rows.forEach((row, i) => {
+      const v = verdicts[i] || row.verdict;
+      const c = confidences[i] || row.confidence;
+      const bucket = bucketOf(v, c, row.error);
+      b[bucket].push(i);
+    });
+    return b;
+  }, [rows, verdicts, confidences]);
+
+  const hasAttention = buckets.bad.length > 0 || buckets.look.length > 0;
+  const [showOk, setShowOk] = useState(() => !hasAttention);
 
   return (
     <div class="lz">
@@ -705,17 +778,117 @@ function ListCard({ rows, host, announce, registerCompleted, reportState }) {
         </h1>
         <p class="lz-body lz-tally">{copy.tallyLine(tally(counted))}</p>
       </div>
+
+      {rows.length > 1 ? (
+        <div class="claim-strip" role="navigation" aria-label="Claims overview">
+          {rows.map((r, i) => {
+            const v = verdicts[i] || r.verdict;
+            const c = confidences[i] || r.confidence;
+            const b = bucketOf(v, c, r.error);
+            return (
+              <button
+                key={i}
+                type="button"
+                class={`strip-cell strip-${b}`}
+                title={`Claim ${i + 1}: ${r.claim}`}
+                aria-label={`Claim ${i + 1}`}
+                onClick={() => {
+                  const el = globalThis.document?.getElementById(`mcp-row-${i}`);
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }}
+              />
+            );
+          })}
+        </div>
+      ) : null}
+
       <div class="lz-region lz-rows-region">
         <ol class="lz-list lz-rows">
-          {rows.map((row, i) => (
+          {buckets.bad.length > 0 ? (
+            <li key="header-bad" class="lz-bucket-head">
+              {copy.BUCKET_BAD}
+            </li>
+          ) : null}
+          {buckets.bad.map((i) => (
             <Row
-              key={rowId(row)}
+              key={i}
               index={i}
-              row={row}
+              row={rows[i]}
               host={host}
               hidden={!allRows && i >= LIST_ROWS_SHOWN}
-              open={openId === rowId(row)}
-              onToggle={() => setOpenId(openId === rowId(row) ? '' : rowId(row))}
+              open={openId === rowId(rows[i])}
+              onToggle={() => setOpenId(openId === rowId(rows[i]) ? '' : rowId(rows[i]))}
+              announce={announce}
+              registerCompleted={registerCompleted}
+              reportState={reportState}
+              onVerdict={onVerdict}
+            />
+          ))}
+
+          {buckets.look.length > 0 ? (
+            <li key="header-look" class="lz-bucket-head">
+              {copy.BUCKET_LOOK}
+            </li>
+          ) : null}
+          {buckets.look.map((i) => (
+            <Row
+              key={i}
+              index={i}
+              row={rows[i]}
+              host={host}
+              hidden={!allRows && i >= LIST_ROWS_SHOWN}
+              open={openId === rowId(rows[i])}
+              onToggle={() => setOpenId(openId === rowId(rows[i]) ? '' : rowId(rows[i]))}
+              announce={announce}
+              registerCompleted={registerCompleted}
+              reportState={reportState}
+              onVerdict={onVerdict}
+            />
+          ))}
+
+          {buckets.ok.length > 0 ? (
+            <li key="header-ok" class="lz-bucket-head">
+              <button
+                type="button"
+                class="lz-bucket-toggle"
+                aria-expanded={showOk}
+                onClick={() => setShowOk(!showOk)}
+              >
+                <span>{copy.bucketOkToggle(buckets.ok.length)}</span>
+                <span aria-hidden="true">{showOk ? '▴' : '▾'}</span>
+              </button>
+            </li>
+          ) : null}
+          {buckets.ok.map((i) => (
+            <Row
+              key={i}
+              index={i}
+              row={rows[i]}
+              host={host}
+              hidden={(!showOk && openId !== rowId(rows[i])) || (!allRows && i >= LIST_ROWS_SHOWN)}
+              open={openId === rowId(rows[i])}
+              onToggle={() => setOpenId(openId === rowId(rows[i]) ? '' : rowId(rows[i]))}
+              announce={announce}
+              registerCompleted={registerCompleted}
+              reportState={reportState}
+              onVerdict={onVerdict}
+            />
+          ))}
+
+          {buckets.none.length > 0 ? (
+            <li key="header-none" class="lz-bucket-head">
+              {copy.BUCKET_NONE}
+            </li>
+          ) : null}
+          {buckets.none.map((i) => (
+            <Row
+              key={i}
+              index={i}
+              row={rows[i]}
+              host={host}
+              hidden={!allRows && i >= LIST_ROWS_SHOWN}
+              open={openId === rowId(rows[i])}
+              onToggle={() => setOpenId(openId === rowId(rows[i]) ? '' : rowId(rows[i]))}
               announce={announce}
               registerCompleted={registerCompleted}
               reportState={reportState}
@@ -1243,9 +1416,164 @@ function DeepBatchRow({ index, item, host, announce, registerCompleted, reportSt
   );
 }
 
+const ISSUE_FINDINGS = new Set([
+  'not_found',
+  'misattributed',
+  'contradicts',
+  'opposite',
+  'fabricated',
+  'overstates',
+  'partial_support',
+  'unverifiable',
+  'paywalled',
+  'retracted',
+  'preprint',
+  'outdated',
+]);
+
+function CitecheckCard({ payload: initialPayload, host }) {
+  const [data, setData] = useState(initialPayload || {});
+  const [showHoldsUp, setShowHoldsUp] = useState(false);
+  const citationCheckId =
+    data.citation_check_id || data.citecheck_id || initialPayload?.citation_check_id || initialPayload?.citecheck_id || '';
+
+  const isRunning =
+    data.status === 'queued' || data.status === 'running' || data.status === 'reading' || (!data.status && !Array.isArray(data.citations));
+
+  useEffect(() => {
+    if (!isRunning || !citationCheckId || !host?.capabilities?.serverTools) return undefined;
+    let timer = null;
+    let active = true;
+
+    async function poll() {
+      try {
+        const res = await host.callTool('get_citation_check_widget', {
+          citation_check_id: citationCheckId,
+          citecheck_id: citationCheckId,
+        });
+        if (!active) return;
+        if (res && typeof res === 'object') {
+          setData(res);
+          const stillGoing = res.status === 'queued' || res.status === 'running' || res.status === 'reading';
+          if (stillGoing) {
+            timer = setTimeout(poll, 2500);
+          }
+        }
+      } catch (_err) {
+        if (active) {
+          timer = setTimeout(poll, 2500);
+        }
+      }
+    }
+
+    timer = setTimeout(poll, 2500);
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [isRunning, citationCheckId, host]);
+
+  const citations = Array.isArray(data.citations) ? data.citations : [];
+  const rawIssues = Array.isArray(data.citation_issues) ? data.citation_issues : [];
+  const issues = citations.length > 0
+    ? citations.filter((c) => c.is_issue || ISSUE_FINDINGS.has(c.finding) || c.finding !== 'supports')
+    : rawIssues;
+  const supports = citations.filter((c) => c.finding === 'supports');
+
+  const checkedCount =
+    data.summary?.citation_checks?.checked ??
+    data.summary?.checked ??
+    citations.length;
+  const issuesCount = data.summary?.citation_issues ?? issues.length;
+
+  const heading = isRunning
+    ? copy.CITECHECK_CHECKING
+    : copy.citecheckSummary(checkedCount, issuesCount);
+
+  return (
+    <div class="lz citecheck-card">
+      <p class="lz-eyebrow">{copy.CITECHECK_EYEBROW}</p>
+      <div class="lz-head">
+        <h1 class="lz-claim" tabIndex={-1}>
+          {heading}
+        </h1>
+      </div>
+
+      {issues.length > 0 ? (
+        <div class="citecheck-section">
+          <h2 class="citecheck-section-title">{copy.CITECHECK_ISSUES_HEADING}</h2>
+          <ul class="citecheck-list">
+            {issues.map((c, i) => (
+              <CitationRow key={c.index ?? i} citation={c} host={host} />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {supports.length > 0 ? (
+        <div class="citecheck-section">
+          <button
+            type="button"
+            class="lz-link citecheck-toggle"
+            aria-expanded={showHoldsUp}
+            onClick={() => setShowHoldsUp(!showHoldsUp)}
+          >
+            {copy.citecheckHoldsUpToggle(supports.length)}
+          </button>
+          {showHoldsUp ? (
+            <ul class="citecheck-list" style={{ marginTop: '8px' }}>
+              {supports.map((c, i) => (
+                <CitationRow key={c.index ?? i} citation={c} host={host} />
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CitationRow({ citation, host }) {
+  const c = citation || {};
+  const finding = c.finding || '';
+  const isSupport = finding === 'supports';
+  const badgeClass = isSupport ? 'badge-support' : 'badge-issue';
+  const label = c.finding_label || finding.replace(/_/g, ' ');
+  const ref = c.cited_url || c.reference || c.doi || '';
+  const isUrl = isWebUrl(ref);
+  const canOpen = host?.capabilities?.openLinks;
+  const statement = c.statement || '';
+  const rationale = c.rationale || c.reason || c.hint || c.snippet || '';
+
+  return (
+    <li class="citecheck-row">
+      <div class="citecheck-row-head">
+        <span class={`cite-badge ${badgeClass}`}>{label}</span>
+        {ref ? (
+          isUrl && canOpen ? (
+            <button
+              type="button"
+              class="lz-link cite-ref"
+              onClick={() => host.openLink(ref).catch(() => {})}
+            >
+              {ref}
+            </button>
+          ) : (
+            <span class="cite-ref">{ref}</span>
+          )
+        ) : null}
+      </div>
+      {statement ? <p class="cite-statement">{statement}</p> : null}
+      {rationale ? <p class="cite-rationale">{rationale}</p> : null}
+    </li>
+  );
+}
+
 export function App({ host, payload, announce, registerCompleted, reportState }) {
   const route = routePayload(payload);
   switch (route.view) {
+    case 'citecheck':
+      return <CitecheckCard payload={route.payload} host={host} />;
     case 'waiting':
       return <Frame heading={copy.WAITING} />;
     case 'single':

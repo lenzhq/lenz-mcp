@@ -68,6 +68,18 @@ export function modelRanIt(payload) {
 
 export function routePayload(payload) {
   if (!payload || typeof payload !== 'object') return { view: 'waiting' };
+  if (
+    typeof payload.citation_check_id === 'string' ||
+    typeof payload.citecheck_id === 'string' ||
+    (Array.isArray(payload.citations) && !Array.isArray(payload.claims))
+  ) {
+    if (payload.status === 'queued' || payload.status === 'running' || payload.status === 'reading') {
+      return { view: 'citecheck', payload, polling: true };
+    }
+    if (payload.status === 'completed' || Array.isArray(payload.citations)) {
+      return { view: 'citecheck', payload, polling: false };
+    }
+  }
   if (modelRanIt(payload)) return routeDeep(payload);
   return routeQuick(payload);
 }
@@ -212,6 +224,8 @@ export function deepResult(payload) {
     warnings: (Array.isArray(p.warnings) ? p.warnings : []).map(text).filter(Boolean),
     sources,
     sourcesTotal: total,
+    card_audit: p.card_audit && typeof p.card_audit === 'object' ? p.card_audit : null,
+    cardAudit: p.card_audit && typeof p.card_audit === 'object' ? p.card_audit : null,
   };
 }
 
@@ -220,6 +234,22 @@ export function changedFrom(quickVerdict, deepVerdict) {
   const q = text(quickVerdict);
   const d = text(deepVerdict);
   return q && d && q.toLowerCase() !== d.toLowerCase() ? q : '';
+}
+
+// Action buckets for conversational grouping:
+// 'bad' (Looks wrong): False, Mostly False
+// 'look' (Needs a closer look): Mixed, No Public Record, or (True/Mostly True with low confidence)
+// 'ok' (Holds up): True, Mostly True with confidence !== low
+// 'none' (Could not be checked): failed/unresolved/unassessed rows
+export function bucketOf(verdict, confidence, error) {
+  if (error || !verdict) return 'none';
+  const key = verdictKey(verdict);
+  if (key === 'false' || key === 'mostly-false') return 'bad';
+  if (key === 'mixed' || key === 'no-record') return 'look';
+  if (key === 'true' || key === 'mostly-true') {
+    return confidence === 'low' ? 'look' : 'ok';
+  }
+  return 'none';
 }
 
 // The list's tally: how many rows read wrong, mixed, fine, have no public record

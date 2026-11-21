@@ -4,7 +4,7 @@
     "mimeTypes": [
       "text/html;profile=mcp-app"
     ],
-    "uri": "ui://lenz/card-v10"
+    "uri": "ui://lenz/card-v11"
   },
   "client": "chatgpt-codex",
   "declares_mcp_apps": true,
@@ -327,7 +327,9 @@
         "title": "check_citationsArguments",
         "type": "object"
       },
-      "meta_keys": [],
+      "meta_keys": [
+        "ui.resourceUri:str"
+      ],
       "model_visible": true,
       "name": "check_citations",
       "outputSchema": {
@@ -400,6 +402,45 @@
         "type": "object"
       },
       "title": "Get citation check result"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Get citation check result (Lenz card)"
+      },
+      "description": "Widget-only twin of `get_citation_check` (hidden from the model).",
+      "inputSchema": {
+        "properties": {
+          "citation_check_id": {
+            "default": "",
+            "description": "The citation check id (or citecheck_id); polled by the Lenz widget in-card.",
+            "title": "Citation Check Id",
+            "type": "string"
+          },
+          "citecheck_id": {
+            "default": "",
+            "description": "Alias for citation_check_id.",
+            "title": "Citecheck Id",
+            "type": "string"
+          }
+        },
+        "title": "get_citation_check_widgetArguments",
+        "type": "object"
+      },
+      "meta_keys": [
+        "ui.visibility:list"
+      ],
+      "model_visible": false,
+      "name": "get_citation_check_widget",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "get_citation_check_widgetDictOutput",
+        "type": "object"
+      },
+      "title": "Get citation check result (Lenz card)"
     },
     {
       "annotations": {

@@ -51,6 +51,25 @@ export const SHOW_FULL_CHECK = 'Show the full check';
 export const HIDE_FULL_CHECK = 'Hide the full check';
 export const showMoreRows = (n) => `Show ${n} more`;
 
+// Action buckets (conversational grouping)
+export const BUCKET_BAD = 'Looks wrong';
+export const BUCKET_LOOK = 'Needs a closer look';
+export const BUCKET_OK = 'Holds up';
+export const BUCKET_NONE = 'Could not be checked';
+export const bucketOkToggle = (n) => `Holds up (${n})`;
+
+// Mini-trace audit
+export const AUDIT_TRACE_SUMMARY = 'How Lenz reached this';
+export const AUDIT_FOR_CLAIM = 'For the claim:';
+export const AUDIT_AGAINST_CLAIM = 'Against:';
+
+// Citation check card
+export const CITECHECK_EYEBROW = 'Citation check';
+export const CITECHECK_CHECKING = 'Checking citations…';
+export const citecheckSummary = (checked, issues) => `${checked} citations checked · ${issues} need attention`;
+export const CITECHECK_ISSUES_HEADING = 'Issues';
+export const citecheckHoldsUpToggle = (n) => `Holds up (${n})`;
+
 // Deep check, running
 export const RUNNING_HEADING = 'Checking against sources';
 export const STAGE_LABELS = {

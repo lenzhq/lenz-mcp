@@ -2384,6 +2384,41 @@ async def _get_verification_for_card(task_id: str, ctx: Context) -> dict[str, An
 
 
 @_tool(
+    title='Get citation check result (Lenz card)',
+    annotations=ToolAnnotations(
+        title='Get citation check result (Lenz card)',
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+    meta=CARD_ONLY_TOOL_META,
+)
+@requires_auth
+async def get_citation_check_widget(
+    citation_check_id: Annotated[
+        str,
+        Field(description='The citation check id (or citecheck_id); polled by the Lenz widget in-card.'),
+    ] = '',
+    ctx: Context = None,  # type: ignore[assignment]
+    citecheck_id: Annotated[
+        str,
+        Field(description='Alias for citation_check_id.'),
+    ] = '',
+) -> dict[str, Any]:
+    """Widget-only twin of `get_citation_check` (hidden from the model)."""
+    ident = (citation_check_id or citecheck_id or '').strip()
+    if not _sendable_id(ident):
+        return with_delivery({'status': 'error', 'message': 'Invalid citation check id.'})
+    try:
+        res = await _citecheck_result(_authorization(ctx), ident)
+    except (exchange.ExchangeFailed, exchange.ExchangeNotConfigured) as exc:
+        res = _citecheck_credential_lost(exc, ident)
+    res.setdefault('citation_check_id', ident)
+    return with_delivery(res)
+
+
+@_tool(
     title='Start a deep fact-check (Lenz card)',
     # idempotentHint=False: a repeat inside the 24-hour replay window joins the
     # running check, but after it (or with `retry_of`) a new paid check starts.
@@ -2638,6 +2673,54 @@ def _source_row(source: dict[str, Any]) -> dict[str, str]:
     return row
 
 
+def _build_card_audit(raw: dict[str, Any]) -> dict[str, Any] | None:
+    if isinstance(raw.get('card_audit'), dict):
+        return raw['card_audit']
+    f = raw.get('framing')
+    framing: dict[str, Any] = f if isinstance(f, dict) else {}
+    r = raw.get('research')
+    research: dict[str, Any] = r if isinstance(r, dict) else {}
+    d = raw.get('debate')
+    debate: dict[str, Any] = d if isinstance(d, dict) else {}
+    a = raw.get('adjudication')
+    adj: dict[str, Any] = a if isinstance(a, dict) else {}
+    queries = [q for q in (framing.get('search_queries') or []) if isinstance(q, str) and q.strip()]
+    pool = [s for s in (research.get('evidence_pool') or []) if isinstance(s, dict)]
+    sources_researched = research.get('sources_researched')
+    if (
+        not isinstance(sources_researched, int)
+        or isinstance(sources_researched, bool)
+        or sources_researched < len(pool)
+    ):
+        sources_researched = len(pool)
+    p = debate.get('pro')
+    pro: dict[str, Any] = p if isinstance(p, dict) else {}
+    c = debate.get('con')
+    con: dict[str, Any] = c if isinstance(c, dict) else {}
+    for_claim = str(pro.get('argument') or pro.get('opening') or '').strip()[:220]
+    against_claim = str(con.get('argument') or con.get('opening') or '').strip()[:220]
+    panel: list[dict[str, Any]] = []
+    for seat in adj.get('assessments') or []:
+        if isinstance(seat, dict) and seat.get('verdict'):
+            panel.append(
+                {
+                    'name': str(seat.get('panelist_name') or seat.get('model') or 'Reviewer'),
+                    'verdict': str(seat.get('verdict') or ''),
+                    'score': seat.get('factual_accuracy_score'),
+                }
+            )
+    if not (queries or sources_researched or for_claim or against_claim or panel):
+        return None
+    return {
+        'queries_count': len(queries),
+        'sources_researched': sources_researched,
+        'evidence_count': len(pool),
+        'for_claim': for_claim,
+        'against_claim': against_claim,
+        'panel': panel,
+    }
+
+
 def _completed_result(result: dict[str, Any]) -> dict[str, Any]:
     """Trim a full verification detail to an agent-friendly result.
 
@@ -2681,6 +2764,9 @@ def _completed_result(result: dict[str, Any]) -> dict[str, Any]:
         'supersedes': SUPERSEDES_NOTE,
         'source': 'Lenz deep fact-check',
     }
+    card_audit = _build_card_audit(result)
+    if card_audit is not None:
+        out['card_audit'] = card_audit
     if rewrite:
         out['suggested_rewrite_note'] = SUGGESTED_REWRITE_NOTE
     return out

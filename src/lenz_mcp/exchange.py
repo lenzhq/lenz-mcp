@@ -101,6 +101,7 @@ TOOL_SCOPES: dict[str, frozenset[str]] = {
     'start_verification_widget': frozenset({'verify', 'history:read'}),
     'select_claims_widget': frozenset({'verify'}),
     'get_verification_widget': frozenset({'verify', 'history:read'}),
+    'get_citation_check_widget': frozenset({'verify', 'history:read'}),
 }
 
 # OAuth error codes that mean this service's own configuration or request is
