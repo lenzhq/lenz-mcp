@@ -2675,7 +2675,7 @@ def _source_row(source: dict[str, Any]) -> dict[str, str]:
 
 def _sanitize_seat_name(raw_name: Any, index: int) -> str:
     letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    fallback = f"Reviewer {letters[index] if index < len(letters) else index + 1}"
+    fallback = f'Reviewer {letters[index] if index < len(letters) else index + 1}'
     if isinstance(raw_name, str):
         first_part = raw_name.strip().split(' · ')[0].strip()
         if re.fullmatch(r'Reviewer [A-Z]', first_part):
