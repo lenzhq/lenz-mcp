@@ -296,7 +296,13 @@ a.lz-link { display: inline-block; }
 .strip-cell.strip-npr { background: transparent; border: 1.5px solid var(--lz-meta); }
 
 /* Bucket headings and toggles in ListCard */
-.lz-batch-actions { margin: 8px 0 4px; }
+.lz-rows > li.lz-batch-actions {
+  display: block;
+  margin: 8px 0 4px;
+  padding: 0;
+  border-top: 0;
+}
+.lz-rows > li.lz-batch-actions + li { border-top: 0; }
 .lz-rows > li.lz-bucket-head {
   display: block;
   font-size: 13px;

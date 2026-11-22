@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4dYsoeFX2z/7kmrTdgYKUzSVAqsELlSKm0v/ttXRb24='; style-src 'sha256-DZZ9A6vUq2qZEVTJxL3nDTpS6k3bp7zT43FebDdHGg0='; img-src 'none'; font-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4dYsoeFX2z/7kmrTdgYKUzSVAqsELlSKm0v/ttXRb24='; style-src 'sha256-AdEqKJrzYtuWD7+FYsqDj5xf4P6BYeMPYSr6K145Om8='; img-src 'none'; font-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="lenz-card" content="v11-dev">
 <title>Lenz result</title>
 <style>
@@ -277,7 +277,13 @@ a.lz-link { display: inline-block; }
 .strip-cell.strip-npr { background: transparent; border: 1.5px solid var(--lz-meta); }
 
 /* Bucket headings and toggles in ListCard */
-.lz-batch-actions { margin: 8px 0 4px; }
+.lz-rows > li.lz-batch-actions {
+  display: block;
+  margin: 8px 0 4px;
+  padding: 0;
+  border-top: 0;
+}
+.lz-rows > li.lz-batch-actions + li { border-top: 0; }
 .lz-rows > li.lz-bucket-head {
   display: block;
   font-size: 13px;
