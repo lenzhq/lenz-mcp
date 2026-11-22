@@ -53,7 +53,6 @@ test('press → running → the deep result in place → one context push → te
   const button = frame.getByRole('button', { name: 'Check against sources' });
   await button.waitFor();
   assert.match(await button.getAttribute('class'), /filled/);
-  assert.ok(await frame.getByText("Reviewers' reasoning").isVisible());
   assert.ok(await frame.getByText(/^One reviewer disagreed: The figure depends/).isVisible());
 
   await button.click();
@@ -837,7 +836,7 @@ test('a list opens one row at a time, and its rows carry only what is unusual ab
   await card.getByText('8 claims checked').waitFor();
   assert.equal(await card.locator('.lz-tally').textContent(), '2 look wrong · 4 hold up · 2 could not be checked');
   const rows = frame.getByRole('button', { expanded: false });
-  const first = frame.locator('.lz-row-head').nth(4);
+  const first = frame.locator('#mcp-row-4 .lz-row-head');
   assert.match(await first.textContent(), /not sure$/);
   assert.equal(await frame.locator('.lz-row-panel').count(), 0);
 
@@ -849,12 +848,12 @@ test('a list opens one row at a time, and its rows carry only what is unusual ab
   assert.equal(await panel.getByRole('button', { name: /Check against sources/ }).count(), 1);
 
   // Opening another row closes the first: one open row at a time.
-  await frame.locator('.lz-row-head').nth(5).click();
+  await frame.locator('#mcp-row-5 .lz-row-head').click();
   assert.equal(await frame.locator('.lz-row-panel').count(), 1);
   assert.equal(await first.getAttribute('aria-expanded'), 'false');
 
   // An error row says what to do instead, and offers no check.
-  await frame.locator('.lz-row-head').nth(7).click();
+  await frame.locator('#mcp-row-7 .lz-row-head').click();
   assert.match(await frame.locator('.lz-row-panel').textContent(), /not a statement that can be checked/);
   assert.equal(await frame.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).count(), 0);
   assert.ok(rows);
@@ -871,7 +870,7 @@ test('a row keeps its deep verdict, its score and its source count, and the tall
   }));
   const frame = await frameOf(page, 'l2');
   const card = frame.locator('.lz');
-  const row = frame.locator('.lz-row-head').nth(4);
+  const row = frame.locator('#mcp-row-4 .lz-row-head');
   await row.click();
   await frame.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).click();
   await frame.locator('.lz-row-panel').getByText('Checking against sources').waitFor();
@@ -891,6 +890,142 @@ test('a row keeps its deep verdict, its score and its source count, and the tall
   await row.click();
   assert.equal(await frame.locator('.lz-row-panel').count(), 0);
   assert.match(await row.textContent(), /Checked against 14 sources/);
+  await page.context().close();
+});
+
+test('duplicate claims at different indices toggle independently', async () => {
+  const { page, errors } = await harness.page();
+  const dupes = [
+    { claim: 'Duplicate claim text.', verdict: 'True', confidence: 'high' },
+    { claim: 'Duplicate claim text.', verdict: 'True', confidence: 'high' },
+  ];
+  await page.evaluate(
+    (c) => window.startCard('dupes', c),
+    config({ toolResult: { status: 'ok', claims: dupes }, tools: {} })
+  );
+  const frame = await frameOf(page, 'dupes');
+  const row0 = frame.locator('#mcp-row-0 .lz-row-head');
+  const row1 = frame.locator('#mcp-row-1 .lz-row-head');
+
+  assert.equal(await row0.getAttribute('aria-expanded'), 'false');
+  assert.equal(await row1.getAttribute('aria-expanded'), 'false');
+
+  await row0.click();
+  assert.equal(await row0.getAttribute('aria-expanded'), 'true');
+  assert.equal(await row1.getAttribute('aria-expanded'), 'false');
+
+  await row1.click();
+  assert.equal(await row0.getAttribute('aria-expanded'), 'false');
+  assert.equal(await row1.getAttribute('aria-expanded'), 'true');
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('display-order pagination keeps flagged claims visible even past index 10', async () => {
+  const { page, errors } = await harness.page();
+  const claims = [
+    { claim: 'Claim 1 False', verdict: 'False', confidence: 'high' },
+    ...Array.from({ length: 9 }, (_, i) => ({
+      claim: `Claim ${i + 2} Mixed`,
+      verdict: 'Mixed',
+      confidence: 'high',
+    })),
+    { claim: 'Claim 11 False', verdict: 'False', confidence: 'high' },
+    { claim: 'Claim 12 Mixed', verdict: 'Mixed', confidence: 'high' },
+  ];
+  await page.evaluate(
+    (c) => window.startCard('pg', c),
+    config({ toolResult: { status: 'ok', claims }, tools: {} })
+  );
+  const frame = await frameOf(page, 'pg');
+
+  // Claim 11 (index 10) is visible because its displayRank is 1 (under To fix)
+  const row10 = frame.locator('#mcp-row-10');
+  assert.equal(await row10.getAttribute('hidden'), null);
+
+  // Claim 12 (index 11) is hidden under pagination limit (displayRank 11 >= 10)
+  const row11 = frame.locator('#mcp-row-11');
+  assert.equal(await row11.getAttribute('hidden'), '');
+
+  // Click Show more reveals all rows
+  const toggle = frame.locator('.lz-row-toggle');
+  await toggle.waitFor();
+  assert.equal(await toggle.textContent(), 'Show 4 more');
+  await toggle.click();
+  assert.equal(await row11.getAttribute('hidden'), null);
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('CitecheckCard renders 4 severity buckets and overview strip when multiple citations', async () => {
+  const { page, errors } = await harness.page();
+  const citePayload = {
+    citation_check_id: 'cite-multi-123',
+    status: 'completed',
+    citations: [
+      { reference: 'https://bad.example', finding: 'contradicted', statement: 'Statement 1' },
+      { reference: 'https://look.example', finding: 'partly_supported', statement: 'Statement 2' },
+      { reference: 'https://none.example', finding: 'unchecked', statement: 'Statement 3' },
+      { reference: 'https://ok.example', finding: 'supported', statement: 'Statement 4' },
+    ],
+  };
+  await page.evaluate(
+    (c) => window.startCard('cite-multi', c),
+    config({ toolResult: citePayload, tools: {} })
+  );
+  const frame = await frameOf(page, 'cite-multi');
+
+  // Overview strip rendered
+  const strip = frame.locator('.claim-strip .strip-cell');
+  assert.equal(await strip.count(), 4);
+  assert.equal(await strip.nth(0).getAttribute('class'), 'strip-cell strip-bad');
+  assert.equal(await strip.nth(1).getAttribute('class'), 'strip-cell strip-look');
+  assert.equal(await strip.nth(2).getAttribute('class'), 'strip-cell strip-none');
+  assert.equal(await strip.nth(3).getAttribute('class'), 'strip-cell strip-ok');
+
+  // Buckets rendered
+  assert.ok(await frame.locator('h2.citecheck-section-title', { hasText: 'To fix' }).isVisible());
+  assert.ok(await frame.locator('h2.citecheck-section-title', { hasText: 'Closer look' }).isVisible());
+  assert.ok(await frame.locator('h2.citecheck-section-title', { hasText: 'Unchecked' }).isVisible());
+  assert.ok(await frame.getByText(/Checks out \(1\)/).isVisible());
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('combined claims + citations payload renders unified items heading, tally and strip', async () => {
+  const { page, errors } = await harness.page();
+  const combinedPayload = {
+    status: 'ok',
+    claims: [
+      { claim: 'Claim wrong', verdict: 'False', confidence: 'high' },
+      { claim: 'Claim ok', verdict: 'True', confidence: 'high' },
+    ],
+    citations: [
+      { reference: 'https://look.example', finding: 'partly_supported', statement: 'Cite look' },
+    ],
+  };
+  await page.evaluate(
+    (c) => window.startCard('combo', c),
+    config({ toolResult: combinedPayload, tools: {} })
+  );
+  const frame = await frameOf(page, 'combo');
+  const card = frame.locator('.lz');
+
+  await card.getByText('3 items checked').waitFor();
+  assert.equal(await card.locator('.lz-tally').textContent(), '1 looks wrong · 1 mixed · 1 holds up');
+
+  // Strip has 3 cells (2 claims + 1 citation)
+  const strip = frame.locator('.claim-strip .strip-cell');
+  assert.equal(await strip.count(), 3);
+
+  // Both To fix and Closer look buckets are present
+  assert.ok(await frame.locator('.lz-bucket-head', { hasText: 'To fix' }).isVisible());
+  assert.ok(await frame.locator('.lz-bucket-head', { hasText: 'Closer look' }).isVisible());
+
+  assert.deepEqual(errors, []);
   await page.context().close();
 });
 
@@ -944,12 +1079,12 @@ test('a row whose check is running keeps running when the row is collapsed', asy
     tools: { start_verification_widget: [SUBMITTED], get_verification_widget: [PROCESSING('research', 2, 9), COMPLETED] },
   }));
   const frame = await frameOf(page, 'lr');
-  const row = frame.locator('.lz-row-head').nth(4);
+  const row = frame.locator('#mcp-row-4 .lz-row-head');
   await row.click();
   await frame.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).click();
   await frame.locator('.lz-row-panel').getByText('Checking against sources').waitFor();
   // Collapse it by opening another row: the check is not cancelled.
-  await frame.locator('.lz-row-head').nth(0).click();
+  await frame.locator('#mcp-row-5 .lz-row-head').click();
   await frame.getByText('Checked against 14 sources').waitFor({ timeout: 15000 });
   assert.match(await row.textContent(), /False\s*2\/10\s*· Checked against 14 sources/);
   await page.waitForFunction(() => window.log.some((e) => e.method === 'ui/update-model-context'));
@@ -1938,7 +2073,7 @@ test('the check label never wraps at 320 px, in every weight, in the card and in
   const { page } = await harness.page({ width: 320, phone: true });
   await page.evaluate((c) => window.startCard('row', c), config({ fullBleed: true, toolResult: F.quick['list-8-with-errors'].toolResult }));
   const frame = await readyFrame(page, 'row');
-  await frame.locator('.lz-row-head').nth(4).click();
+  await frame.locator('#mcp-row-4 .lz-row-head').click();
   const inRow = frame.locator('.lz-row-panel').getByRole('button', { name: 'Check against sources' });
   await inRow.waitFor();
   assert.equal(await lineCount(inRow), 1, 'the open row wraps');
@@ -1984,7 +2119,7 @@ for (const width of [440, 480, 735]) {
     const heads = await frame.locator('.lz-row-head').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().right));
     for (const right of heads) assert.ok(right <= card.right + 0.5, `a row ends at ${right}, past the card's ${card.right}`);
     // A known label still reads on one line beside its claim.
-    assert.equal(await lineCount(frame.locator('.lz-row-head .row-line').nth(1)), 1);
+    assert.equal(await lineCount(frame.locator('#mcp-row-1 .row-line')), 1);
     assert.deepEqual(errors, []);
   });
 }

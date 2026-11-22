@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buttonStrength, changedFrom, deepResult, modelRanIt, routePayload, routeQuick, tally } from './route.js';
+import { bucketOf, buttonStrength, changedFrom, deepResult, modelRanIt, routePayload, routeQuick, tally } from './route.js';
 import * as copy from '../copy.js';
 import { confidenceBucket, domainOf, formatElapsed, isWebUrl, languageCode, languageName, searchedPages, stageLabel, text, verdictKey } from './format.js';
 
@@ -475,5 +475,119 @@ test('a batch deep-check envelope routes to deep-batch with completed results, r
   assert.equal(modelRanIt({ status: 'failed', items: [{ status: 'failed', claim: 'A.' }] }), true);
   assert.equal(modelRanIt({ status: 'partial' }), false);
   assert.equal(modelRanIt({ status: 'failed' }), false);
+});
+
+test('check_citations payloads route to citecheck with polling flag', () => {
+  const queued = routePayload({ citation_check_id: 'cite-123', status: 'queued' });
+  assert.equal(queued.view, 'citecheck');
+  assert.equal(queued.polling, true);
+
+  const running = routePayload({ citecheck_id: 'cite-456', status: 'running' });
+  assert.equal(running.view, 'citecheck');
+  assert.equal(running.polling, true);
+
+  const reading = routePayload({ citation_check_id: 'cite-789', status: 'reading' });
+  assert.equal(reading.view, 'citecheck');
+  assert.equal(reading.polling, true);
+
+  const completed = routePayload({
+    citation_check_id: 'cite-123',
+    status: 'completed',
+    citations: [{ reference: 'https://example.com', finding: 'supports' }],
+  });
+  assert.equal(completed.view, 'citecheck');
+  assert.equal(completed.polling, false);
+
+  const citationsOnly = routePayload({
+    citations: [{ reference: 'https://example.com', finding: 'contradicts' }],
+  });
+  assert.equal(citationsOnly.view, 'citecheck');
+  assert.equal(citationsOnly.polling, false);
+
+  const uncheckable = routePayload({
+    status: 'invalid_request',
+    source: 'Lenz citation check',
+    code: 'no_checkable_citations',
+    message: 'Lenz found no checkable citations in this text.',
+  });
+  assert.equal(uncheckable.view, 'citecheck');
+  assert.equal(uncheckable.polling, false);
+
+  const noCitationsCodeOnly = routePayload({
+    status: 'invalid_request',
+    code: 'no_checkable_citations',
+  });
+  assert.equal(noCitationsCodeOnly.view, 'citecheck');
+});
+
+test('routeQuick handles combined claims + citations payload into list view', () => {
+  const combined = routePayload({
+    status: 'ok',
+    claims: [{ claim: 'Earth is round.', verdict: 'True', confidence: 'high' }],
+    citations: [{ reference: 'https://example.com', finding: 'supported' }],
+  });
+  assert.equal(combined.view, 'list');
+  assert.equal(combined.rows.length, 1);
+  assert.equal(combined.citations.length, 1);
+});
+
+test('bucketOf classifies rows into action buckets', () => {
+  assert.equal(bucketOf('False', 'high', ''), 'bad');
+  assert.equal(bucketOf('Mostly False', 'medium', ''), 'bad');
+
+  assert.equal(bucketOf('Mixed', 'high', ''), 'look');
+  assert.equal(bucketOf('No Public Record', 'high', ''), 'look');
+  assert.equal(bucketOf('True', 'low', ''), 'look');
+  assert.equal(bucketOf('Mostly True', 'low', ''), 'look');
+
+  assert.equal(bucketOf('True', 'high', ''), 'ok');
+  assert.equal(bucketOf('True', 'medium', ''), 'ok');
+  assert.equal(bucketOf('Mostly True', 'high', ''), 'ok');
+  assert.equal(bucketOf('Mostly True', 'medium', ''), 'ok');
+
+  assert.equal(bucketOf('', 'high', ''), 'none');
+  assert.equal(bucketOf('True', 'high', 'no_claim'), 'none');
+});
+
+test('deepResult preserves card_audit when present', () => {
+  const audit = {
+    queries_count: 3,
+    sources_researched: 12,
+    evidence_count: 5,
+    for_claim: 'Evidence supports the claim.',
+    against_claim: 'Counter evidence indicates otherwise.',
+    panel: [{ name: 'Seat 1', verdict: 'True', score: 8 }],
+  };
+  const res = deepResult({
+    verification_id: 'abcd1234',
+    claim: 'Test claim',
+    verdict: 'True',
+    card_audit: audit,
+  });
+  assert.deepEqual(res.card_audit, audit);
+  assert.deepEqual(res.cardAudit, audit);
+});
+
+test('deepResult extracts url for claim page on non-NPR verdicts', () => {
+  const withUrl = deepResult({
+    claim: 'The earth orbits the sun.',
+    verdict: 'True',
+    url: 'https://lenz.io/c/earth-sun-orbit-slug',
+  });
+  assert.equal(withUrl.url, 'https://lenz.io/c/earth-sun-orbit-slug');
+
+  const npr = deepResult({
+    claim: 'Unicorns exist in cave.',
+    verdict: 'No Public Record',
+    url: 'https://lenz.io/c/unicorns-slug',
+  });
+  assert.equal(npr.url, '');
+
+  const nonLenz = deepResult({
+    claim: 'The earth orbits the sun.',
+    verdict: 'True',
+    url: 'https://example.com/c/earth',
+  });
+  assert.equal(nonLenz.url, '');
 });
 

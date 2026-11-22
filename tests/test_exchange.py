@@ -396,6 +396,7 @@ def test_the_scope_table():
         'start_verification_widget': {'verify', 'history:read'},
         'select_claims_widget': {'verify'},
         'get_verification_widget': {'verify', 'history:read'},
+        'get_citation_check_widget': {'verify', 'history:read'},
     }
 
 

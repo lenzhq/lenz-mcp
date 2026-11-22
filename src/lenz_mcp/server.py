@@ -2365,6 +2365,41 @@ async def _get_verification_for_card(task_id: str, ctx: Context) -> dict[str, An
 
 
 @_tool(
+    title='Get citation check result (Lenz card)',
+    annotations=ToolAnnotations(
+        title='Get citation check result (Lenz card)',
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+    meta=CARD_ONLY_TOOL_META,
+)
+@requires_auth
+async def get_citation_check_widget(
+    citation_check_id: Annotated[
+        str,
+        Field(description='The citation check id (or citecheck_id); polled by the Lenz widget in-card.'),
+    ] = '',
+    ctx: Context = None,  # type: ignore[assignment]
+    citecheck_id: Annotated[
+        str,
+        Field(description='Alias for citation_check_id.'),
+    ] = '',
+) -> dict[str, Any]:
+    """Widget-only twin of `get_citation_check` (hidden from the model)."""
+    ident = (citation_check_id or citecheck_id or '').strip()
+    if not _sendable_id(ident):
+        return with_delivery({'status': 'error', 'message': 'Invalid citation check id.'})
+    try:
+        res = await _citecheck_result(_authorization(ctx), ident)
+    except (exchange.ExchangeFailed, exchange.ExchangeNotConfigured) as exc:
+        res = _citecheck_credential_lost(exc, ident)
+    res.setdefault('citation_check_id', ident)
+    return with_delivery(res)
+
+
+@_tool(
     title='Start a deep fact-check (Lenz card)',
     # idempotentHint=False: a repeat inside the 24-hour replay window joins the
     # running check, but after it (or with `retry_of`) a new paid check starts.
@@ -2619,12 +2654,71 @@ def _source_row(source: dict[str, Any]) -> dict[str, str]:
     return row
 
 
+def _sanitize_seat_name(raw_name: Any, index: int) -> str:
+    letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    fallback = f'Reviewer {letters[index] if index < len(letters) else index + 1}'
+    if isinstance(raw_name, str):
+        first_part = raw_name.strip().split(' · ')[0].strip()
+        if re.fullmatch(r'Reviewer [A-Z]', first_part):
+            return first_part
+    return fallback
+
+
+def _build_card_audit(raw: dict[str, Any]) -> dict[str, Any] | None:
+    if isinstance(raw.get('card_audit'), dict):
+        audit = dict(raw['card_audit'])
+        audit.pop('for_claim', None)
+        audit.pop('against_claim', None)
+        if isinstance(audit.get('panel'), list):
+            sanitized_panel = []
+            for idx, seat in enumerate(audit['panel']):
+                if isinstance(seat, dict):
+                    seat_copy = dict(seat)
+                    seat_copy['name'] = _sanitize_seat_name(
+                        seat_copy.get('name') or seat_copy.get('panelist_name'), idx
+                    )
+                    sanitized_panel.append(seat_copy)
+            audit['panel'] = sanitized_panel
+        return audit
+    f = raw.get('framing')
+    framing: dict[str, Any] = f if isinstance(f, dict) else {}
+    r = raw.get('research')
+    research: dict[str, Any] = r if isinstance(r, dict) else {}
+    a = raw.get('adjudication')
+    adj: dict[str, Any] = a if isinstance(a, dict) else {}
+    queries = [q for q in (framing.get('search_queries') or []) if isinstance(q, str) and q.strip()]
+    pool = [s for s in (research.get('evidence_pool') or []) if isinstance(s, dict)]
+    sources_researched = research.get('sources_researched')
+    if (
+        not isinstance(sources_researched, int)
+        or isinstance(sources_researched, bool)
+        or sources_researched < len(pool)
+    ):
+        sources_researched = len(pool)
+    panel: list[dict[str, Any]] = []
+    for idx, seat in enumerate(adj.get('assessments') or []):
+        if isinstance(seat, dict) and seat.get('verdict'):
+            panel.append(
+                {
+                    'name': _sanitize_seat_name(seat.get('panelist_name') or seat.get('name'), idx),
+                    'verdict': str(seat.get('verdict') or ''),
+                    'score': seat.get('factual_accuracy_score'),
+                }
+            )
+    if not (sources_researched or len(pool) or panel):
+        return None
+    return {
+        'queries_count': len(queries),
+        'sources_researched': sources_researched,
+        'evidence_count': len(pool),
+        'panel': panel,
+    }
+
+
 def _completed_result(result: dict[str, Any]) -> dict[str, Any]:
     """Trim a full verification detail to an agent-friendly result.
 
-    No branded link: verify/API claims are private by default and the payload
-    carries no public signal, so a link would point at a share-gated page.
-    Discovery rides on assess cache-hit links + the directory listing.
+    Includes the claim page url when present on non-NPR verdicts.
     """
     # Filter url-less entries FIRST, then take the top 5 — slicing first would
     # drop good sources sitting past url-less ones (a fully-sourced result could
@@ -2662,6 +2756,16 @@ def _completed_result(result: dict[str, Any]) -> dict[str, Any]:
         'supersedes': SUPERSEDES_NOTE,
         'source': 'Lenz deep fact-check',
     }
+    raw_url = result.get('url')
+    if (
+        isinstance(raw_url, str)
+        and raw_url.startswith('https://lenz.io/c/')
+        and str(result.get('verdict') or '') != 'No Public Record'
+    ):
+        out['url'] = raw_url
+    card_audit = _build_card_audit(result)
+    if card_audit is not None:
+        out['card_audit'] = card_audit
     if rewrite:
         out['suggested_rewrite_note'] = SUGGESTED_REWRITE_NOTE
     return out
@@ -3341,7 +3445,11 @@ def _citecheck_submit_error(resp: client.ApiResponse) -> dict[str, Any]:
     if status == 402:
         return _quota_exhausted(_citecheck_quota_body(data))
     if status == 422:
-        out = {'status': 'invalid_request', 'message': detail or 'The request was invalid.'}
+        out: dict[str, Any] = {
+            'status': 'invalid_request',
+            'source': 'Lenz citation check',
+            'message': detail or 'The request was invalid.',
+        }
         if code:
             out['code'] = code
         return out

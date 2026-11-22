@@ -66,8 +66,29 @@ export function modelRanIt(payload) {
   return DEEP_STATUSES.has(payload.status);
 }
 
+const CITECHECK_REFUSAL_STATUSES = new Set([
+  'auth_required',
+  'quota_exhausted',
+  'service_unavailable',
+  'rate_limited',
+  'in_progress',
+  'already_resolved',
+]);
+
 export function routePayload(payload) {
   if (!payload || typeof payload !== 'object') return { view: 'waiting' };
+  if (
+    !CITECHECK_REFUSAL_STATUSES.has(payload.status) &&
+    (typeof payload.citation_check_id === 'string' ||
+      typeof payload.citecheck_id === 'string' ||
+      payload.source === 'Lenz citation check' ||
+      payload.code === 'no_checkable_citations' ||
+      payload.code === 'no_citations' ||
+      (Array.isArray(payload.citations) && !Array.isArray(payload.claims)))
+  ) {
+    const polling = payload.status === 'queued' || payload.status === 'running' || payload.status === 'reading';
+    return { view: 'citecheck', payload, polling };
+  }
   if (modelRanIt(payload)) return routeDeep(payload);
   return routeQuick(payload);
 }
@@ -140,7 +161,10 @@ export function routeQuick(payload) {
   switch (payload.status) {
     case 'ok': {
       const rows = (Array.isArray(payload.claims) ? payload.claims : []).map(quickRow).filter((r) => r.claim);
-      if (rows.length === 0) return { view: 'nothing', message: '' };
+      const citations = Array.isArray(payload.citations) ? payload.citations : [];
+      if (rows.length === 0 && citations.length === 0) return { view: 'nothing', message: '' };
+      if (rows.length > 0 && citations.length > 0) return { view: 'list', rows, citations };
+      if (rows.length === 0 && citations.length > 0) return { view: 'citecheck', payload, polling: false };
       if (rows.length === 1) {
         const row = rows[0];
         if (row.error) return { view: 'row-error', row };
@@ -198,6 +222,8 @@ export function deepResult(payload) {
     })
     .filter((s) => s.title || s.url);
   const total = Number.isInteger(p.sources_total) && p.sources_total >= sources.length ? p.sources_total : sources.length;
+  const rawUrl = text(p.url);
+  const url = rawUrl.startsWith('https://lenz.io/c/') && verdictKey(text(p.verdict)) !== 'no-record' ? rawUrl : '';
   return {
     verificationId: /^[0-9a-f]{8}$/.test(text(p.verification_id)) ? text(p.verification_id) : '',
     claim: text(p.claim),
@@ -212,6 +238,9 @@ export function deepResult(payload) {
     warnings: (Array.isArray(p.warnings) ? p.warnings : []).map(text).filter(Boolean),
     sources,
     sourcesTotal: total,
+    url,
+    card_audit: p.card_audit && typeof p.card_audit === 'object' ? p.card_audit : null,
+    cardAudit: p.card_audit && typeof p.card_audit === 'object' ? p.card_audit : null,
   };
 }
 
@@ -220,6 +249,22 @@ export function changedFrom(quickVerdict, deepVerdict) {
   const q = text(quickVerdict);
   const d = text(deepVerdict);
   return q && d && q.toLowerCase() !== d.toLowerCase() ? q : '';
+}
+
+// Action buckets for conversational grouping:
+// 'bad' (To fix): False, Mostly False
+// 'look' (Closer look): Mixed, No Public Record, or (True/Mostly True with low confidence)
+// 'ok' (Checks out): True, Mostly True with confidence !== low
+// 'none' (Unchecked): failed/unresolved/unassessed rows
+export function bucketOf(verdict, confidence, error) {
+  if (error || !verdict) return 'none';
+  const key = verdictKey(verdict);
+  if (key === 'false' || key === 'mostly-false') return 'bad';
+  if (key === 'mixed' || key === 'no-record') return 'look';
+  if (key === 'true' || key === 'mostly-true') {
+    return confidence === 'low' ? 'look' : 'ok';
+  }
+  return 'none';
 }
 
 // The list's tally: how many rows read wrong, mixed, fine, have no public record

@@ -130,6 +130,9 @@ body { font-family: var(--lz-font); color: var(--lz-ink); -webkit-font-smoothing
 .lz-clamp { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .lz-label { font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--lz-meta); margin: 8px 0 0; }
 h2.lz-label { margin: 0 0 10px; }
+.lz-rewrite-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 0 10px; }
+.lz-rewrite-head h2.lz-label { margin: 0; }
+.lz-copy-btn { font-size: 13px; padding: 2px 0; min-height: 24px; }
 
 .lz-link {
   appearance: none; background: none; border: 0; padding: 4px 0; margin: 0; cursor: pointer;
@@ -143,6 +146,7 @@ a.lz-link { display: inline-block; }
 @media (pointer: coarse) { .lz-link { min-height: 44px; } }
 .lz [tabindex='-1']:focus { outline: none; }
 .lz-actions { margin-top: 16px; }
+.lz-actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .lz-button {
   appearance: none; font: inherit; font-size: 15px; font-weight: 500; cursor: pointer;
   min-height: 44px; padding: 10px 16px; border-radius: 8px; text-align: center; width: 100%;
@@ -211,18 +215,19 @@ a.lz-link { display: inline-block; }
 .lz-pages-list { margin-top: 6px; }
 .lz-pages-list > li { overflow-wrap: anywhere; }
 .lz-pages > .lz-link { margin-top: 8px; }
-.lz-quote { margin-top: 6px; font-size: 15px; line-height: 1.6; text-indent: -0.4em; }
+.lz-quote { margin-top: 6px; font-size: 15px; line-height: 1.6; text-indent: 0; }
 /* A non-English quote's language, before it: the quote no longer starts the
    line, so its opening mark does not hang. */
 .lz-quote-foreign { text-indent: 0; }
 .lz-quote-lang { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lz-meta); margin-right: 6px; }
 .lz-rows > li { display: grid; grid-template-columns: 2ch minmax(0, 1fr); gap: 0 10px; }
+.lz-rows > li[hidden] { display: none; }
 /* A row is one line: the claim, and its verdict in a right-hand column so the
    verdicts scan down one edge. The meta (not sure, reviewers split, sources) sits
    under the claim only when there is one. The rule between rows is the whole gap:
    the header's own padding, nothing added. */
 .lz-rows > li + li { margin-top: 0; padding-top: 0; }
-.lz-rows-region { margin-top: 12px; padding-top: 0; }
+.lz-rows-region { margin-top: 8px; padding-top: 0; border-top: 0; }
 /* A row header IS the disclosure: the whole line is the target, and the
    affordance is on the claim's text, never a box. */
 .lz-row-head {
@@ -245,6 +250,7 @@ a.lz-link { display: inline-block; }
 .lz-row-head .row-score { font-size: 13px; font-variant-numeric: tabular-nums; margin-left: 6px; }
 @media (pointer: coarse) { .lz-row-head { min-height: 44px; } }
 .lz-row-panel { margin-top: 0; padding-bottom: 8px; }
+.lz-row-panel .lz-finding { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--lz-hair); }
 .lz-row-changed { margin-top: -4px; }
 .lz-tally { margin-top: 6px; color: var(--lz-meta); }
 /* The list card's title and its tally share one line when they fit. */
@@ -260,5 +266,209 @@ a.lz-link { display: inline-block; }
   font-size: 13px; color: var(--lz-meta);
 }
 .lz-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Claim strip: 24px WCAG target-size wrapper around a 12px ::before square */
+.claim-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: 6px -6px 4px -6px;
+  align-items: center;
+}
+.strip-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  background: transparent;
+}
+.strip-cell::before {
+  content: '';
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--lz-hair);
+}
+.strip-cell:hover::before { opacity: 0.85; }
+.strip-cell.is-open::before { outline: 2px solid var(--lz-ink); outline-offset: 1px; }
+.strip-cell.strip-bad::before { background: var(--lz-false); }
+.strip-cell.strip-look::before { background: var(--lz-mostly-true); }
+.strip-cell.strip-ok::before { background: var(--lz-true); }
+.strip-cell.strip-none::before { background: var(--lz-meta); }
+.strip-cell.strip-npr::before { background: transparent; border: 1.5px solid var(--lz-meta); box-sizing: border-box; }
+
+/* Bucket headings and toggles in ListCard */
+.lz-rows > li.lz-batch-actions {
+  display: block;
+  margin: 8px 0 4px;
+  padding: 0;
+  border-top: 0;
+}
+.lz-rows > li.lz-batch-actions + li { border-top: 0; }
+.lz-rows > li.lz-bucket-head {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--lz-meta);
+  margin-top: 16px;
+  margin-bottom: 2px;
+  padding-bottom: 5px;
+  border-top: 0;
+  border-bottom: 1.5px solid var(--lz-hair);
+}
+.lz-rows > li.lz-bucket-head:first-child { margin-top: 4px; }
+.lz-rows > li.lz-bucket-head + li { border-top: 0; }
+.lz-bucket-toggle {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+@media (pointer: coarse) { .lz-bucket-toggle { min-height: 44px; } }
+.lz-bucket-toggle:hover { color: var(--lz-ink); }
+.lz-rows > li.citecheck-row { padding: 10px 0; border-bottom: 0; }
+.lz-rows > li.citecheck-row > .num { padding-top: 2px; }
+
+/* Mini-trace in DeepResult */
+.audit-trace {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--lz-hair);
+}
+.audit-trace-summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--lz-meta);
+  padding: 4px 0;
+  user-select: none;
+}
+.audit-trace-summary:hover { color: var(--lz-ink); }
+@media (pointer: coarse) { .audit-trace-summary { min-height: 44px; display: flex; align-items: center; } }
+.audit-trace-body {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--lz-meta);
+}
+.audit-counts { margin: 0 0 6px 0; }
+.audit-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.audit-pill {
+  display: inline-block;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--lz-off);
+  border: 1px solid var(--lz-hair);
+  color: var(--lz-ink);
+}
+
+/* Citation check card */
+.citecheck-summary { margin-top: 4px; color: var(--lz-meta); font-size: 14px; }
+.citecheck-section { margin-top: 16px; }
+.citecheck-section-title,
+.citecheck-toggle {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--lz-meta);
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--lz-hair);
+  padding-bottom: 4px;
+}
+.citecheck-list { list-style: none; padding: 0; margin: 0; }
+.citecheck-row {
+  display: grid;
+  grid-template-columns: 2ch minmax(0, 1fr);
+  gap: 0 10px;
+  padding: 10px 0;
+  border-bottom: 1px dotted var(--lz-hair);
+}
+.citecheck-row:last-child { border-bottom: 0; }
+.citecheck-row > .num {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--lz-meta);
+  padding-top: 2px;
+}
+.citecheck-row-body { min-width: 0; }
+.citecheck-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cite-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--lz-off);
+  color: var(--lz-ink);
+}
+.cite-badge.badge-issue {
+  background: var(--lz-false);
+  color: var(--lz-on-primary);
+}
+.cite-badge.badge-look {
+  background: var(--lz-mostly-true);
+  color: var(--lz-on-primary);
+}
+.cite-badge.badge-support {
+  background: var(--lz-true);
+  color: var(--lz-on-primary);
+}
+.cite-badge.badge-neutral {
+  background: var(--lz-off);
+  color: var(--lz-ink);
+  border: 1px solid var(--lz-hair);
+}
+.cite-ref {
+  font-size: 13px;
+  color: var(--lz-primary);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  padding: 0;
+  min-height: 0;
+}
+.cite-ref:hover { text-decoration: underline; }
+.cite-statement {
+  margin: 6px 0 2px 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--lz-ink);
+}
+.cite-rationale {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--lz-meta);
+}
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 `;

@@ -29,7 +29,12 @@ import pytest
 from lenz_mcp import client, config, decisions, mcp_card, middleware
 from lenz_mcp.testing import DECLARES_APPS, DECLARES_NO_APPS, MODERN, assembled_app
 
-CARD_TOOLS = {'start_verification_widget', 'get_verification_widget', 'select_claims_widget'}
+CARD_TOOLS = {
+    'start_verification_widget',
+    'get_verification_widget',
+    'select_claims_widget',
+    'get_citation_check_widget',
+}
 
 
 # ── the profile is resolved once, from the request ───────────────────

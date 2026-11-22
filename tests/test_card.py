@@ -41,7 +41,12 @@ from lenz_mcp.testing import (
 )
 from tests import api_wire
 
-CARD_TOOLS = {'start_verification_widget', 'get_verification_widget', 'select_claims_widget'}
+CARD_TOOLS = {
+    'start_verification_widget',
+    'get_verification_widget',
+    'select_claims_widget',
+    'get_citation_check_widget',
+}
 
 # The per-client manifest is no longer something a test can reach by hand: 2.x
 # removed `FastMCP._mcp_server.request_handlers`, and the tailoring moved into
@@ -822,6 +827,7 @@ def test_the_delivery_hint_is_never_shown_to_a_model():
         'start_verification_widget',
         'get_verification_widget',
         'select_claims_widget',
+        'get_citation_check_widget',
     }
 
 
@@ -972,3 +978,139 @@ def test_a_client_we_cannot_parse_never_inherits_a_measured_clients_wait(monkeyp
         _as_client(monkeypatch, ua)
         assert client.client_identity() not in config.VERIFY_WAIT_SECONDS_BY_IDENTITY, ua
         assert server._verify_wait_seconds() == config.VERIFY_WAIT_SECONDS, ua
+
+
+def test_card_audit_built_for_completed_result():
+    raw = {
+        'verification_id': 'abcd1234',
+        'claim': 'Honey never spoils.',
+        'verdict': 'True',
+        'framing': {'search_queries': ['honey shelf life', 'honey spoilage']},
+        'research': {
+            'sources_researched': 15,
+            'evidence_pool': [{'url': 'https://example.com/1'}, {'url': 'https://example.com/2'}],
+        },
+        'debate': {
+            'pro': {'argument': 'Ancient honey remains edible.'},
+            'con': {'argument': 'Improper storage can introduce moisture.'},
+        },
+        'adjudication': {
+            'assessments': [
+                {'panelist_name': 'Reviewer A', 'verdict': 'True', 'factual_accuracy_score': 9},
+                {'panelist_name': 'Reviewer B', 'verdict': 'True', 'factual_accuracy_score': 10},
+            ]
+        },
+    }
+    audit = server._build_card_audit(raw)
+    assert audit is not None
+    assert audit['queries_count'] == 2
+    assert audit['sources_researched'] == 15
+    assert audit['evidence_count'] == 2
+    assert 'for_claim' not in audit
+    assert 'against_claim' not in audit
+    assert len(audit['panel']) == 2
+    assert audit['panel'][0] == {'name': 'Reviewer A', 'verdict': 'True', 'score': 9}
+
+    completed = server._completed_result(raw)
+    assert completed['card_audit'] == audit
+
+
+def test_sanitize_seat_name_and_card_audit():
+    # Model/vendor names leak in raw names should be sanitized to Reviewer X
+    raw_leak = {
+        'adjudication': {
+            'assessments': [
+                {'panelist_name': 'gpt-4o · Reviewer A', 'verdict': 'True'},
+                {'panelist_name': 'Claude Sonnet', 'verdict': 'False'},
+                {'panelist_name': 'Reviewer C', 'verdict': 'Mixed'},
+            ]
+        }
+    }
+    audit = server._build_card_audit(raw_leak)
+    assert audit is not None
+    assert audit['panel'][0]['name'] == 'Reviewer A'
+    assert audit['panel'][1]['name'] == 'Reviewer B'
+    assert audit['panel'][2]['name'] == 'Reviewer C'
+
+    # Pre-built card_audit dict strips for/against claim and sanitizes panel names
+    prebuilt = {
+        'card_audit': {
+            'for_claim': 'old debate arg',
+            'against_claim': 'old debate arg',
+            'panel': [
+                {'name': 'Gemini Flash', 'verdict': 'True'},
+                {'name': 'Reviewer B', 'verdict': 'Mostly True'},
+            ],
+        }
+    }
+    sanitized = server._build_card_audit(prebuilt)
+    assert 'for_claim' not in sanitized
+    assert 'against_claim' not in sanitized
+    assert sanitized['panel'][0]['name'] == 'Reviewer A'
+    assert sanitized['panel'][1]['name'] == 'Reviewer B'
+
+
+def test_completed_result_url_passthrough():
+    raw_with_url = {
+        'claim': 'Honey never spoils.',
+        'verdict': 'True',
+        'url': 'https://lenz.io/c/honey-never-spoils',
+    }
+    res = server._completed_result(raw_with_url)
+    assert res['url'] == 'https://lenz.io/c/honey-never-spoils'
+
+    # No Public Record verdict suppresses url
+    raw_npr = {
+        'claim': 'Mysterious claim.',
+        'verdict': 'No Public Record',
+        'url': 'https://lenz.io/c/mysterious-claim',
+    }
+    res_npr = server._completed_result(raw_npr)
+    assert 'url' not in res_npr
+
+    # Non-lenz.io/c/ url suppresses url
+    raw_other_url = {
+        'claim': 'Honey never spoils.',
+        'verdict': 'True',
+        'url': 'https://example.com/c/honey',
+    }
+    res_other = server._completed_result(raw_other_url)
+    assert 'url' not in res_other
+
+
+def test_citecheck_submit_error_422():
+    resp = client.ApiResponse(
+        status=422,
+        data={
+            'code': 'no_checkable_citations',
+            'detail': 'Lenz found no checkable citations in this text.',
+        },
+    )
+    err = server._citecheck_submit_error(resp)
+    assert err['status'] == 'invalid_request'
+    assert err['source'] == 'Lenz citation check'
+    assert err['code'] == 'no_checkable_citations'
+    assert err['message'] == 'Lenz found no checkable citations in this text.'
+
+
+def test_check_citations_in_card_tool_names():
+    assert 'check_citations' in mcp_card.CARD_TOOL_NAMES
+    with _app(card=True) as harness:
+        tools = _tools(harness, 'Claude-User/1.0')
+        assert tools['check_citations']['_meta'] == {'ui': {'resourceUri': mcp_card.CARD_URI}}
+
+
+def test_get_citation_check_widget_meta_and_delivery(monkeypatch):
+    monkeypatch.setattr(config, 'CARD_ENABLED', True)
+    monkeypatch.setattr(server, '_authorization', lambda ctx: 'Bearer lenz_x')
+    _as_client(monkeypatch, 'openai-mcp/1.0.0 (ChatGPT)')
+
+    async def _citecheck_status(authorization, *, citecheck_id):
+        return ApiResponse(status=200, data={'status': 'completed', 'citations': []})
+
+    monkeypatch.setattr(client, 'citecheck_status', _citecheck_status)
+
+    out = _run(server.get_citation_check_widget('c' * 32, _Ctx()))
+    assert out['status'] == 'completed'
+    assert out[mcp_card.CARD_RESULT_NAMESPACE] == {'deliver': 'message'}
+    assert out.get('citation_check_id') == 'c' * 32

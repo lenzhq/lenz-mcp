@@ -1886,6 +1886,7 @@ def test_protocol_all_tools_registered():
         'list_verifications',
         'check_citations',
         'get_citation_check',
+        'get_citation_check_widget',
     }
 
 
@@ -1912,6 +1913,7 @@ _EXPECTED_HINTS = {
     # new charged check, so it is not idempotent. Reading one back changes nothing.
     'check_citations': (False, False, False, True),
     'get_citation_check': (True, False, True, False),
+    'get_citation_check_widget': (True, False, True, False),
 }
 
 

@@ -24,11 +24,13 @@ export const SHOW_LESS = 'Show less';
 // No timing on the button: it wrapped the label onto two rows on a phone, and
 // the running state's USUALLY line already sets the expectation.
 export const CHECK_BUTTON = 'Check against sources';
+export const CHECK_DURATION_HINT = 'Takes a minute or two';
 
 // Quick check, several claims
 // The list card always has two or more, but the picker can start exactly one,
 // and "1 claims checked" is the kind of thing a reader notices.
 export const listHeading = (n) => (n === 1 ? '1 claim checked' : `${n} claims checked`);
+export const itemsHeading = (n) => (n === 1 ? '1 item checked' : `${n} items checked`);
 // The tally under the heading: verdicts in words, never colour.
 // Wrong first, because that is what the reader came for; zeros are omitted.
 export const TALLY_WORDS = {
@@ -50,6 +52,41 @@ export const rowSources = (n) => `Checked against ${n} ${n === 1 ? 'source' : 's
 export const SHOW_FULL_CHECK = 'Show the full check';
 export const HIDE_FULL_CHECK = 'Hide the full check';
 export const showMoreRows = (n) => `Show ${n} more`;
+
+// Action buckets (conversational grouping)
+export const BUCKET_BAD = 'To fix';
+export const BUCKET_LOOK = 'Closer look';
+export const BUCKET_OK = 'Checks out';
+export const BUCKET_NONE = 'Unchecked';
+export const bucketOkToggle = (n) => `Checks out (${n})`;
+export const checkAllFlagged = (n) => `Check all ${n} flagged against sources`;
+
+// Mini-trace audit
+export const AUDIT_TRACE_SUMMARY = 'How Lenz reached this';
+export const auditCounts = (searched, kept) => {
+  const parts = [];
+  if (searched > 0) parts.push(`${searched} ${searched === 1 ? 'source' : 'sources'} searched`);
+  if (kept > 0) parts.push(`${kept} cited in the check`);
+  return parts.join(' · ');
+};
+
+// Citation check card
+export const CITECHECK_EYEBROW = 'Citation check';
+export const CITECHECK_CHECKING = 'Checking citations…';
+export const CITECHECK_NO_CITATIONS = 'Lenz found no checkable citations in this text.';
+export const citecheckProgress = (done, total) => `${done} of ${total} citations checked`;
+export const citecheckSummary = (checked, issues) => {
+  const cWord = checked === 1 ? '1 citation checked' : `${checked} citations checked`;
+  const iWord =
+    issues === 0
+      ? 'all hold up'
+      : issues === 1
+        ? '1 needs attention'
+        : `${issues} need attention`;
+  return `${cWord} · ${iWord}`;
+};
+export const CITECHECK_ISSUES_HEADING = 'Issues';
+export const citecheckHoldsUpToggle = (n) => `Checks out (${n})`;
 
 // Deep check, running
 export const RUNNING_HEADING = 'Checking against sources';
@@ -91,11 +128,14 @@ export const scoreLabel = (score) => `Score ${score} out of 10`;
 export const CAVEATS = 'Caveats';
 // The same label as the claim page and the Workbench.
 export const SUGGESTED_REWRITE = 'Suggested rewrite';
+export const COPY_REWRITE = 'Copy';
+export const COPIED_REWRITE = 'Copied';
 export const showMoreCaveats = (n) => `Show ${n} more ${n === 1 ? 'caveat' : 'caveats'}`;
 export const sourcesLabel = (total, shown) =>
   total > shown ? `${total} sources · showing ${shown}` : `${total} ${total === 1 ? 'source' : 'sources'}`;
 export const showMoreSources = (n) => `Show ${n} more ${n === 1 ? 'source' : 'sources'}`;
 export const NO_SOURCES = 'No sources could be read for this check.';
+export const SEE_SOURCES_IN_LENZ = 'See sources in Lenz';
 export const deepFooter = (total) =>
   total > 0 ? `Deep check · ${total} ${total === 1 ? 'source' : 'sources'}` : 'Deep check · no sources';
 export const FOLLOW_UP = 'Ask a follow-up';
