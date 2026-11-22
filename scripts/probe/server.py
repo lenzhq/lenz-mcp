@@ -340,16 +340,17 @@ _CANNED_RUNS: dict[str, float] = {}
 
 
 # The card's delivery hint, stamped as lenz-mcp stamps it (mcp_card.py
-# card_delivery, keyed on the VENDOR token). Without it the real card in
-# ChatGPT takes the silent `ui/update-model-context` route, which ChatGPT
-# accepts and drops (measured 2026-09-18). A copy, not an import: this probe
-# runs standalone. The connector's probe-server test pins it to lenz-mcp's rule.
+# card_delivery, keyed on the VENDOR token). It was how the real card in
+# ChatGPT avoided the silent `ui/update-model-context` route that ChatGPT
+# accepted and dropped (2026-09-18); ChatGPT delivers it since 2026-11-22, so
+# the set is empty. A copy, not an import: this probe runs standalone. The
+# connector's probe-server test pins it to lenz-mcp's rule.
 #
 # The token, not the full identity: a new parenthesised suffix on a vendor's
 # own client must not change how its card reaches the model. One did
 # (`openai-mcp/1.0.0 (ChatGPT)`, 2026-09-23), and under an identity table the
 # card would have gone silent in the app it was measured in.
-MESSAGE_DELIVERY_VENDOR_TOKENS = frozenset({'openai-mcp'})
+MESSAGE_DELIVERY_VENDOR_TOKENS: frozenset[str] = frozenset()
 _REQUEST_USER_AGENT: contextvars.ContextVar[str] = contextvars.ContextVar('probe_user_agent', default='')
 
 

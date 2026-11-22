@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 # Bump BY HAND, with a new dist file and a versions.json entry, whenever the
 # bundle changes. Never derived from the bundle's bytes (see the module note).
-CARD_URI = 'ui://lenz/card-v11'
+CARD_URI = 'ui://lenz/card-v12'
 CARD_URI_PREFIX = 'ui://lenz/'
 CARD_MIME_TYPE = 'text/html;profile=mcp-app'
 
@@ -88,19 +88,23 @@ CARD_ONLY_TOOL_NAMES = frozenset(
 CARD_ONLY_TOOL_META = {'ui': {'visibility': ['app']}}
 
 # ── How the card tells the MODEL what it found ───────────────────────
-# Two hosts, two mechanisms, and the card cannot tell which host it is in.
+# Two mechanisms: `ui/update-model-context` (silent: the model learns the
+# result, the user sees nothing) and `ui/message` (posted at once as a user turn,
+# which the model then answers).
 #
-# Claude delivers `ui/update-model-context` silently: the model learns the
-# result and the user sees nothing. ChatGPT ACCEPTS that call, answers success
-# and never delivers it (measured 2026-09-17) — and then tells the user "no full
-# verification was run" beside a card showing a sourced verdict. Its one working
-# channel is `ui/message`, which it SENDS at once as a user turn.
+# Claude has always delivered the first. ChatGPT ACCEPTED it and never delivered
+# it (measured 2026-09-17), so its card posted a message instead. Measured again
+# 2026-11-22: ChatGPT now delivers it (the result carries
+# `_meta.openai/modelContext.updateId`, and the model answered a word it was only
+# told through the push, with no tool call). The message then became the
+# duplicate: the card's user turn plus the model's acknowledgement of it. So no
+# vendor is routed to the message any more.
 #
-# The card cannot infer which it is in: ChatGPT DECLARES updateModelContext, so
-# the capability is no signal, and a dropped push still returns success, so
-# there is nothing to detect afterwards. The SERVER knows — the card's own tool
-# calls carry the client's User-Agent — so it says so, in the result of a call
-# the card already makes. The card obeys it and never guesses.
+# The card cannot infer which mechanism it needs: a host that DECLARES
+# updateModelContext may still drop the push, and a dropped push returns
+# success, so there is nothing to detect afterwards. The SERVER knows — the
+# card's own tool calls carry the client's User-Agent — so it says so, in the
+# result of a call the card already makes. The card obeys it and never guesses.
 #
 # It rides under `_card`, the card's own namespace, so it can never collide with
 # a field a model-facing schema grows later; these three tools are app-only, so
@@ -108,13 +112,13 @@ CARD_ONLY_TOOL_META = {'ui': {'visibility': ['app']}}
 CARD_RESULT_NAMESPACE = '_card'
 DELIVER_BY_MESSAGE = 'message'
 DELIVER_BY_CONTEXT = 'context'
-# Whose card must post a message instead of pushing context: OpenAI's, by
-# VENDOR token. Every OpenAI surface that renders our card is a ChatGPT
-# surface, and the failure this prevents is the model contradicting a sourced
-# verdict the user is looking at — so the coarse answer is the right one here,
-# and a proxied or relabelled ChatGPT gets it too. It grants nothing: a client
-# that renders no card never reads the hint.
-MESSAGE_DELIVERY_VENDOR_TOKENS = frozenset({'openai-mcp'})
+# Whose card must post a message instead of pushing context, by VENDOR token.
+# Empty since 2026-11-22: every host that renders our card delivers the push.
+# The mechanism stays in the card for the next host that drops it (the failure
+# it prevents is the model contradicting a sourced verdict the user is looking
+# at): add that vendor's token here, and a test proves the hint follows it. It
+# grants nothing: a client that renders no card never reads the hint.
+MESSAGE_DELIVERY_VENDOR_TOKENS: frozenset[str] = frozenset()
 
 
 def card_delivery(profile=None) -> str:

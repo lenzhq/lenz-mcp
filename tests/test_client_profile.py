@@ -294,15 +294,29 @@ def test_the_token_and_the_identity_agree_on_where_the_token_ends(user_agent, ve
         assert identity.startswith(vendor), user_agent
 
 
-def test_a_versionless_suffixed_chatgpt_still_gets_the_message_hint(monkeypatch):
-    """The delivery hint is what a wrong vendor token costs a user directly:
-    a card showing a sourced verdict beside a model saying no check was run."""
+def test_a_vendor_on_the_message_list_gets_the_message_hint_whatever_its_suffix(monkeypatch):
+    """No vendor is on the list today (ChatGPT delivers the silent push since
+    2026-11-22), but the mechanism stays for the next host that drops it, and
+    the hint is keyed on the vendor TOKEN: a new parenthesised suffix on that
+    vendor's own client must not send its card back to the silent route."""
+    monkeypatch.setattr(mcp_card, 'MESSAGE_DELIVERY_VENDOR_TOKENS', frozenset({'openai-mcp'}))
     monkeypatch.setattr(
         client,
         'client_profile',
         lambda: client.ClientProfile.from_user_agent('openai-mcp (Codex)'),
     )
     assert mcp_card.card_delivery() == mcp_card.DELIVER_BY_MESSAGE
+
+
+def test_chatgpt_gets_the_context_hint(monkeypatch):
+    """Measured 2026-11-22: ChatGPT delivers `ui/update-model-context` to the
+    model. A message on top of it is the double confirmation users saw."""
+    monkeypatch.setattr(
+        client,
+        'client_profile',
+        lambda: client.ClientProfile.from_user_agent('openai-mcp/1.0.0 (ChatGPT)'),
+    )
+    assert mcp_card.card_delivery() == mcp_card.DELIVER_BY_CONTEXT
 
 
 def test_the_registry_describes_what_it_measured():
@@ -457,9 +471,9 @@ def test_the_card_delivery_decision_is_logged():
             stamped = mcp_card.with_delivery({'status': 'ok'})
     finally:
         reset()
-    assert stamped['_card'] == {'deliver': 'message'}
+    assert stamped['_card'] == {'deliver': 'context'}
     fields = _fields(_lines(messages, 'mcp_card_delivery ')[0])
-    assert fields == {'identity': 'openai-mcp(ChatGPT)', 'deliver': 'message'}
+    assert fields == {'identity': 'openai-mcp(ChatGPT)', 'deliver': 'context'}
 
 
 def test_an_exhausted_wait_is_logged_with_the_tool_that_spent_it():

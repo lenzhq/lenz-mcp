@@ -138,8 +138,6 @@ export const NO_SOURCES = 'No sources could be read for this check.';
 export const SEE_SOURCES_IN_LENZ = 'See sources in Lenz';
 export const deepFooter = (total) =>
   total > 0 ? `Deep check · ${total} ${total === 1 ? 'source' : 'sources'}` : 'Deep check · no sources';
-export const FOLLOW_UP = 'Ask a follow-up';
-export const followUpPrefill = (verificationId) => `Ask Lenz about this check (verification ${verificationId}): `;
 
 // A quick check that did not produce a verdict (row error codes, whole-call envelopes)
 export const NOTHING_TO_CHECK = 'Nothing to check here';

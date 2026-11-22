@@ -186,21 +186,22 @@ def test_prod_has_no_fixture_card_and_its_card_tools_are_the_real_ones():
 @pytest.mark.parametrize(
     ('user_agent', 'deliver'),
     [
-        ('openai-mcp/1.0.0', 'message'),
-        ('openai-mcp/1.0.0 (Codex)', 'message'),
-        ('openai-mcp/1.0.0 (ChatGPT)', 'message'),
-        # Same vendor, so the same hint: it is keyed on the token, and an
-        # OpenAI card must never be told to push silently.
-        ('openai-mcp/1.0.0 (Responses API)', 'message'),
-        ('openai-mcp/1.0.0 (Responses API) proxy/1.0', 'message'),
+        # ChatGPT delivers the silent push since 2026-11-22, so the probe's
+        # card tools tell OpenAI's cards to push, as lenz-mcp's do.
+        ('openai-mcp/1.0.0', 'context'),
+        ('openai-mcp/1.0.0 (Codex)', 'context'),
+        ('openai-mcp/1.0.0 (ChatGPT)', 'context'),
+        ('openai-mcp/1.0.0 (Responses API)', 'context'),
+        ('openai-mcp/1.0.0 (Responses API) proxy/1.0', 'context'),
         ('Claude-User', 'context'),
         ('', 'context'),
     ],
 )
 def test_the_fake_card_tools_stamp_delivery_as_lenz_mcp_does(probe, user_agent, deliver):
     """The probe's card tools answer the way lenz-mcp's do, `_card.deliver`
-    included: without it the real card in ChatGPT took the silent route, which
-    ChatGPT drops (seen 2026-09-18). Same rule as mcp_card.card_delivery."""
+    included. It once kept ChatGPT's card off the silent route ChatGPT dropped
+    (seen 2026-09-18); ChatGPT delivers it since 2026-11-22. Same rule as
+    mcp_card.card_delivery."""
     from lenz_mcp import mcp_card
 
     reset = probe.bind_user_agent(user_agent)
@@ -224,6 +225,9 @@ def test_the_delivery_stamp_reads_the_caller_over_the_transport(probe):
     from lenz_mcp import mcp_card
     from lenz_mcp.wire import modern_meta
 
+    # A vendor on the message list makes the two callers differ, so a lost
+    # User-Agent fails here (the list is empty in production since 2026-11-22).
+    probe.MESSAGE_DELIVERY_VENDOR_TOKENS = frozenset({'openai-mcp'})
     tools = {t.name: t for t in asyncio.run(probe.mcp.list_tools())}
     assert set(tools['start_verification_widget'].input_schema['properties']) == {'claim', 'retry_of'}
     assert set(tools['get_verification_widget'].input_schema['properties']) == {'task_id'}
