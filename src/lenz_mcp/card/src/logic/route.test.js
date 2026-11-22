@@ -503,6 +503,32 @@ test('check_citations payloads route to citecheck with polling flag', () => {
   });
   assert.equal(citationsOnly.view, 'citecheck');
   assert.equal(citationsOnly.polling, false);
+
+  const uncheckable = routePayload({
+    status: 'invalid_request',
+    source: 'Lenz citation check',
+    code: 'no_checkable_citations',
+    message: 'Lenz found no checkable citations in this text.',
+  });
+  assert.equal(uncheckable.view, 'citecheck');
+  assert.equal(uncheckable.polling, false);
+
+  const noCitationsCodeOnly = routePayload({
+    status: 'invalid_request',
+    code: 'no_checkable_citations',
+  });
+  assert.equal(noCitationsCodeOnly.view, 'citecheck');
+});
+
+test('routeQuick handles combined claims + citations payload into list view', () => {
+  const combined = routePayload({
+    status: 'ok',
+    claims: [{ claim: 'Earth is round.', verdict: 'True', confidence: 'high' }],
+    citations: [{ reference: 'https://example.com', finding: 'supported' }],
+  });
+  assert.equal(combined.view, 'list');
+  assert.equal(combined.rows.length, 1);
+  assert.equal(combined.citations.length, 1);
 });
 
 test('bucketOf classifies rows into action buckets', () => {
@@ -540,5 +566,28 @@ test('deepResult preserves card_audit when present', () => {
   });
   assert.deepEqual(res.card_audit, audit);
   assert.deepEqual(res.cardAudit, audit);
+});
+
+test('deepResult extracts url for claim page on non-NPR verdicts', () => {
+  const withUrl = deepResult({
+    claim: 'The earth orbits the sun.',
+    verdict: 'True',
+    url: 'https://lenz.io/c/earth-sun-orbit-slug',
+  });
+  assert.equal(withUrl.url, 'https://lenz.io/c/earth-sun-orbit-slug');
+
+  const npr = deepResult({
+    claim: 'Unicorns exist in cave.',
+    verdict: 'No Public Record',
+    url: 'https://lenz.io/c/unicorns-slug',
+  });
+  assert.equal(npr.url, '');
+
+  const nonLenz = deepResult({
+    claim: 'The earth orbits the sun.',
+    verdict: 'True',
+    url: 'https://example.com/c/earth',
+  });
+  assert.equal(nonLenz.url, '');
 });
 

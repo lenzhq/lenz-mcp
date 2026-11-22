@@ -130,6 +130,9 @@ body { font-family: var(--lz-font); color: var(--lz-ink); -webkit-font-smoothing
 .lz-clamp { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .lz-label { font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--lz-meta); margin: 8px 0 0; }
 h2.lz-label { margin: 0 0 10px; }
+.lz-rewrite-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 0 10px; }
+.lz-rewrite-head h2.lz-label { margin: 0; }
+.lz-copy-btn { font-size: 13px; padding: 2px 0; min-height: 24px; }
 
 .lz-link {
   appearance: none; background: none; border: 0; padding: 4px 0; margin: 0; cursor: pointer;
@@ -143,6 +146,7 @@ a.lz-link { display: inline-block; }
 @media (pointer: coarse) { .lz-link { min-height: 44px; } }
 .lz [tabindex='-1']:focus { outline: none; }
 .lz-actions { margin-top: 16px; }
+.lz-actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .lz-button {
   appearance: none; font: inherit; font-size: 15px; font-weight: 500; cursor: pointer;
   min-height: 44px; padding: 10px 16px; border-radius: 8px; text-align: center; width: 100%;
@@ -289,8 +293,10 @@ a.lz-link { display: inline-block; }
 .strip-cell.strip-look { background: var(--lz-mostly-true); }
 .strip-cell.strip-ok { background: var(--lz-true); }
 .strip-cell.strip-none { background: var(--lz-meta); }
+.strip-cell.strip-npr { background: transparent; border: 1.5px solid var(--lz-meta); }
 
 /* Bucket headings and toggles in ListCard */
+.lz-batch-actions { margin: 8px 0 4px; }
 .lz-rows > li.lz-bucket-head {
   display: block;
   font-size: 13px;
@@ -345,9 +351,6 @@ a.lz-link { display: inline-block; }
   color: var(--lz-meta);
 }
 .audit-counts { margin: 0 0 6px 0; }
-.audit-debate { margin: 6px 0; }
-.audit-argument { margin: 4px 0; }
-.audit-argument strong { color: var(--lz-ink); font-weight: 500; }
 .audit-panel {
   display: flex;
   flex-wrap: wrap;
@@ -421,6 +424,11 @@ a.lz-link { display: inline-block; }
 .cite-badge.badge-support {
   background: var(--lz-true);
   color: var(--lz-on-primary);
+}
+.cite-badge.badge-neutral {
+  background: var(--lz-off);
+  color: var(--lz-ink);
+  border: 1px solid var(--lz-hair);
 }
 .cite-ref {
   font-size: 13px;

@@ -893,6 +893,142 @@ test('a row keeps its deep verdict, its score and its source count, and the tall
   await page.context().close();
 });
 
+test('duplicate claims at different indices toggle independently', async () => {
+  const { page, errors } = await harness.page();
+  const dupes = [
+    { claim: 'Duplicate claim text.', verdict: 'True', confidence: 'high' },
+    { claim: 'Duplicate claim text.', verdict: 'True', confidence: 'high' },
+  ];
+  await page.evaluate(
+    (c) => window.startCard('dupes', c),
+    config({ toolResult: { status: 'ok', claims: dupes }, tools: {} })
+  );
+  const frame = await frameOf(page, 'dupes');
+  const row0 = frame.locator('#mcp-row-0 .lz-row-head');
+  const row1 = frame.locator('#mcp-row-1 .lz-row-head');
+
+  assert.equal(await row0.getAttribute('aria-expanded'), 'false');
+  assert.equal(await row1.getAttribute('aria-expanded'), 'false');
+
+  await row0.click();
+  assert.equal(await row0.getAttribute('aria-expanded'), 'true');
+  assert.equal(await row1.getAttribute('aria-expanded'), 'false');
+
+  await row1.click();
+  assert.equal(await row0.getAttribute('aria-expanded'), 'false');
+  assert.equal(await row1.getAttribute('aria-expanded'), 'true');
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('display-order pagination keeps flagged claims visible even past index 10', async () => {
+  const { page, errors } = await harness.page();
+  const claims = [
+    { claim: 'Claim 1 False', verdict: 'False', confidence: 'high' },
+    ...Array.from({ length: 9 }, (_, i) => ({
+      claim: `Claim ${i + 2} Mixed`,
+      verdict: 'Mixed',
+      confidence: 'high',
+    })),
+    { claim: 'Claim 11 False', verdict: 'False', confidence: 'high' },
+    { claim: 'Claim 12 Mixed', verdict: 'Mixed', confidence: 'high' },
+  ];
+  await page.evaluate(
+    (c) => window.startCard('pg', c),
+    config({ toolResult: { status: 'ok', claims }, tools: {} })
+  );
+  const frame = await frameOf(page, 'pg');
+
+  // Claim 11 (index 10) is visible because its displayRank is 1 (under Looks wrong)
+  const row10 = frame.locator('#mcp-row-10');
+  assert.equal(await row10.getAttribute('hidden'), null);
+
+  // Claim 12 (index 11) is hidden under pagination limit (displayRank 11 >= 10)
+  const row11 = frame.locator('#mcp-row-11');
+  assert.equal(await row11.getAttribute('hidden'), '');
+
+  // Click Show more reveals all rows
+  const toggle = frame.locator('.lz-row-toggle');
+  await toggle.waitFor();
+  assert.equal(await toggle.textContent(), 'Show 4 more');
+  await toggle.click();
+  assert.equal(await row11.getAttribute('hidden'), null);
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('CitecheckCard renders 4 severity buckets and overview strip when multiple citations', async () => {
+  const { page, errors } = await harness.page();
+  const citePayload = {
+    citation_check_id: 'cite-multi-123',
+    status: 'completed',
+    citations: [
+      { reference: 'https://bad.example', finding: 'contradicted', statement: 'Statement 1' },
+      { reference: 'https://look.example', finding: 'partly_supported', statement: 'Statement 2' },
+      { reference: 'https://none.example', finding: 'unchecked', statement: 'Statement 3' },
+      { reference: 'https://ok.example', finding: 'supported', statement: 'Statement 4' },
+    ],
+  };
+  await page.evaluate(
+    (c) => window.startCard('cite-multi', c),
+    config({ toolResult: citePayload, tools: {} })
+  );
+  const frame = await frameOf(page, 'cite-multi');
+
+  // Overview strip rendered
+  const strip = frame.locator('.claim-strip .strip-cell');
+  assert.equal(await strip.count(), 4);
+  assert.equal(await strip.nth(0).getAttribute('class'), 'strip-cell strip-bad');
+  assert.equal(await strip.nth(1).getAttribute('class'), 'strip-cell strip-look');
+  assert.equal(await strip.nth(2).getAttribute('class'), 'strip-cell strip-none');
+  assert.equal(await strip.nth(3).getAttribute('class'), 'strip-cell strip-ok');
+
+  // Buckets rendered
+  assert.ok(await frame.locator('h2.citecheck-section-title', { hasText: 'Looks wrong' }).isVisible());
+  assert.ok(await frame.locator('h2.citecheck-section-title', { hasText: 'Needs a closer look' }).isVisible());
+  assert.ok(await frame.locator('h2.citecheck-section-title', { hasText: 'Could not be checked' }).isVisible());
+  assert.ok(await frame.getByText(/Holds up \(1\)/).isVisible());
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('combined claims + citations payload renders unified items heading, tally and strip', async () => {
+  const { page, errors } = await harness.page();
+  const combinedPayload = {
+    status: 'ok',
+    claims: [
+      { claim: 'Claim wrong', verdict: 'False', confidence: 'high' },
+      { claim: 'Claim ok', verdict: 'True', confidence: 'high' },
+    ],
+    citations: [
+      { reference: 'https://look.example', finding: 'partly_supported', statement: 'Cite look' },
+    ],
+  };
+  await page.evaluate(
+    (c) => window.startCard('combo', c),
+    config({ toolResult: combinedPayload, tools: {} })
+  );
+  const frame = await frameOf(page, 'combo');
+  const card = frame.locator('.lz');
+
+  await card.getByText('3 items checked').waitFor();
+  assert.equal(await card.locator('.lz-tally').textContent(), '1 looks wrong · 1 mixed · 1 holds up');
+
+  // Strip has 3 cells (2 claims + 1 citation)
+  const strip = frame.locator('.claim-strip .strip-cell');
+  assert.equal(await strip.count(), 3);
+
+  // Both Looks wrong and Needs a closer look buckets are present
+  assert.ok(await frame.locator('.lz-bucket-head', { hasText: 'Looks wrong' }).isVisible());
+  assert.ok(await frame.locator('.lz-bucket-head', { hasText: 'Needs a closer look' }).isVisible());
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
 test('two rows checked in one card push ONE cumulative snapshot of both', async () => {
   const { page } = await harness.page();
   const first = { ...COMPLETED, verification_id: 'aaaa1111', verdict: 'True', lenz_score: 9 };
