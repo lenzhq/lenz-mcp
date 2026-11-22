@@ -940,7 +940,7 @@ test('display-order pagination keeps flagged claims visible even past index 10',
   );
   const frame = await frameOf(page, 'pg');
 
-  // Claim 11 (index 10) is visible because its displayRank is 1 (under Looks wrong)
+  // Claim 11 (index 10) is visible because its displayRank is 1 (under To fix)
   const row10 = frame.locator('#mcp-row-10');
   assert.equal(await row10.getAttribute('hidden'), null);
 
@@ -986,10 +986,10 @@ test('CitecheckCard renders 4 severity buckets and overview strip when multiple 
   assert.equal(await strip.nth(3).getAttribute('class'), 'strip-cell strip-ok');
 
   // Buckets rendered
-  assert.ok(await frame.locator('h2.citecheck-section-title', { hasText: 'Looks wrong' }).isVisible());
-  assert.ok(await frame.locator('h2.citecheck-section-title', { hasText: 'Needs a closer look' }).isVisible());
-  assert.ok(await frame.locator('h2.citecheck-section-title', { hasText: 'Could not be checked' }).isVisible());
-  assert.ok(await frame.getByText(/Holds up \(1\)/).isVisible());
+  assert.ok(await frame.locator('h2.citecheck-section-title', { hasText: 'To fix' }).isVisible());
+  assert.ok(await frame.locator('h2.citecheck-section-title', { hasText: 'Closer look' }).isVisible());
+  assert.ok(await frame.locator('h2.citecheck-section-title', { hasText: 'Unchecked' }).isVisible());
+  assert.ok(await frame.getByText(/Checks out \(1\)/).isVisible());
 
   assert.deepEqual(errors, []);
   await page.context().close();
@@ -1021,9 +1021,9 @@ test('combined claims + citations payload renders unified items heading, tally a
   const strip = frame.locator('.claim-strip .strip-cell');
   assert.equal(await strip.count(), 3);
 
-  // Both Looks wrong and Needs a closer look buckets are present
-  assert.ok(await frame.locator('.lz-bucket-head', { hasText: 'Looks wrong' }).isVisible());
-  assert.ok(await frame.locator('.lz-bucket-head', { hasText: 'Needs a closer look' }).isVisible());
+  // Both To fix and Closer look buckets are present
+  assert.ok(await frame.locator('.lz-bucket-head', { hasText: 'To fix' }).isVisible());
+  assert.ok(await frame.locator('.lz-bucket-head', { hasText: 'Closer look' }).isVisible());
 
   assert.deepEqual(errors, []);
   await page.context().close();

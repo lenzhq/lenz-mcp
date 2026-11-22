@@ -54,11 +54,11 @@ export const HIDE_FULL_CHECK = 'Hide the full check';
 export const showMoreRows = (n) => `Show ${n} more`;
 
 // Action buckets (conversational grouping)
-export const BUCKET_BAD = 'Looks wrong';
-export const BUCKET_LOOK = 'Needs a closer look';
-export const BUCKET_OK = 'Holds up';
-export const BUCKET_NONE = 'Could not be checked';
-export const bucketOkToggle = (n) => `Holds up (${n})`;
+export const BUCKET_BAD = 'To fix';
+export const BUCKET_LOOK = 'Closer look';
+export const BUCKET_OK = 'Checks out';
+export const BUCKET_NONE = 'Unchecked';
+export const bucketOkToggle = (n) => `Checks out (${n})`;
 export const checkAllFlagged = (n) => `Check all ${n} flagged against sources`;
 
 // Mini-trace audit
@@ -86,7 +86,7 @@ export const citecheckSummary = (checked, issues) => {
   return `${cWord} · ${iWord}`;
 };
 export const CITECHECK_ISSUES_HEADING = 'Issues';
-export const citecheckHoldsUpToggle = (n) => `Holds up (${n})`;
+export const citecheckHoldsUpToggle = (n) => `Checks out (${n})`;
 
 // Deep check, running
 export const RUNNING_HEADING = 'Checking against sources';

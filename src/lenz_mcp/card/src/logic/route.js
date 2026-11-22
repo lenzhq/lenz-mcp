@@ -252,10 +252,10 @@ export function changedFrom(quickVerdict, deepVerdict) {
 }
 
 // Action buckets for conversational grouping:
-// 'bad' (Looks wrong): False, Mostly False
-// 'look' (Needs a closer look): Mixed, No Public Record, or (True/Mostly True with low confidence)
-// 'ok' (Holds up): True, Mostly True with confidence !== low
-// 'none' (Could not be checked): failed/unresolved/unassessed rows
+// 'bad' (To fix): False, Mostly False
+// 'look' (Closer look): Mixed, No Public Record, or (True/Mostly True with low confidence)
+// 'ok' (Checks out): True, Mostly True with confidence !== low
+// 'none' (Unchecked): failed/unresolved/unassessed rows
 export function bucketOf(verdict, confidence, error) {
   if (error || !verdict) return 'none';
   const key = verdictKey(verdict);

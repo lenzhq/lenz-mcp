@@ -1630,12 +1630,12 @@ const CITECHECK_FINDING_LABELS = {
   quote_not_in_source: 'Quote not in the source',
   not_in_source: 'Not in the source',
   metadata_mismatch: 'Reference details differ',
-  partly_supported: 'Needs a closer look',
-  partial_support: 'Needs a closer look',
+  partly_supported: 'Closer look',
+  partial_support: 'Closer look',
   supported: 'Supported',
   supports: 'Supported',
-  unchecked: 'Not checked',
-  failed: 'Not checked',
+  unchecked: 'Unchecked',
+  failed: 'Unchecked',
   pending: 'Not checked yet',
 };
 
@@ -1662,7 +1662,7 @@ function normalizeCitation(c) {
   const label =
     row.finding_label ||
     CITECHECK_FINDING_LABELS[finding] ||
-    (finding ? finding.replace(/_/g, ' ') : 'Not checked');
+    (finding ? finding.replace(/_/g, ' ') : 'Unchecked');
   const snippet = text(row.snippet || chk.snippet);
   const rationale = text(
     row.rationale ||
