@@ -10,7 +10,6 @@ import * as copy from './copy.js';
 import { createDeepCheck } from './logic/deep-check.js';
 import { domainOf, formatElapsed, isWebUrl, languageName, text, verdictKey } from './logic/format.js';
 import { bucketOf, buttonStrength, changedFrom, deepResult, isSendableId, routePayload, tally } from './logic/route.js';
-import { DELIVER_MESSAGE, readDelivery } from './logic/delivery.js';
 import { buildSnapshot } from './logic/snapshot.js';
 import { createPickStore, createRowStore } from './logic/store.js';
 
@@ -475,20 +474,6 @@ function DeepResult({ result, quickVerdict, host, headingRef, compact = false })
       <Caveats warnings={result.warnings} />
       <AuditTrace audit={result.card_audit || result.cardAudit} />
       <Sources result={result} host={host} />
-      {/* "Ask a follow-up" PREFILLS the composer and the user finishes the
-          sentence. A host that SENDS a message instead would post the
-          fragment as a user turn, so the button is not offered there. */}
-      {host.capabilities.message && result.verificationId && readDelivery(host) !== DELIVER_MESSAGE ? (
-        <div class="lz-actions">
-          <button
-            type="button"
-            class="lz-link"
-            onClick={() => host.sendMessage(copy.followUpPrefill(result.verificationId)).catch(() => {})}
-          >
-            {copy.FOLLOW_UP}
-          </button>
-        </div>
-      ) : null}
       {result.url && host.capabilities.openLinks && isWebUrl(result.url) ? (
         <div class="lz-actions">
           <a

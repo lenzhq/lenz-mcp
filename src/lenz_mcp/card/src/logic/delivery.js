@@ -1,8 +1,8 @@
 // WHICH mechanism this card must use to tell the model.
 //
-// The card cannot work it out: ChatGPT DECLARES `updateModelContext` and drops
-// it silently, and a dropped push still returns success, so neither the
-// capability nor the outcome is a signal. The SERVER knows — the card's own
+// The card cannot work it out: a host may DECLARE `updateModelContext` and drop
+// it silently (ChatGPT did until 2026-11-22), and a dropped push still returns
+// success, so neither the capability nor the outcome is a signal. The SERVER knows — the card's own
 // tool calls carry the client's User-Agent — and says so under `_card` in every
 // card-only tool result (src/lenz_mcp/mcp_card.py, with_delivery).
 //

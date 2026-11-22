@@ -125,8 +125,9 @@ function Root({ host, dev }) {
   }, [cardStore]);
 
   // Telling the model is ONE decision with two mechanisms, and the server says
-  // which (mcp_card.card_delivery): Claude takes a silent push, ChatGPT only
-  // a chat message. Never both on any host.
+  // which (mcp_card.card_delivery): every measured host takes the silent push
+  // (ChatGPT since 2026-11-22); the chat message is for a host that drops it.
+  // Never both on any host.
   // The announcement ledger is per CONVERSATION, not per card: two cards
   // showing one check, and a picker whose card record is deliberately absent,
   // must not each announce it. A new conversation has its own.

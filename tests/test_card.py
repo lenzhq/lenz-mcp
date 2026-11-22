@@ -252,14 +252,15 @@ def test_a_declaring_client_that_renders_nothing_is_accepted():
 def test_the_delivery_hint_follows_the_vendor_not_the_identity(monkeypatch, authed):
     """Delivery is keyed on the raw leading token, so an unparsable UA keeps it.
 
-    ChatGPT accepts `ui/update-model-context`, never delivers it, and then tells
-    the user no verification was run — beside a card showing a sourced verdict.
-    A proxied or relabelled ChatGPT renders the same card and needs the same
-    hint: keyed on the full identity, `openai-mcp/1.0.0 (x) proxy/1.0` would
-    get `context` and produce exactly that contradiction. The hint grants
-    nothing, so the coarse answer costs nothing — a client that renders no card
-    never reads it.
+    No vendor is on the message list today (ChatGPT delivers the silent push
+    since 2026-11-22), so this puts one there: the rule must still route every
+    client of that vendor, a proxied or relabelled one included, and nobody
+    else. Keyed on the full identity, `openai-mcp/1.0.0 (x) proxy/1.0` would get
+    `context`, and a host that drops the push would show a model contradicting
+    the card. The hint grants nothing — a client that renders no card never
+    reads it.
     """
+    monkeypatch.setattr(mcp_card, 'MESSAGE_DELIVERY_VENDOR_TOKENS', frozenset({'openai-mcp'}))
 
     async def _verify(authorization, **kwargs):
         return ApiResponse(status=202, data={'task_id': 't' * 32})
@@ -273,7 +274,7 @@ def test_the_delivery_hint_follows_the_vendor_not_the_identity(monkeypatch, auth
         ('openai-mcp/1.0.0 (Responses API)', 'message'),
         ('openai-mcp/1.0.0 (Something New)', 'message'),
         # Unparsable, so it wins nothing in the wait table — but it is still
-        # OpenAI's, and a card of theirs must not be told to push silently.
+        # that vendor's, and its card must not be told to push silently.
         ('openai-mcp/1.0.0 (Responses API) proxy/1.0', 'message'),
         ('Claude-User/1.0', 'context'),
         ('some-other-host/1.0', 'context'),
@@ -770,10 +771,10 @@ def _as_client(monkeypatch, user_agent, **kwargs):
     [
         ('Claude-User/1.0', 'context'),
         ('Claude-User', 'context'),
-        # ChatGPT accepts update-model-context and never delivers it, so its card
-        # has to say it in the chat instead.
-        ('openai-mcp/1.0.0', 'message'),
-        ('openai-mcp/1.0.0 (Codex)', 'message'),
+        # ChatGPT delivers update-model-context since 2026-11-22: one result
+        # for the model, no second turn in the chat.
+        ('openai-mcp/1.0.0', 'context'),
+        ('openai-mcp/1.0.0 (Codex)', 'context'),
         # An unmeasured client gets the quiet mechanism: a host nobody has
         # measured is never made to post into the user's own turn.
         ('claude-code/2.1.4', 'context'),
@@ -816,7 +817,7 @@ def test_every_card_tool_says_how_to_deliver_on_every_path(monkeypatch, authed):
         _run(server.select_claims_widget('t' * 32, [], _Ctx())),  # invalid_request
     ]
     for out in results:
-        assert out[mcp_card.CARD_RESULT_NAMESPACE] == {'deliver': 'message'}, out
+        assert out[mcp_card.CARD_RESULT_NAMESPACE] == {'deliver': 'context'}, out
 
 
 def test_the_delivery_hint_is_never_shown_to_a_model():
@@ -848,7 +849,7 @@ def test_every_per_client_decision_reads_one_profile(monkeypatch):
     profile = client.client_profile()
     assert (profile.vendor_token, profile.identity) == ('openai-mcp', 'openai-mcp (Codex)')
     assert mcp_card.card_active() is True
-    assert mcp_card.card_delivery() == 'message'
+    assert mcp_card.card_delivery() == 'context'
     assert server._verify_wait_seconds() == 100.0
 
     _as_client(monkeypatch, 'Claude-User/1.0', declares_apps=False, declaration_source='request')
@@ -1112,5 +1113,5 @@ def test_get_citation_check_widget_meta_and_delivery(monkeypatch):
 
     out = _run(server.get_citation_check_widget('c' * 32, _Ctx()))
     assert out['status'] == 'completed'
-    assert out[mcp_card.CARD_RESULT_NAMESPACE] == {'deliver': 'message'}
+    assert out[mcp_card.CARD_RESULT_NAMESPACE] == {'deliver': 'context'}
     assert out.get('citation_check_id') == 'c' * 32

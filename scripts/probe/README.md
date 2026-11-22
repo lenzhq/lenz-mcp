@@ -145,8 +145,7 @@ Then steps 1 to 3 as usual (**remove and re-add the connector**: the tool list c
    you use?` Claude should list `card_fixture` and the other probe tools, but NOT
    `start_verification_widget` or `get_verification_widget`.
 7. **Links.** In a checked result, click a source title. Did it open? Was there a
-   confirmation? Then **Ask a follow-up**: does the text appear in the chat box
-   without being sent?
+   confirmation?
 
 ## 8. Record the results
 
@@ -243,6 +242,17 @@ The stub-host flow that pins it: a host which accepts `updateModelContext` and
 drops it must still see the result delivered by message, exactly once, and still
 nothing on a re-mount.
 
+**Re-measured 2026-11-22 (card button 3, a Business workspace, host protocol
+2026-01-26): ChatGPT now delivers `ui/update-model-context`.** The reply carries
+`_meta.openai/modelContext.updateId`, the composer shows a "Context" chip, and
+asked "without calling any tool" the model answered the secret word it was told
+only through the push. Its host capabilities now also declare
+`experimental: openai/modelContext, openai/message {draft}, openai/skillsDeepLinks,
+openai/sourceViews`. The message route had become the duplicate (the card's user
+turn, then the model acknowledging it), so `MESSAGE_DELIVERY_VENDOR_TOKENS` is
+empty and ChatGPT's card pushes context like Claude's. The message mechanism and
+its stub-host flow stay, for the next host that drops the push.
+
 ### What the adapter does for ChatGPT
 
 - One card, two hosts. The card is a standard MCP Apps resource: no
@@ -252,18 +262,21 @@ nothing on a re-mount.
 - A connection whose manifest names a card URI that is no longer served needs
   the connector re-added. A read of such a URI answers a clean JSON-RPC
   not-found and logs the URI asked for; both halves are pinned by tests.
-- `ui/update-model-context` is treated as ABSENT for ChatGPT whatever it
-  declares. The card says the result in the chat instead, once per completed
-  check, coalesced per card, never on a re-mount. Which mechanism a card uses is
-  the SERVER's answer (`_card.deliver` on the three card-only tools), never the
-  card's guess: ChatGPT declares the capability it drops, and a dropped push
-  still returns success, so nothing in the card could tell.
+- Until 2026-11-22, `ui/update-model-context` was treated as ABSENT for ChatGPT
+  whatever it declared, and the card said the result in the chat instead, once
+  per completed check, coalesced per card, never on a re-mount. ChatGPT now
+  delivers the push (re-measured above), so it gets `context` like Claude. Which
+  mechanism a card uses is still the SERVER's answer (`_card.deliver` on the
+  card-only tools), never the card's guess: a host can declare the capability
+  and drop it, and a dropped push still returns success.
 - The chat message carries no page text at all — not even `key_finding`. A
   `ui/message` arrives as the USER's turn, the most trusted position in a
   conversation; the context snapshot may quote sources behind an
   untrusted-evidence header, a user turn may not.
-- "Ask a follow-up" is not offered on ChatGPT: it prefills half a sentence for
+- "Ask a follow-up" was not offered on ChatGPT: it prefilled half a sentence for
   the user to finish, and a host that sends immediately would post the fragment.
+  Card v12 removed it everywhere (the follow-up tool went in v3.0.0, and ChatGPT
+  now gets the context route the button was shown on).
 - The deep-check wait for `openai-mcp` is 100 s (measured cut 119.8 s, and the
   whole call must land under ~110 s).
 

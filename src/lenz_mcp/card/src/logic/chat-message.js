@@ -1,10 +1,12 @@
 // The card's result, written as a message to the CHAT.
 //
-// Claude takes the result silently through `ui/update-model-context`. ChatGPT
-// accepts that call, answers success and never delivers it — measured — and
-// then tells the user "no full verification was run" beside a card that is
-// showing a sourced verdict. Its only working channel is `ui/message`, which it
-// SENDS AT ONCE as a user turn.
+// Used only where the server says `message` (mcp_card.MESSAGE_DELIVERY_VENDOR_TOKENS,
+// empty since 2026-11-22). Every measured host now takes the result silently
+// through `ui/update-model-context`. ChatGPT used to accept that call, answer
+// success and never deliver it, then tell the user "no full verification was
+// run" beside a card showing a sourced verdict; its only working channel was
+// `ui/message`, which it SENDS AT ONCE as a user turn. This is for the next host
+// that behaves that way.
 //
 // So this text is read by a person, in their own voice, and the model REPLIES
 // to it. Six rules follow, and every one of them is in the wording:

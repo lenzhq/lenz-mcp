@@ -97,6 +97,11 @@ mcp_verify_wait_exhausted identity=… wait=… tool=…
   a host that accepts the silent context push and drops it needs
   `deliver=message`, keyed on the vendor token in
   `mcp_card.MESSAGE_DELIVERY_VENDOR_TOKENS`.
+- **The result is confirmed twice in the chat** (the card's message as a user
+  turn, then the model acknowledging it). The host now delivers the context
+  push, so its vendor token comes off `MESSAGE_DELIVERY_VENDOR_TOKENS`. ChatGPT
+  did this on 2026-11-22 (measured with `scripts/probe/`), and the set has been
+  empty since.
 
 A change here ships as a release: a PR, then a tag, then a pin bump on the API
 side.

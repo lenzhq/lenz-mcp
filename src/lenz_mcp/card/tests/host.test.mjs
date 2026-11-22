@@ -557,7 +557,6 @@ test('a missing capability hides its control', async () => {
   const frame = await frameOf(page, 'n');
   await frame.getByRole('button', { name: /Check against sources/ }).click();
   await frame.getByText('Claim checked').waitFor({ timeout: 10000 });
-  assert.equal(await frame.getByRole('button', { name: 'Ask a follow-up' }).count(), 0);
   assert.equal(await frame.getByRole('link', { name: /Business Employment Dynamics/ }).count(), 0);
   assert.equal((await log(page)).filter((e) => e.method === 'ui/update-model-context').length, 0);
   await page.context().close();
@@ -1880,24 +1879,9 @@ test('a host that takes the push is never sent a message', async () => {
   await page.waitForTimeout(400);
   assert.equal((await pushesOf(page, 'g7')).length, 1, 'the silent channel, as on Claude');
   assert.deepEqual(await messagesOf(page, 'g7'), [], 'never both');
-  // And the follow-up button stays, because a prefill is what makes it work.
-  assert.equal(await frame.getByRole('button', { name: 'Ask a follow-up' }).count(), 1);
-  await page.context().close();
-});
-
-test('the follow-up button is not offered where a message is sent at once', async () => {
-  const { page } = await harness.page();
-  await page.evaluate((c) => window.startCard('g8', c), config({
-    tools: {
-      start_verification_widget: [withDeliver({ status: 'submitted', task_id: 'task-1' })],
-      get_verification_widget: [withDeliver(COMPLETED)],
-    },
-  }));
-  const frame = await frameOf(page, 'g8');
-  await frame.getByRole('button', { name: /Check against sources/ }).click();
-  await frame.getByText('Claim checked').waitFor({ timeout: 12000 });
-  // It PREFILLS a half-sentence for the user to finish; a host that sends
-  // immediately would post the fragment as a user turn.
+  // No follow-up button (card v12): the follow-up tool it prefilled for was
+  // removed in v3.0.0, and ChatGPT, which now takes this route, sends a card's
+  // message at once, so a prefilled half-sentence would post as the user's turn.
   assert.equal(await frame.getByRole('button', { name: 'Ask a follow-up' }).count(), 0);
   await page.context().close();
 });
