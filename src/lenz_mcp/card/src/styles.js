@@ -333,7 +333,8 @@ a.lz-link { display: inline-block; }
 }
 @media (pointer: coarse) { .lz-bucket-toggle { min-height: 44px; } }
 .lz-bucket-toggle:hover { color: var(--lz-ink); }
-.lz-rows > li.citecheck-row { border-bottom: 0; }
+.lz-rows > li.citecheck-row { padding: 10px 0; border-bottom: 0; }
+.lz-rows > li.citecheck-row > .num { padding-top: 2px; }
 
 /* Mini-trace in DeepResult */
 .audit-trace {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-SPwXj2U6ixk1TdxQYfMwO2z9u8Kmmj0VotzXG6ARqW4='; style-src 'sha256-LHKLV7ETnqNymcGBfoHTqfrhqLjSsZx+bIPsHTmRElE='; img-src 'none'; font-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-SPwXj2U6ixk1TdxQYfMwO2z9u8Kmmj0VotzXG6ARqW4='; style-src 'sha256-hhPmZMj/G3lTyMfeh/NYkLa0BJRh0owyv+ZzNDcLHCg='; img-src 'none'; font-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="lenz-card" content="v11">
 <title>Lenz result</title>
 <style>
@@ -314,7 +314,8 @@ a.lz-link { display: inline-block; }
 }
 @media (pointer: coarse) { .lz-bucket-toggle { min-height: 44px; } }
 .lz-bucket-toggle:hover { color: var(--lz-ink); }
-.lz-rows > li.citecheck-row { border-bottom: 0; }
+.lz-rows > li.citecheck-row { padding: 10px 0; border-bottom: 0; }
+.lz-rows > li.citecheck-row > .num { padding-top: 2px; }
 
 /* Mini-trace in DeepResult */
 .audit-trace {
