@@ -1071,7 +1071,7 @@ def _item_claim(item: dict[str, Any]) -> Any:
 
 
 def _option(option: Any) -> Any:
-    """A claim-picker option as the tools give it: ``{text, domain, ...}``.
+    """A claim-picker option as the tools give it: ``{text, ...}``.
 
     The API names the option's text ``claim``; the tools keep ``text``.
     """
