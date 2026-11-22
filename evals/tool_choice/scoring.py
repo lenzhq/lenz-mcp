@@ -134,7 +134,6 @@ _ARGS_OK = {
         and all(_text(c) for c in a['claims'])
     ),
     'get_verification': _get_verification_ok,
-    'ask_followup': lambda a: _text(a.get('verification_id')) and _text(a.get('question')),
 }
 
 

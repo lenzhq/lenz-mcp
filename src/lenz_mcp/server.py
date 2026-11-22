@@ -51,7 +51,7 @@ CONFIDENCE_NOTE = (
     'calibrated probability. Treat as directional, not a guarantee.'
 )
 
-# `language` on assess_claim / verify_claim / ask_followup.
+# `language` on assess_claim / verify_claim.
 #
 # The type and the wording exist to stop the client filling this in unasked.
 # Typed as a bare `str` and described as an "ISO 639-1 code", it advertised ~180
@@ -85,13 +85,6 @@ LANGUAGE_FIELD_DESCRIPTION = (
     "This field overrides that; the conversation's language and the user's locale are not a request to "
     'override it. Set it only when the user asks for the answer in a different language, and keep the '
     'text you send in its own words and language: a translated text is a different claim. '
-    f'Supported: {", ".join(config.SUPPORTED_LANGUAGES)}.'
-)
-# A follow-up answers in the CHECK's language, not the question's, so its
-# `language` field has a text of its own.
-FOLLOWUP_LANGUAGE_FIELD_DESCRIPTION = (
-    'Leave unset: the answer follows the language of the deep check it is about. Set it only when the '
-    'user asks for the answer in another language. '
     f'Supported: {", ".join(config.SUPPORTED_LANGUAGES)}.'
 )
 
@@ -337,18 +330,6 @@ CREDENTIAL_LOST_MID_RUN = (
     'call `list_verifications` later to find it. Do not start the same check again. Do not mention '
     'tool names to the user.'
 )
-FOLLOWUP_NOT_COMPLETED = (
-    "That deep check isn't complete yet. Tell the user it is still running and that you will answer "
-    "once it finishes. Call `get_verification` until its status is 'completed', then call "
-    '`ask_followup` again.'
-)
-# Transport failure: the reply (and its charge) MAY have landed server-side, and
-# `ask_followup` is not idempotent, so the model is told not to resend blindly.
-FOLLOWUP_UNREACHABLE = (
-    "Couldn't reach Lenz to send the question, and it may already have been recorded. Do not resend "
-    'it blindly: a resend may be charged twice. Call `get_verification` to check the conversation '
-    'before resending.'
-)
 
 # `list_verifications`: enough to find a check from earlier today, short enough to read.
 RECENT_CHECKS_LIMIT = 10
@@ -359,7 +340,7 @@ NO_RECENT_CHECKS_MESSAGE = (
 )
 
 # The billing `code` values the API attaches to a quota/credit rejection on the
-# tools the MCP calls (assess_claim / verify_claim / select_claims / ask_followup).
+# tools the MCP calls (assess_claim / verify_claim / select_claims).
 # Used ONLY on the legacy-403 path below — a 402 is unambiguous by status alone.
 # Any other 403 is a real access denial (e.g. an IP block), not a billing wall.
 #
@@ -523,7 +504,7 @@ mcp = MCPServer(
         'on medium, offer it; on high, mention it. On a long text, offer it for the claims that matter; '
         f'when the user asks for every claim, run one per claim, {config.DEEP_CHECK_BATCH} at a time. '
         '`list_verifications` finds earlier deep checks, also one whose result never arrived; '
-        '`ask_followup` answers questions about a finished one; `check_citations` checks whether the '
+        '`check_citations` checks whether the '
         'sources a draft cites support it, when the user asks that; `check_usage` shows the balance.'
     ),
     website_url=config.FRONTEND_URL,
@@ -1090,7 +1071,7 @@ def _item_claim(item: dict[str, Any]) -> Any:
 
 
 def _option(option: Any) -> Any:
-    """A claim-picker option as the tools give it: ``{text, domain, ...}``.
+    """A claim-picker option as the tools give it: ``{text, ...}``.
 
     The API names the option's text ``claim``; the tools keep ``text``.
     """
@@ -1536,7 +1517,7 @@ def _submitted_message(*, already_running: bool) -> str:
     and it waits. The old ChatGPT variant said "do NOT poll" because its card
     completed on its own and ChatGPT suppresses repeated identical tool calls —
     the verdict reached the user's screen but never the model, so it could not
-    summarise, answer follow-ups or chain into ask_followup.
+    summarise or answer follow-ups.
     With the wait server-side, one call is normally enough; only the card-on
     variant still asks the model not to narrate what the card already shows.
     """
@@ -2268,7 +2249,7 @@ async def get_verification(
     top sources, a `suggested_rewrite` when the claim can be corrected (not
     verified itself: a suggestion to review, never a checked fact), the
     `depth` the verdict was produced at and the
-    `verification_id` — pass that to `ask_followup` for a grounded follow-up.
+    `verification_id`.
     If the check needs a decision (the text holds several claims) it
     returns `status: needs_input` with the options. Still `processing`
     after the wait means tell the user it is still running and call again;
@@ -2748,7 +2729,7 @@ def _completed_result(result: dict[str, Any]) -> dict[str, Any]:
     rewrite = (rewrite.strip() or None) if isinstance(rewrite, str) else None
     out = {
         'status': 'completed',
-        # The caller's own claim id — pass to `ask_followup` for a grounded follow-up.
+        # The caller's own claim id.
         'verification_id': result.get('verification_id', ''),
         'claim': result.get('claim', ''),
         'verdict': result.get('verdict', ''),
@@ -2806,8 +2787,8 @@ async def check_usage(ctx: Context) -> dict[str, Any]:
 
     One pool funds every call. `costs` is the live price list — read the
     weight from there rather than assuming one. `verify_claim` is the
-    expensive tool by an order of magnitude; `assess_claim` and
-    `ask_followup` are the cheap ones.
+    expensive tool by an order of magnitude; `assess_claim` is the
+    cheap one.
 
     `costs` is keyed by capability at its default price. `cost_options`
     holds the prices that depend on a request parameter, nested capability →
@@ -2878,7 +2859,7 @@ async def list_verifications(ctx: Context) -> dict[str, Any]:
     checks (`assess_claim`) are not stored. Each row carries the claim, the
     verdict, the score (none for No Public Record), the confidence, the key finding and a
     `verification_id`: pass it to `get_verification` for the full result
-    with its sources, or to `ask_followup`. Read-only: it never starts a check
+    with its sources. Read-only: it never starts a check
     and costs no credits.
     """
     resp = await client.list_verifications(_authorization(ctx), page_size=RECENT_CHECKS_LIMIT)
@@ -2907,92 +2888,6 @@ async def list_verifications(ctx: Context) -> dict[str, Any]:
         'total': total if isinstance(total, int) and checks else len(checks),
         'message': RECENT_CHECKS_MESSAGE if checks else NO_RECENT_CHECKS_MESSAGE,
     }
-
-
-@_tool(
-    title='Ask a follow-up',
-    # readOnlyHint=False: every call appends the question and the answer to the
-    # check's follow-up thread and debits one credit. idempotentHint=False: no
-    # Idempotency-Key is sent (see client.ask), so asking again adds another turn.
-    # openWorldHint=False: answers from the evidence already gathered for the
-    # completed check; nothing is searched or fetched from the web at call time.
-    annotations=ToolAnnotations(
-        title='Ask a follow-up', readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
-    ),
-)
-@requires_auth
-async def ask_followup(
-    verification_id: Annotated[
-        str,
-        Field(
-            description='The verification_id of a COMPLETED deep check (on a verify_claim or get_verification result, or a list_verifications row) — NOT a task_id.'
-        ),
-    ],
-    question: Annotated[
-        str,
-        # max_length is declared, not just documented: the API rejects a longer
-        # question with a 422 the model can only learn from by spending a tool
-        # call on it. Bounded in the
-        # schema, an over-long question costs one local self-correction —
-        # the same reasoning as the `language` enum above.
-        Field(
-            max_length=config.ASK_MESSAGE_MAX_CHARS,
-            description=(
-                "The follow-up question, answered from the check's full evidence. "
-                f'Maximum {config.ASK_MESSAGE_MAX_CHARS} characters — ask one focused '
-                'question rather than a multi-part one.'
-            ),
-        ),
-    ],
-    ctx: Context,
-    language: Annotated[
-        LanguageCode,
-        Field(description=FOLLOWUP_LANGUAGE_FIELD_DESCRIPTION),
-    ] = '',
-) -> dict[str, Any]:
-    """Answer a question about a finished deep check (a `verify_claim` result), using its
-    full evidence.
-
-    A deep-check result summarises its evidence; this reads all of it (every
-    source, the research and the reviewers' reasoning) and answers `question`
-    from it. Pass the
-    `verification_id` of a completed deep check (on a `verify_claim` or
-    `get_verification` result, or a `list_verifications` row; NOT a task_id). Only
-    works on a completed `verify_claim` — not on `assess_claim` results. Costs
-    credits at the cheap rate, same as `assess_claim`. The conversation is kept
-    server-side per verification, so ask
-    follow-ups sequentially rather than in parallel. Replies in the language of the
-    check unless the user explicitly asked for another one — leave `language` unset.
-    The answer is markdown whose links point at the check's own sources: when you
-    relay it, keep its source links as links.
-    """
-    authorization = _authorization(ctx)  # gate enforced by @requires_auth
-    verification_id = (verification_id or '').strip()
-    if not _sendable_id(verification_id):
-        return _unsendable_id('verification_id', 'get_verification')
-
-    resp = await client.ask(authorization, verification_id=verification_id, message=question, language=language)
-    if resp.ok:
-        return {
-            'status': 'ok',
-            'answer': resp.data.get('content', ''),
-            'source': "Lenz follow-up (grounded in the verification's full research, debate & adjudication)",
-        }
-    # /ask returns 400 for a not-yet-completed verification; _error_result has no
-    # 400 branch, so surface it distinctly instead of a generic error.
-    if resp.status == 400:
-        return {
-            'status': 'not_completed',
-            'message': FOLLOWUP_NOT_COMPLETED,
-        }
-    # Transport failure: the reply (and its charge) MAY have landed server-side.
-    # `ask_followup` is not idempotent, so warn against a blind resend.
-    if resp.status == 0:
-        return {
-            'status': 'error',
-            'message': FOLLOWUP_UNREACHABLE,
-        }
-    return _error_result(resp)
 
 
 # ── citation checks ──────────────────────────────────────────────────

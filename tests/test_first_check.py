@@ -154,8 +154,6 @@ _RESULT = {
     'claim': 'GDPR requires consent for any processing of personal data.',
     'visibility': 'private',
     'depth': 'standard',
-    'domain': 'law',
-    'entities': [{'name': 'GDPR', 'qid': 'Q1172506'}],
     'presumed_intent': '',
     'verdict': 'False',
     'confidence': 'high',
@@ -201,8 +199,6 @@ _LISTING = {
         {
             'verification_id': 'a1b2c3d4',
             'claim': 'GDPR requires consent for any processing of personal data.',
-            'domain': 'law',
-            'entities': [{'name': 'GDPR', 'qid': 'Q1172506'}],
             'verdict': 'False',
             'confidence': 'high',
             'lenz_score': 2,
@@ -1399,7 +1395,6 @@ _TOOL_NAMES = (
     'get_verification',
     'list_verifications',
     'check_usage',
-    'ask_followup',
     'select_claims',
     'check_citations',
     'get_citation_check',
@@ -1476,7 +1471,6 @@ def test_every_result_string_in_the_server_keeps_the_split():
     for must in (
         'LOW_CONFIDENCE_NEXT_STEP',
         'STILL_RUNNING_AFTER_WAIT',
-        'FOLLOWUP_NOT_COMPLETED',
         'ASSESS_NOTES_NOTE',
         'QUICK_REWRITE_NOTE',
     ):

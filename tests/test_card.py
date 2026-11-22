@@ -162,7 +162,7 @@ def test_claude_gets_the_card_on_assess_and_the_card_only_tools():
     for name in CARD_TOOLS:
         assert tools[name]['_meta'] == {'ui': {'visibility': ['app']}}, name
     # Not the picker and not the tools whose answers are not a verdict.
-    for name in ('select_claims', 'check_usage', 'ask_followup'):
+    for name in ('select_claims', 'check_usage'):
         assert 'ui' not in (tools[name].get('_meta') or {}), name
     for name, tool in tools.items():
         assert not any(k.startswith('openai/') for k in (tool.get('_meta') or {})), name

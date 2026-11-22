@@ -241,12 +241,10 @@
   "reason": "multi_claim",
   "claims": [
    {
-    "text": "The Earth is round.",
-    "domain": "Science"
+    "text": "The Earth is round."
    },
    {
-    "text": "Water boils at 100C at sea level.",
-    "domain": "Science"
+    "text": "Water boils at 100C at sea level."
    }
   ],
   "message": "The text contains several claims and a deep check covers one at a time. If the user already asked for every claim, select them all, up to 10 at a time, without asking again; if they named the ones that matter, select those; otherwise show the user this list and ask which to check. Then call select_claims with this task_id and the exact text of the chosen claim(s):\n1. The Earth is round.\n2. Water boils at 100C at sea level.",
@@ -258,8 +256,7 @@
   "reason": "multi_claim",
   "claims": [
    {
-    "text": "X is Y.",
-    "domain": "Science"
+    "text": "X is Y."
    }
   ],
   "message": "The text contains several claims and a deep check covers one at a time. If the user already asked for every claim, select them all, up to 10 at a time, without asking again; if they named the ones that matter, select those; otherwise show the user this list and ask which to check. Then call select_claims with this task_id and the exact text of the chosen claim(s):\n1. X is Y.",

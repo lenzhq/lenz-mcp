@@ -8,7 +8,7 @@
   },
   "client": "chatgpt-codex",
   "declares_mcp_apps": true,
-  "instructions": "Lenz checks factual claims against independent sources: in a draft, a pasted text or your own previous answer. Use it when the user names Lenz; asks you to check, double-check, verify, confirm or fact-check something; asks you to audit a draft or your previous answer for factual errors; asks whether something is true or accurate; or doubts a factual statement you made (“are you sure?”, “is that right?”). It checks factual claims, such as a fact, a figure, a date, a quote or an attribution; opinions, predictions, arithmetic, how programming code behaves and text with no checkable claim are outside what it can check. A claim check sees only the text you send: not this conversation, and not the page behind a link. So send something that makes sense on its own: a text as written (Lenz finds the claims in it); one claim as a statement, with what the conversation says it refers to and nothing else changed; and a claim a quick check listed exactly as listed. A claim gets one of two checks. `assess_claim`, the quick check, is where to start unless the user asks for sources, a deep check or a verification: a verdict and a confidence for each claim in about 15 seconds, one credit each. It is a first read by a panel of reviewers, not sourced evidence, so present it that way and always with its confidence. `verify_claim`, the deep check, investigates one claim against sources in about a minute or two (a 1-10 score, or No Public Record), for ten credits (five at low depth), and its verdict replaces the quick one. Because it costs that much more, it runs on the user's yes, or when they ask for sources, a deep check or a verification. How strongly to offer it follows the quick check: on low confidence, or when the claim is high-stakes for the user (legal, medical, financial, or about to be published), recommend it; on medium, offer it; on high, mention it. On a long text, offer it for the claims that matter; when the user asks for every claim, run one per claim, 10 at a time. `list_verifications` finds earlier deep checks, also one whose result never arrived; `ask_followup` answers questions about a finished one; `check_citations` checks whether the sources a draft cites support it, when the user asks that; `check_usage` shows the balance.",
+  "instructions": "Lenz checks factual claims against independent sources: in a draft, a pasted text or your own previous answer. Use it when the user names Lenz; asks you to check, double-check, verify, confirm or fact-check something; asks you to audit a draft or your previous answer for factual errors; asks whether something is true or accurate; or doubts a factual statement you made (“are you sure?”, “is that right?”). It checks factual claims, such as a fact, a figure, a date, a quote or an attribution; opinions, predictions, arithmetic, how programming code behaves and text with no checkable claim are outside what it can check. A claim check sees only the text you send: not this conversation, and not the page behind a link. So send something that makes sense on its own: a text as written (Lenz finds the claims in it); one claim as a statement, with what the conversation says it refers to and nothing else changed; and a claim a quick check listed exactly as listed. A claim gets one of two checks. `assess_claim`, the quick check, is where to start unless the user asks for sources, a deep check or a verification: a verdict and a confidence for each claim in about 15 seconds, one credit each. It is a first read by a panel of reviewers, not sourced evidence, so present it that way and always with its confidence. `verify_claim`, the deep check, investigates one claim against sources in about a minute or two (a 1-10 score, or No Public Record), for ten credits (five at low depth), and its verdict replaces the quick one. Because it costs that much more, it runs on the user's yes, or when they ask for sources, a deep check or a verification. How strongly to offer it follows the quick check: on low confidence, or when the claim is high-stakes for the user (legal, medical, financial, or about to be published), recommend it; on medium, offer it; on high, mention it. On a long text, offer it for the claims that matter; when the user asks for every claim, run one per claim, 10 at a time. `list_verifications` finds earlier deep checks, also one whose result never arrived; `check_citations` checks whether the sources a draft cites support it, when the user asks that; `check_usage` shows the balance.",
   "prompts": [
     {
       "arguments": [
@@ -36,94 +36,6 @@
     }
   ],
   "tools": [
-    {
-      "annotations": {
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "readOnlyHint": false,
-        "title": "Ask a follow-up"
-      },
-      "description": "Answer a question about a finished deep check (a `verify_claim` result), using its full evidence.\n\nA deep-check result summarises its evidence; this reads all of it (every source, the research and the reviewers' reasoning) and answers `question` from it. Pass the `verification_id` of a completed deep check (on a `verify_claim` or `get_verification` result, or a `list_verifications` row; NOT a task_id). Only works on a completed `verify_claim` — not on `assess_claim` results. Costs credits at the cheap rate, same as `assess_claim`. The conversation is kept server-side per verification, so ask follow-ups sequentially rather than in parallel. Replies in the language of the check unless the user explicitly asked for another one — leave `language` unset. The answer is markdown whose links point at the check's own sources: when you relay it, keep its source links as links.",
-      "inputSchema": {
-        "properties": {
-          "language": {
-            "default": "",
-            "description": "Leave unset: the answer follows the language of the deep check it is about. Set it only when the user asks for the answer in another language. Supported: en, es, de, fr, it, pt, nl, sv, da, no, fi, bg, sr, ko, pl, ru, uk, hi, ar, ro, el, hu, cs, sk, sl, mk, hr, tr, sq, lt, lv, et, be, ca, eu, is, ga, cy, mt.",
-            "enum": [
-              "",
-              "en",
-              "es",
-              "de",
-              "fr",
-              "it",
-              "pt",
-              "nl",
-              "sv",
-              "da",
-              "no",
-              "fi",
-              "bg",
-              "sr",
-              "ko",
-              "pl",
-              "ru",
-              "uk",
-              "hi",
-              "ar",
-              "ro",
-              "el",
-              "hu",
-              "cs",
-              "sk",
-              "sl",
-              "mk",
-              "hr",
-              "tr",
-              "sq",
-              "lt",
-              "lv",
-              "et",
-              "be",
-              "ca",
-              "eu",
-              "is",
-              "ga",
-              "cy",
-              "mt"
-            ],
-            "title": "Language",
-            "type": "string"
-          },
-          "question": {
-            "description": "The follow-up question, answered from the check's full evidence. Maximum 500 characters — ask one focused question rather than a multi-part one.",
-            "maxLength": 500,
-            "title": "Question",
-            "type": "string"
-          },
-          "verification_id": {
-            "description": "The verification_id of a COMPLETED deep check (on a verify_claim or get_verification result, or a list_verifications row) — NOT a task_id.",
-            "title": "Verification Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "verification_id",
-          "question"
-        ],
-        "title": "ask_followupArguments",
-        "type": "object"
-      },
-      "meta_keys": [],
-      "model_visible": true,
-      "name": "ask_followup",
-      "outputSchema": {
-        "additionalProperties": true,
-        "title": "ask_followupDictOutput",
-        "type": "object"
-      },
-      "title": "Ask a follow-up"
-    },
     {
       "annotations": {
         "destructiveHint": false,
@@ -347,7 +259,7 @@
         "readOnlyHint": true,
         "title": "Check usage & credits"
       },
-      "description": "Show how many Lenz credits are left, and what they still buy.\n\nOne pool funds every call. `costs` is the live price list — read the weight from there rather than assuming one. `verify_claim` is the expensive tool by an order of magnitude; `assess_claim` and `ask_followup` are the cheap ones.\n\n`costs` is keyed by capability at its default price. `cost_options` holds the prices that depend on a request parameter, nested capability → parameter → value — today `verify_claim` at `depth=\"low\"`, under `cost_options.verify.depth.low`. Read the low-depth price from there.\n\n`assess_remaining` and `verify_remaining` are two views of the SAME balance, not separate allowances: spending on one reduces both. Call this when the user asks about credits, or before a large batch to size it against `credits_remaining`. It is not a prerequisite: never call it before an ordinary check. `next` is one example of what the user can ask.",
+      "description": "Show how many Lenz credits are left, and what they still buy.\n\nOne pool funds every call. `costs` is the live price list — read the weight from there rather than assuming one. `verify_claim` is the expensive tool by an order of magnitude; `assess_claim` is the cheap one.\n\n`costs` is keyed by capability at its default price. `cost_options` holds the prices that depend on a request parameter, nested capability → parameter → value — today `verify_claim` at `depth=\"low\"`, under `cost_options.verify.depth.low`. Read the low-depth price from there.\n\n`assess_remaining` and `verify_remaining` are two views of the SAME balance, not separate allowances: spending on one reduces both. Call this when the user asks about credits, or before a large batch to size it against `credits_remaining`. It is not a prerequisite: never call it before an ordinary check. `next` is one example of what the user can ask.",
       "inputSchema": {
         "properties": {},
         "title": "check_usageArguments",
@@ -450,7 +362,7 @@
         "readOnlyHint": true,
         "title": "Get deep fact-check result"
       },
-      "description": "Get the result of a deep check that is running or already finished: wait for a running check by `task_id` (or several in parallel via `task_ids`), or fetch a completed one by `verification_id`.\n\nWith a `task_id` (from `verify_claim` or `select_claims`) this waits for the run to finish and returns `status: completed` with the verdict, the 1–10 Lenz score (or No Public Record, with no score, when nothing public records the claim), confidence, key finding, executive summary, top sources, a `suggested_rewrite` when the claim can be corrected (not verified itself: a suggestion to review, never a checked fact), the `depth` the verdict was produced at and the `verification_id` — pass that to `ask_followup` for a grounded follow-up. If the check needs a decision (the text holds several claims) it returns `status: needs_input` with the options. Still `processing` after the wait means tell the user it is still running and call again; `list_verifications` finds it later if the conversation moves on. A completed result replaces any earlier quick verdict on the same claim; its `supersedes` and `presentation` say how to tell the user. With an 8-character `verification_id` it returns the stored result immediately.",
+      "description": "Get the result of a deep check that is running or already finished: wait for a running check by `task_id` (or several in parallel via `task_ids`), or fetch a completed one by `verification_id`.\n\nWith a `task_id` (from `verify_claim` or `select_claims`) this waits for the run to finish and returns `status: completed` with the verdict, the 1–10 Lenz score (or No Public Record, with no score, when nothing public records the claim), confidence, key finding, executive summary, top sources, a `suggested_rewrite` when the claim can be corrected (not verified itself: a suggestion to review, never a checked fact), the `depth` the verdict was produced at and the `verification_id`. If the check needs a decision (the text holds several claims) it returns `status: needs_input` with the options. Still `processing` after the wait means tell the user it is still running and call again; `list_verifications` finds it later if the conversation moves on. A completed result replaces any earlier quick verdict on the same claim; its `supersedes` and `presentation` say how to tell the user. With an 8-character `verification_id` it returns the stored result immediately.",
       "inputSchema": {
         "properties": {
           "task_id": {
@@ -534,7 +446,7 @@
         "readOnlyHint": true,
         "title": "Your recent checks"
       },
-      "description": "List the most recent completed deep checks (`verify_claim`), newest first, up to 10.\n\nCall this when the user asks about an earlier deep check, or when a `verify_claim` was started and its result never arrived: a check that finished after the wait ended is listed here. A row appears only once a check has finished, so a check still running is not listed yet, and quick checks (`assess_claim`) are not stored. Each row carries the claim, the verdict, the score (none for No Public Record), the confidence, the key finding and a `verification_id`: pass it to `get_verification` for the full result with its sources, or to `ask_followup`. Read-only: it never starts a check and costs no credits.",
+      "description": "List the most recent completed deep checks (`verify_claim`), newest first, up to 10.\n\nCall this when the user asks about an earlier deep check, or when a `verify_claim` was started and its result never arrived: a check that finished after the wait ended is listed here. A row appears only once a check has finished, so a check still running is not listed yet, and quick checks (`assess_claim`) are not stored. Each row carries the claim, the verdict, the score (none for No Public Record), the confidence, the key finding and a `verification_id`: pass it to `get_verification` for the full result with its sources. Read-only: it never starts a check and costs no credits.",
       "inputSchema": {
         "properties": {},
         "title": "list_verificationsArguments",

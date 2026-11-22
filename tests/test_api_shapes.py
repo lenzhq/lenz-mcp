@@ -99,8 +99,6 @@ def _api_of(request: Any) -> str:
         return 'verify_status'
     if path.endswith('/select'):
         return 'select'
-    if path.startswith('/ask/'):
-        return 'ask'
     if path == '/citecheck':
         return 'citecheck'
     if path.startswith('/citechecks/'):
@@ -522,40 +520,6 @@ def test_a_success_in_the_older_version_never_reaches_the_tools(name):
 # the same (keys sorted).
 
 CITECHECK_SHAPES: dict[str, dict[str, Any]] = json.loads((HERE / 'citecheck_shapes.json').read_text(encoding='utf-8'))
-ASK_BODIES: dict[str, ApiResponse] = {
-    'answered': ApiResponse(
-        status=200, data={'role': 'expert', 'content': 'Because **evidence**.', 'created_at': '2026-10-10T10:00:00Z'}
-    ),
-    'not_completed_400': ApiResponse(
-        status=400,
-        data={'detail': 'Ask is only available for completed verifications.', 'code': 'verification_not_ready'},
-    ),
-    'not_ready_409': ApiResponse(status=409, data={'code': 'verification_not_ready', 'task_id': 'a' * 32}),
-    'failed_409': ApiResponse(status=409, data={'code': 'verification_failed', 'task_id': 'a' * 32}),
-    'no_credits_402': ApiResponse(
-        status=402,
-        data={
-            'detail': 'No remaining ask credits.',
-            'code': 'no_credits',
-            'upgrade_url': 'https://lenz.io/plans',
-            'credits_remaining': 0,
-            'cost': 1,
-        },
-    ),
-    'not_found_404': ApiResponse(status=404, data={'detail': 'Verification not found.', 'code': 'not_found'}),
-    'key_reused_422': ApiResponse(
-        status=422,
-        data={'detail': 'Idempotency-Key reused with a different request body.', 'code': 'idempotency_body_mismatch'},
-    ),
-    'ask_failed_502': ApiResponse(
-        status=502, data={'detail': 'The chat model could not answer this question.', 'code': 'ask_failed'}
-    ),
-    'unavailable_503': ApiResponse(
-        status=503,
-        data={'detail': 'The chat model is unavailable right now.', 'code': 'upstream_unavailable', 'retry_after': 90},
-        headers={'retry-after': '90'},
-    ),
-}
 
 
 def _citecheck_response(name: str) -> ApiResponse:
@@ -568,16 +532,6 @@ def _both_ways(runner: Callable[[pytest.MonkeyPatch], Any]) -> tuple[str, str]:
     with pytest.MonkeyPatch.context() as m:
         stubbed = asyncio.run(runner(m))
     return sorted_json(stubbed), sorted_json(run_through_the_wire(runner))
-
-
-@pytest.mark.parametrize('name', sorted(ASK_BODIES))
-def test_ask_reads_the_same_through_the_sdk(name):
-    def runner(m):
-        _stub(m, 'ask', ASK_BODIES[name])
-        return server.ask_followup('deadbeef', 'Why?', _ctx())
-
-    stubbed, through = _both_ways(runner)
-    assert through == stubbed
 
 
 _CITECHECK_GETS = sorted(name for name in CITECHECK_SHAPES if name.startswith('get_'))

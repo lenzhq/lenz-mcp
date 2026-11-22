@@ -66,8 +66,6 @@ API_SCOPES = frozenset(
     {
         'assess',
         'verify',
-        'ask',
-        'ask:read',
         'extract',
         'history:read',
         'history:write',
@@ -89,7 +87,6 @@ TOOL_SCOPES: dict[str, frozenset[str]] = {
     'get_verification': frozenset({'verify', 'history:read'}),
     'check_usage': frozenset({'usage:read'}),
     'list_verifications': frozenset({'history:read'}),
-    'ask_followup': frozenset({'ask'}),
     # A citation check is submitted under `verify` and read back under it too;
     # the API answers the status of a check this grant did not itself submit
     # only under `history:read`, so both tools ask for both.

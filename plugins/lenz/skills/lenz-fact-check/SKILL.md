@@ -25,7 +25,7 @@ complements groundedness/faithfulness checkers, it does not replace them.
 ## Prerequisite: the Lenz MCP must be connected
 
 This skill drives the **Lenz MCP server** (`https://lenz.io/mcp`) and its tools:
-`assess_claim`, `verify_claim`, `get_verification`, `select_claims`, `ask_followup`,
+`assess_claim`, `verify_claim`, `get_verification`, `select_claims`,
 `list_verifications`, `check_citations`, `get_citation_check`, `check_usage`. If those
 tools are not available, do **not** try to fact-check by other means — tell the
 user to connect Lenz first (OAuth for clients that support it, or a free API key),
@@ -66,8 +66,7 @@ per https://github.com/lenzhq/lenz-mcp, then retry.
    claims it returns `needs_input`: show the list and use `select_claims`. A single
    sentence runs its first claim only. A completed deep
    check replaces the quick verdict on the same claim: if it changed, say so plainly and
-   why. If a result never arrived, `list_verifications` finds it. To dig further into a
-   finished check, use `ask_followup` with its `verification_id`.
+   why. If a result never arrived, `list_verifications` finds it.
 
 4. **Present the results.** Per claim: state the claim, the verdict, and the
    confidence in plain language. **Lead with the claims that are false or
