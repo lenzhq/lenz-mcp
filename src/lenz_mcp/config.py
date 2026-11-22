@@ -135,11 +135,6 @@ def assess_timeout(identity: str) -> float:
     return ASSESS_TIMEOUT_BY_IDENTITY.get(identity, ASSESS_TIMEOUT_SHORT_HOST)
 
 
-# Not derived from the /assess timeouts: /ask is a single LLM reply, but it can block
-# on source summaries, so it is not reliably the lighter of the two. Sized
-# independently.
-ASK_TIMEOUT = 60.0
-
 # ── Deep-verify long-poll ─────────────────────────────────────────────
 # `verify_claim` (after submitting), `get_verification` and a single-claim
 # `select_claims` WAIT for the run inside the tool call, polling /verify/status
@@ -276,9 +271,6 @@ DEEP_CHECK_BATCH = 10
 # plain API client, so it mirrors the API's limits as constants.
 ASSESS_MAX_CLAIMS = 20
 
-# The API's other limits the tools state to the model, mirrored the same way.
-# `ask_followup`'s message limit.
-ASK_MESSAGE_MAX_CHARS = 500
 # The `language` codes the API accepts, in the API's order, which the tool
 # schema lists.
 SUPPORTED_LANGUAGES: tuple[str, ...] = (

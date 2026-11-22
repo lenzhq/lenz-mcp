@@ -827,27 +827,6 @@ async def select(authorization: Authorization, *, task_id: str, texts: list[str]
     return await _call('select', '/verify/{task_id}/select', authorization, invoke)
 
 
-async def ask(authorization: Authorization, *, verification_id: str, message: str, language: str = '') -> ApiResponse:
-    # No idempotency key, deliberately, even though the REST endpoint honours
-    # one (and the SDK sends a random one unless told not to). `ask` is a
-    # conversational append — asking the same question twice is a legit second
-    # turn, and it gets a different answer because the first exchange is now
-    # history. Every key `_idem_key` derives is content-derived, so sending one
-    # here would manufacture client-side exactly the implicit key the endpoint
-    # refuses to derive server-side: the second ask would replay the first reply
-    # for the full response TTL. A key belongs on a RETRY of one logical ask,
-    # which is a thing only a caller that owns the retry can tell apart from a
-    # re-ask, and the connector never retries one. Longer timeout — /ask is
-    # synchronous and can block on source summaries plus the LLM reply.
-    language = effective_language(language)
-    question = _utf8_safe(message)
-
-    async def invoke(sdk: AsyncLenz, options: dict[str, Any]) -> Result:
-        return await sdk.ask.send(verification_id, message=question, language=language, idempotency=False, **options)
-
-    return await _call('ask', '/ask/{verification_id}', authorization, invoke, timeout=config.ASK_TIMEOUT)
-
-
 def _canonical_json(value: Any) -> str:
     """The same JSON for the same content, whatever the key order.
 

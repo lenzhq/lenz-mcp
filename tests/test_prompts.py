@@ -123,7 +123,6 @@ def test_prompts_leave_the_tools_and_instructions_unchanged():
         'start_verification_widget',
         'select_claims_widget',
         'check_usage',
-        'ask_followup',
         'list_verifications',
         'check_citations',
         'get_citation_check',

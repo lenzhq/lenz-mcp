@@ -47,8 +47,6 @@ def api(monkeypatch):
             return httpx.Response(202, json={'task_id': 't' * 32})
         if '/verify/status/' in path:
             return httpx.Response(200, json={'status': 'processing'})
-        if '/ask/' in path:
-            return httpx.Response(200, json={'role': 'expert', 'content': 'An answer.'})
         if path.endswith('/select'):
             return httpx.Response(202, json={'status': 'queued', 'items': []})
         if path.endswith('/citecheck'):
@@ -80,20 +78,16 @@ def _keys(sent, suffix):
 def test_a_code_the_caller_sets_is_sent_unchanged(api):
     _run(client.assess('Bearer k', text='hi', language='en'))
     _run(client.verify('Bearer k', text='hi', language='de'))
-    _run(client.ask('Bearer k', verification_id='abcd1234', message='why?', language='fr'))
     assert _bodies(api, '/assess')[0]['language'] == 'en'
     assert _bodies(api, '/verify')[0]['language'] == 'de'
-    assert _bodies(api, 'abcd1234')[0]['language'] == 'fr'
 
 
-def test_unset_becomes_auto_on_assess_verify_and_ask(api):
+def test_unset_becomes_auto_on_assess_and_verify(api):
     _run(client.assess('Bearer k', text='hi', language=''))
     _run(client.assess('Bearer k', claims=['a', 'b'], language=''))
     _run(client.verify('Bearer k', text='hi', language=''))
-    _run(client.ask('Bearer k', verification_id='abcd1234', message='why?'))
     assert [b['language'] for b in _bodies(api, '/assess')] == ['auto', 'auto']
     assert _bodies(api, '/verify')[0]['language'] == 'auto'
-    assert _bodies(api, 'abcd1234')[0]['language'] == 'auto'
 
 
 def test_auto_is_part_of_the_key_and_differs_from_a_code(api):
@@ -120,10 +114,8 @@ def test_a_select_or_a_citation_check_is_never_sent_a_language(api):
 def test_the_tools_send_auto_for_an_unset_language(api):
     _run(server.assess_claim('Der Rhein ist der längste Fluss Deutschlands.', _ctx()))
     _run(server.verify_claim('Der Rhein ist der längste Fluss Deutschlands.', _ctx()))
-    _run(server.ask_followup('abcd1234', 'Welche Quelle ist am stärksten?', _ctx()))
     assert _bodies(api, '/assess')[0]['language'] == 'auto'
     assert _bodies(api, '/verify')[0]['language'] == 'auto'
-    assert _bodies(api, 'abcd1234')[0]['language'] == 'auto'
 
 
 @pytest.mark.parametrize('language', ['en', 'ko', 'ar', 'hi', 'uk', 'mk'])
@@ -131,10 +123,8 @@ def test_an_explicit_code_is_never_replaced(api, language):
     text = 'Der Rhein ist der längste Fluss Deutschlands.'
     _run(server.assess_claim(text, _ctx(), language=language))
     _run(server.verify_claim(text, _ctx(), language=language))
-    _run(server.ask_followup('abcd1234', 'Which source is strongest?', _ctx(), language=language))
     assert _bodies(api, '/assess')[0]['language'] == language
     assert _bodies(api, '/verify')[0]['language'] == language
-    assert _bodies(api, 'abcd1234')[0]['language'] == language
 
 
 def test_the_claim_text_goes_to_the_api_as_it_was_given(api):
@@ -144,12 +134,11 @@ def test_the_claim_text_goes_to_the_api_as_it_was_given(api):
     assert _bodies(api, '/assess')[0]['text'] == text
 
 
-@pytest.mark.parametrize('tool', ['assess_claim', 'verify_claim', 'ask_followup'])
+@pytest.mark.parametrize('tool', ['assess_claim', 'verify_claim'])
 def test_an_unsupported_code_never_reaches_the_api(api, tool):
     arguments = {
         'assess_claim': {'claim': 'x'},
         'verify_claim': {'claim': 'x'},
-        'ask_followup': {'verification_id': 'abcd1234', 'question': 'q'},
     }[tool]
     with pytest.raises(Exception) as excinfo:  # noqa: PT011
         _run(server.mcp.call_tool(tool, {**arguments, 'language': 'zh'}))
@@ -159,7 +148,7 @@ def test_an_unsupported_code_never_reaches_the_api(api, tool):
 
 def test_auto_is_not_a_value_the_model_can_pass():
     tools = {t.name: t for t in _run(server.mcp.list_tools())}
-    for name in ('assess_claim', 'verify_claim', 'ask_followup'):
+    for name in ('assess_claim', 'verify_claim'):
         assert 'auto' not in tools[name].input_schema['properties']['language']['enum']
 
 
@@ -190,20 +179,16 @@ def _tools():
 
 
 def test_the_field_description_states_the_rule():
-    for name in ('assess_claim', 'verify_claim', 'ask_followup'):
+    for name in ('assess_claim', 'verify_claim'):
         text = ' '.join(_tools()[name].input_schema['properties']['language']['description'].split())
         assert 'Leave unset' in text, name
         # The reason, then when to set it: Lenz already answers in the text's language.
         assert 'Leave unset' in text and 'Set it only when the user asks for the answer in' in text, name
-        if name == 'ask_followup':
-            # A follow-up answers in the check's language, not the question's.
-            assert 'the answer follows the language of the deep check it is about' in text
-        else:
-            assert 'Lenz answers in the language of the text it checks' in text, name
-            # The conversation's language and the user's locale are not a request.
-            assert "the conversation's language and the user's locale are not a request" in text, name
-            # The answer's language is the field's job, never a reason to translate the text.
-            assert 'a translated text is a different claim' in text, name
+        assert 'Lenz answers in the language of the text it checks' in text, name
+        # The conversation's language and the user's locale are not a request.
+        assert "the conversation's language and the user's locale are not a request" in text, name
+        # The answer's language is the field's job, never a reason to translate the text.
+        assert 'a translated text is a different claim' in text, name
         assert 'ISO 639-1' not in text, name
         for code in config.SUPPORTED_LANGUAGES:
             assert code in text, (name, code)
@@ -218,9 +203,3 @@ def test_the_claim_is_to_be_passed_in_the_users_own_language():
 def test_the_assess_description_qualifies_what_follows_the_language():
     text = ' '.join(_tools()['assess_claim'].description.split())
     assert 'Results follow the language of the text; set `language` only when the user asks' in text
-
-
-def test_the_ask_description_says_the_reply_follows_the_check():
-    text = ' '.join(_tools()['ask_followup'].description.split())
-    assert 'Replies in the language of the check' in text
-    assert 'Replies in English' not in text

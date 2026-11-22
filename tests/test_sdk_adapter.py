@@ -128,15 +128,6 @@ ENDPOINTS: list[tuple[str, Any, str, str, Any, str | None, float]] = [
         config.DEFAULT_TIMEOUT,
     ),
     (
-        'ask',
-        lambda: client.ask(AUTH, verification_id='deadbeef', message='Why?'),
-        'POST',
-        '/api/v1/ask/deadbeef',
-        {'message': 'Why?', 'language': 'auto'},
-        None,
-        config.ASK_TIMEOUT,
-    ),
-    (
         'citecheck',
         lambda: client.citecheck(AUTH, text='A draft [a](https://e.org/a).', max_citations=5),
         'POST',
@@ -189,8 +180,7 @@ def test_each_endpoint_on_the_wire(wire, call, method, path, body, key, timeout)
         assert json.loads(request.content) == body
         assert request.headers['content-type'] == 'application/json'
     if key is None:
-        # Reads carry none, and `ask` none on purpose (a re-ask is a new turn),
-        # not even the random one the SDK would send unasked.
+        # Reads carry none, not even the random one the SDK would send unasked.
         assert 'idempotency-key' not in request.headers
     else:
         assert request.headers['idempotency-key'] == key
@@ -603,36 +593,6 @@ def test_an_error_in_another_api_version_is_still_that_error(wire, response, sta
         assert out['retry_after_seconds'] == 45
 
 
-# ── ask ──────────────────────────────────────────────────────────────
-
-
-def test_ask_400_reads_as_not_completed(wire):
-    wire.respond(_error(400, {'detail': 'Ask is only available for completed verifications.'}))
-    out = _run(server.ask_followup('deadbeef', 'Why?', _ctx()))
-    assert out['status'] == 'not_completed'
-
-
-@pytest.mark.parametrize('code', ['verification_not_ready', 'verification_failed'])
-def test_ask_409_keeps_its_code_in_the_body(wire, code):
-    """The SDK rebuilds `.code` and blanks some; the connector reads the body."""
-    wire.respond(_error(409, {'code': code, 'task_id': 't' * 32}))
-    resp = _run(client.ask(AUTH, verification_id='deadbeef', message='Why?'))
-    assert resp.status == 409 and resp.data['code'] == code
-
-
-def test_ask_answer_reaches_the_tool(wire):
-    wire.respond(api_wire.answer(200, {'role': 'expert', 'content': 'Because.', 'created_at': '2026-10-10T10:00:00Z'}))
-    out = _run(server.ask_followup('deadbeef', 'Why?', _ctx()))
-    assert out['status'] == 'ok' and out['answer'] == 'Because.'
-
-
-def test_asking_twice_sends_two_questions_without_a_key(wire):
-    _run(client.ask(AUTH, verification_id='deadbeef', message='Why?'))
-    _run(client.ask(AUTH, verification_id='deadbeef', message='Why?'))
-    assert len(wire.requests) == 2
-    assert all('idempotency-key' not in r.headers for r in wire.requests)
-
-
 # ── renewal of an exchanged credential ──────────────────────────────
 
 
@@ -750,10 +710,6 @@ def test_a_lone_surrogate_is_dropped_from_body_and_key_on_every_write(wire):
     assert wire.last.headers['idempotency-key'] == client._idem_key('verify', 'ab', 'en')
     assert _no_replacement(wire.last)
 
-    _run(client.ask(AUTH, verification_id='deadbeef', message='q\ud800?'))
-    assert wire.body()['message'] == 'q?'
-    assert _no_replacement(wire.last)
-
     _run(client.citecheck(AUTH, text='a\ud800b [x](https://e.org/x)'))
     assert wire.body() == {'text': 'ab [x](https://e.org/x)'}
     assert wire.last.headers['idempotency-key'] == client._idem_key(
@@ -794,10 +750,9 @@ def test_an_empty_selection_is_refused_without_a_request(wire, caplog):
             'blank_input',
             'payload: Value error, send exactly one of text and pairs',
         ),
-        (lambda: client.ask(AUTH, verification_id='deadbeef', message='  '), 'blank_input', 'Message cannot be empty.'),
         (lambda: client.list_verifications(AUTH, page_size=0), 'invalid_page_size', 'The request was invalid.'),
     ],
-    ids=['assess blank', 'assess blank item', 'verify blank', 'citecheck blank', 'ask blank', 'page size'],
+    ids=['assess blank', 'assess blank item', 'verify blank', 'citecheck blank', 'page size'],
 )
 def test_a_refused_argument_reads_as_the_apis_422(wire, call, code, detail):
     """Blank input reads with the API's own sentence (the SDK's is the same: the
@@ -841,14 +796,6 @@ def test_the_select_tool_still_starts_the_chosen_check_beside_a_blank(wire):
     out = _run(server.select_claims('t' * 32, ['First.', ' '], _ctx()))
     assert out['status'] != 'invalid_request'
     assert [wire.body(r) for r in wire.requests if r.url.path.endswith('/select')] == [{'texts': ['First.', ' ']}]
-
-
-def test_a_blank_follow_up_question_says_what_the_api_said(wire):
-    """The old client sent it and showed the API's 422 sentence; the SDK
-    refuses it before sending with the same sentence."""
-    out = _run(server.ask_followup('deadbeef', '   ', _ctx()))
-    assert out == {'status': 'invalid_request', 'message': 'Message cannot be empty.'}
-    assert wire.requests == []
 
 
 # ── a completed poll with nothing to show ───────────────────────────

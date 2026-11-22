@@ -98,7 +98,7 @@ def test_the_submission_text_is_rendered_from_the_cases():
         assert case.expected_output in text, case.id
     assert text.count('### ') == 8
     # The tool names the reviewer reads are the ones the eval asserts.
-    assert '`assess_claim`' in text and '`verify_claim`' in text and '`ask_followup`' in text
+    assert '`assess_claim`' in text and '`verify_claim`' in text and '`check_citations`' in text
 
 
 def test_every_group_is_exercised():
