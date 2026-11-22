@@ -332,7 +332,8 @@ a.lz-link { display: inline-block; }
   gap: 6px;
 }
 @media (pointer: coarse) { .lz-bucket-toggle { min-height: 44px; } }
-.lz-bucket-toggle:hover { text-decoration: underline; }
+.lz-bucket-toggle:hover { color: var(--lz-ink); }
+.lz-rows > li.citecheck-row { border-bottom: 0; }
 
 /* Mini-trace in DeepResult */
 .audit-trace {

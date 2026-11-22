@@ -659,8 +659,9 @@ function SingleCard({ row, host, announce, registerCompleted, reportState }) {
 // confidence line and the reasoning the single card shows, plus the action — and
 // once its deep check has run, the deep verdict in place, with the full deep
 // check block behind one disclosure. One row is open at a time; the others stay usable.
-function Row({ index, row, host, open, hidden, onToggle, announce, registerCompleted, reportState, onVerdict, autoStart, completedResult }) {
-  const label = copy.rowLabel(index + 1);
+function Row({ index, displayNumber, row, host, open, hidden, onToggle, announce, registerCompleted, reportState, onVerdict, autoStart, completedResult }) {
+  const num = displayNumber != null ? displayNumber : index + 1;
+  const label = copy.rowLabel(num);
   const { state, start } = useDeepCheck({ row, host, announce, registerCompleted, label, checkKey: rowId(row), order: index, reportState });
   const [full, setFull] = useState(false);
   const panelId = `lz-row-${index}`;
@@ -719,7 +720,7 @@ function Row({ index, row, host, open, hidden, onToggle, announce, registerCompl
 
   return (
     <li id={`mcp-row-${index}`} hidden={hidden || undefined}>
-      <span class="num">{index + 1}</span>
+      <span class="num">{num}</span>
       <div>
         <button type="button" class="lz-row-head" ref={headRef} aria-expanded={open} aria-controls={panelId} onClick={onToggle}>
           <span class="row-claim">{row.claim}</span>
@@ -888,6 +889,24 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
     return map;
   }, [buckets]);
 
+  const itemNumbers = useMemo(() => {
+    const claimNums = new Map();
+    const citeNums = new Map();
+    if (normCitations.length === 0) return { claimNums, citeNums };
+    let seq = 0;
+    for (const key of ['bad', 'look', 'ok', 'none']) {
+      for (const i of buckets[key]) {
+        seq += 1;
+        claimNums.set(i, seq);
+      }
+      for (const c of citeBuckets[key]) {
+        seq += 1;
+        citeNums.set(c, seq);
+      }
+    }
+    return { claimNums, citeNums };
+  }, [buckets, citeBuckets, normCitations.length]);
+
   const hasAttention =
     buckets.bad.length > 0 ||
     buckets.look.length > 0 ||
@@ -978,6 +997,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
             <Row
               key={`${rowId(rows[i])}#${i}`}
               index={i}
+              displayNumber={itemNumbers.claimNums.get(i)}
               row={rows[i]}
               host={host}
               hidden={!allRows && displayRank.get(i) >= LIST_ROWS_SHOWN}
@@ -992,7 +1012,13 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
             />
           ))}
           {citeBuckets.bad.map((c, idx) => (
-            <CitationRow key={`cite-bad-${c.index ?? idx}`} citation={c} fallbackIndex={rows.length + idx} host={host} />
+            <CitationRow
+              key={`cite-bad-${c.index ?? idx}`}
+              citation={c}
+              displayNumber={itemNumbers.citeNums.get(c)}
+              fallbackIndex={rows.length + idx}
+              host={host}
+            />
           ))}
 
           {(buckets.look.length > 0 && buckets.look.some((i) => allRows || displayRank.get(i) < LIST_ROWS_SHOWN)) || citeBuckets.look.length > 0 ? (
@@ -1004,6 +1030,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
             <Row
               key={`${rowId(rows[i])}#${i}`}
               index={i}
+              displayNumber={itemNumbers.claimNums.get(i)}
               row={rows[i]}
               host={host}
               hidden={!allRows && displayRank.get(i) >= LIST_ROWS_SHOWN}
@@ -1018,7 +1045,13 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
             />
           ))}
           {citeBuckets.look.map((c, idx) => (
-            <CitationRow key={`cite-look-${c.index ?? idx}`} citation={c} fallbackIndex={rows.length + idx} host={host} />
+            <CitationRow
+              key={`cite-look-${c.index ?? idx}`}
+              citation={c}
+              displayNumber={itemNumbers.citeNums.get(c)}
+              fallbackIndex={rows.length + idx}
+              host={host}
+            />
           ))}
 
           {(buckets.ok.length > 0 && (allRows || buckets.ok.some((i) => displayRank.get(i) < LIST_ROWS_SHOWN))) || citeBuckets.ok.length > 0 ? (
@@ -1043,6 +1076,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
             <Row
               key={`${rowId(rows[i])}#${i}`}
               index={i}
+              displayNumber={itemNumbers.claimNums.get(i)}
               row={rows[i]}
               host={host}
               hidden={!showOk || (!allRows && displayRank.get(i) >= LIST_ROWS_SHOWN)}
@@ -1058,7 +1092,13 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
           ))}
           {showOk
             ? citeBuckets.ok.map((c, idx) => (
-                <CitationRow key={`cite-ok-${c.index ?? idx}`} citation={c} fallbackIndex={rows.length + idx} host={host} />
+                <CitationRow
+                  key={`cite-ok-${c.index ?? idx}`}
+                  citation={c}
+                  displayNumber={itemNumbers.citeNums.get(c)}
+                  fallbackIndex={rows.length + idx}
+                  host={host}
+                />
               ))
             : null}
 
@@ -1071,6 +1111,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
             <Row
               key={`${rowId(rows[i])}#${i}`}
               index={i}
+              displayNumber={itemNumbers.claimNums.get(i)}
               row={rows[i]}
               host={host}
               hidden={!allRows && displayRank.get(i) >= LIST_ROWS_SHOWN}
@@ -1085,7 +1126,13 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
             />
           ))}
           {citeBuckets.none.map((c, idx) => (
-            <CitationRow key={`cite-none-${c.index ?? idx}`} citation={c} fallbackIndex={rows.length + idx} host={host} />
+            <CitationRow
+              key={`cite-none-${c.index ?? idx}`}
+              citation={c}
+              displayNumber={itemNumbers.citeNums.get(c)}
+              fallbackIndex={rows.length + idx}
+              host={host}
+            />
           ))}
         </ol>
         {hidden > 0 ? (
@@ -1845,12 +1892,12 @@ function CitecheckCard({ payload: initialPayload, host }) {
         </div>
       ) : null}
 
-      {look.length > 0 ? (
+      { look.length > 0 ? (
         <div class="citecheck-section">
           <h2 class="citecheck-section-title">{copy.BUCKET_LOOK}</h2>
           <ol class="citecheck-list">
             {look.map((c, i) => (
-              <CitationRow key={c.index ?? i} citation={c} fallbackIndex={i} host={host} />
+              <CitationRow key={c.index ?? i} citation={c} fallbackIndex={bad.length + i} host={host} />
             ))}
           </ol>
         </div>
@@ -1861,7 +1908,7 @@ function CitecheckCard({ payload: initialPayload, host }) {
           <h2 class="citecheck-section-title">{copy.BUCKET_NONE}</h2>
           <ol class="citecheck-list">
             {unchecked.map((c, i) => (
-              <CitationRow key={c.index ?? i} citation={c} fallbackIndex={i} host={host} />
+              <CitationRow key={c.index ?? i} citation={c} fallbackIndex={bad.length + look.length + i} host={host} />
             ))}
           </ol>
         </div>
@@ -1885,7 +1932,7 @@ function CitecheckCard({ payload: initialPayload, host }) {
           {effectiveShowHoldsUp ? (
             <ol class="citecheck-list" style={{ marginTop: '8px' }}>
               {supports.map((c, i) => (
-                <CitationRow key={c.index ?? i} citation={c} fallbackIndex={i} host={host} />
+                <CitationRow key={c.index ?? i} citation={c} fallbackIndex={bad.length + look.length + unchecked.length + i} host={host} />
               ))}
             </ol>
           ) : null}
@@ -1895,7 +1942,7 @@ function CitecheckCard({ payload: initialPayload, host }) {
   );
 }
 
-function CitationRow({ citation, fallbackIndex, host }) {
+function CitationRow({ citation, displayNumber, fallbackIndex, host }) {
   const c = citation && typeof citation.isSupport === 'boolean' ? citation : normalizeCitation(citation);
   const isPartly = c.finding === 'partly_supported' || c.finding === 'partial_support';
   const badgeClass = c.isSupport
@@ -1908,7 +1955,14 @@ function CitationRow({ citation, fallbackIndex, host }) {
   const ref = c.ref;
   const href = isWebUrl(c.url) ? c.url : isWebUrl(ref) ? ref : '';
   const canOpen = host?.capabilities?.openLinks;
-  const rowNum = Number.isInteger(c.index) ? c.index + 1 : Number.isInteger(fallbackIndex) ? fallbackIndex + 1 : null;
+  const rowNum =
+    displayNumber != null
+      ? displayNumber
+      : Number.isInteger(c.index)
+        ? c.index + 1
+        : Number.isInteger(fallbackIndex)
+          ? fallbackIndex + 1
+          : null;
 
   return (
     <li class="citecheck-row">
