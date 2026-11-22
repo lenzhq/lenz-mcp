@@ -44,8 +44,6 @@ def default_answer(request: httpx.Request) -> httpx.Response:
         return answer(200, {'task_id': path.rsplit('/', 1)[-1], 'status': 'processing'})
     if path.endswith('/select'):
         return answer(202, {'status': 'queued', 'items': []})
-    if path.startswith('/ask/'):
-        return answer(200, {'role': 'expert', 'content': 'An answer.'})
     if path == '/citecheck':
         return answer(202, {'citecheck_id': 'ab12cd34', 'status': 'queued'})
     if path.startswith('/citechecks/'):

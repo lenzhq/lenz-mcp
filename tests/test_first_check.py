@@ -1399,7 +1399,6 @@ _TOOL_NAMES = (
     'get_verification',
     'list_verifications',
     'check_usage',
-    'ask_followup',
     'select_claims',
     'check_citations',
     'get_citation_check',
@@ -1476,7 +1475,6 @@ def test_every_result_string_in_the_server_keeps_the_split():
     for must in (
         'LOW_CONFIDENCE_NEXT_STEP',
         'STILL_RUNNING_AFTER_WAIT',
-        'FOLLOWUP_NOT_COMPLETED',
         'ASSESS_NOTES_NOTE',
         'QUICK_REWRITE_NOTE',
     ):

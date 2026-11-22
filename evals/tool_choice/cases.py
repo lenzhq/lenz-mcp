@@ -740,20 +740,19 @@ CASES: tuple[Case, ...] = (
         why='"with sources" is the consent the instructions treat as asking for a deep check.',
     ),
     Case(
-        id='submission-4-followup',
-        tools_line='`ask_followup` (with the verification_id from case 3).',
+        id='submission-4-citations',
+        tools_line='`check_citations` (with the draft text).',
         group='openai_submission',
-        scenario='Right after case 3, in the same chat.',
-        history=DEEP_DONE,
-        prompt='Ask Lenz: where did the horned helmet image come from?',
-        expect='ask_followup',
-        expect_args={'verification_id': _is('a1b2c3d4'), 'question': _says('horn')},
-        forbid=('verify_claim', 'assess_claim'),
+        scenario='A draft citing sources.',
+        prompt=f'Check with Lenz whether the sources in this draft support it: "{_CITED_DRAFT}"',
+        expect='check_citations',
+        expect_args={'text': _says('reports.example.org/report-2024'), 'pairs': _unset},
+        forbid=('assess_claim', 'verify_claim'),
         expected_output=(
-            "A short answer grounded in case 3's sources (19th-century Romanticism; costume design "
-            "for Wagner's operas is the usual attribution). No new check is started."
+            'A report per citation showing whether each source supports the statement citing it, with '
+            'the quote read from the source.'
         ),
-        why='A follow-up must reuse the verification, not pay for a second check of the same claim.',
+        why="The user asks whether the draft's sources support it, which triggers check_citations.",
     ),
     Case(
         id='submission-5-housekeeping',
@@ -1648,18 +1647,15 @@ CASES: tuple[Case, ...] = (
         ),
     ),
     Case(
-        id='house-followup-uses-id',
+        id='house-followup-no-call',
         group='housekeeping',
         history=DEEP_DONE,
-        prompt='Ask Lenz a follow-up: when did the horned image first appear, according to the sources?',
-        expect='ask_followup',
-        expect_args={'verification_id': _is('a1b2c3d4'), 'question': _says('horn')},
-        forbid=('verify_claim',),
+        prompt='When did the horned image first appear, according to the sources in that check?',
+        expect=NONE,
+        forbid=('verify_claim', 'assess_claim'),
         why=(
-            'The id is in the history; a new check would charge again for an answer we hold. The '
-            'question asks for more than the result in the history shows (its quotes name no date), '
-            'so answering from the history alone is not an option: a question those quotes do '
-            'answer is fairly answered without a call.'
+            'The check is already complete and its sources are in the history. Answering from the '
+            'conversation history requires no new check.'
         ),
     ),
     # ── Language ──────────────────────────────────────────────────────

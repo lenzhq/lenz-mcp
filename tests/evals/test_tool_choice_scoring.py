@@ -525,7 +525,7 @@ def test_the_histories_carry_the_connectors_own_guidance():
     high = next(t for t in cases.by_id('escalate-not-on-thanks').history if isinstance(t, cases.ToolExchange))
     assert 'recommend_verify' not in high.result['claims'][0]
 
-    deep = next(t for t in cases.by_id('house-followup-uses-id').history if isinstance(t, cases.ToolExchange))
+    deep = next(t for t in cases.by_id('house-followup-no-call').history if isinstance(t, cases.ToolExchange))
     assert deep.result['status'] == 'completed' and deep.result['verification_id'] == 'a1b2c3d4'
     assert deep.result['supersedes'] == server.SUPERSEDES_NOTE
 
@@ -599,10 +599,7 @@ def _ideal(manifest, history, prompt, *, model, with_instructions, distractor=Fa
         'named-list-uses-claims': {
             'claims': ['Portugal borders only Spain.', 'Lisbon is on the Tagus.', 'The Azores are in the Pacific.']
         },
-        'submission-4-followup': {
-            'verification_id': 'a1b2c3d4',
-            'question': 'Where did the horned helmet image come from?',
-        },
+        'submission-4-citations': {'text': cases._CITED_DRAFT},
         'escalate-on-yes': {'claim': '90% of startups fail in their first year.'},
         'citations-named-sources-draft': {'text': cases._CITED_DRAFT},
     }

@@ -380,7 +380,7 @@ def test_every_scope_a_tool_asks_for_exists():
 
 def test_the_connector_never_asks_for_more_than_its_tools_use():
     asked = frozenset().union(*exchange.TOOL_SCOPES.values())
-    assert asked == {'assess', 'verify', 'ask', 'usage:read', 'history:read'}
+    assert asked == {'assess', 'verify', 'usage:read', 'history:read'}
 
 
 def test_the_scope_table():
@@ -391,7 +391,6 @@ def test_the_scope_table():
         'get_verification': {'verify', 'history:read'},
         'check_usage': {'usage:read'},
         'list_verifications': {'history:read'},
-        'ask_followup': {'ask'},
         'check_citations': {'verify', 'history:read'},
         'get_citation_check': {'verify', 'history:read'},
         'start_verification_widget': {'verify', 'history:read'},
@@ -408,7 +407,6 @@ def test_the_scope_table():
         (lambda: server.get_verification('task-1', _ctx()), 'history:read verify'),
         (lambda: server.check_usage(_ctx()), 'usage:read'),
         (lambda: server.list_verifications(_ctx()), 'history:read'),
-        (lambda: server.ask_followup('pub12345', 'why?', _ctx()), 'ask'),
         (lambda: server.check_citations('A draft [a](https://example.gov/a).', _ctx()), 'history:read verify'),
         (lambda: server.get_citation_check('ab12cd34', _ctx()), 'history:read verify'),
     ],

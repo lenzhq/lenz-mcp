@@ -119,7 +119,6 @@ def test_all_tools_gate_on_missing_key(monkeypatch):
     assert _run(server.get_verification('tid', _ctx(auth=None)))['status'] == 'auth_required'
     assert _run(server.select_claims('tid', ['a'], _ctx(auth=None)))['status'] == 'auth_required'
     assert _run(server.check_usage(_ctx(auth=None)))['status'] == 'auth_required'
-    assert _run(server.ask_followup('vid', 'q', _ctx(auth=None)))['status'] == 'auth_required'
 
 
 # ── assess ───────────────────────────────────────────────────────────
@@ -1329,7 +1328,7 @@ def test_get_verification_completed_no_link(monkeypatch):
     # question to learn it
     assert isinstance(out['lenz_score'], int) and 1 <= out['lenz_score'] <= 10
     assert out['lenz_score'] == 9
-    # the caller's own claim id is surfaced so it can be passed to `ask`
+    # the caller's own claim id is surfaced
     assert out['verification_id'] == 'pub99999'
     # verify results are private by default → never linked
     assert 'lenz_url' not in out
@@ -1418,7 +1417,7 @@ def test_get_verification_widget_delegates_to_shared_mapper(monkeypatch):
 def test_submitted_message_names_the_waiting_call_for_every_client(monkeypatch):
     """Every client is told to call get_verification, which WAITS. The old ChatGPT
     variant said "do NOT poll" and the verdict never reached the model (it could
-    not summarise or chain into ask_followup). The card is
+    not summarise or answer follow-ups). The card is
     mentioned only when it is actually on for this request."""
     monkeypatch.setattr('lenz_mcp.server.request_is_chatgpt', lambda: False)
     claude = server._submitted_message(already_running=False)
@@ -1581,7 +1580,7 @@ def test_check_usage_passes_the_price_list_and_depth_prices_through(monkeypatch)
             data={
                 'plan': 'pro',
                 'credits': {'remaining': 4990, 'total': 5000},
-                'costs': {'verify': 10, 'assess': 1, 'ask': 1, 'extract': 0},
+                'costs': {'verify': 10, 'assess': 1, 'extract': 0},
                 'cost_options': {'verify': {'depth': {'standard': 10, 'low': 5}}},
             },
         ),
@@ -1592,80 +1591,15 @@ def test_check_usage_passes_the_price_list_and_depth_prices_through(monkeypatch)
     assert out['cost_options']['verify']['depth']['low'] == 5
 
 
-# ── ask ──────────────────────────────────────────────────────────────
-
-
-def test_ask_happy_path(monkeypatch):
-    _patch_api(
-        monkeypatch,
-        'ask',
-        ApiResponse(
-            status=200,
-            data={'role': 'expert', 'content': 'The NASA source is strongest.', 'created_at': '2026-07-04T00:00:00Z'},
-        ),
-    )
-    out = _run(server.ask_followup('pub99999', 'which source is strongest?', _ctx()))
-    assert out['status'] == 'ok'
-    assert out['answer'] == 'The NASA source is strongest.'
-
-
-def test_ask_quota_exhausted(monkeypatch):
-    # /ask quota rejection is a 402.
-    _patch_api(
-        monkeypatch,
-        'ask',
-        ApiResponse(status=402, data={'detail': 'No remaining ask credits.', 'code': 'no_credits'}),
-    )
-    out = _run(server.ask_followup('vid', 'q', _ctx()))
-    assert out['status'] == 'quota_exhausted'
-    assert out['manage_url'] == config.PLANS_URL
-
-
-def test_ask_not_completed_maps_to_distinct_status(monkeypatch):
-    # 400 = verification not completed; surfaced distinctly, not a generic error.
-    _patch_api(
-        monkeypatch,
-        'ask',
-        ApiResponse(status=400, data={'detail': 'Ask is only available for completed verifications.'}),
-    )
-    out = _run(server.ask_followup('vid', 'q', _ctx()))
-    assert out['status'] == 'not_completed'
-    assert 'get_verification' in out['message']
-
-
-def test_ask_transport_error_warns_against_blind_retry(monkeypatch):
-    _patch_api(monkeypatch, 'ask', ApiResponse(status=0, data={}))
-    out = _run(server.ask_followup('vid', 'q', _ctx()))
-    assert out['status'] == 'error'
-    assert 'charged' in out['message']  # non-idempotent: don't blindly resend
-
-
-def test_client_ask_targets_ask_endpoint(monkeypatch):
-    wire = api_wire.install(monkeypatch)
-    resp = _run(client.ask('Bearer k', verification_id='V1', message='hi', language='es'))
-    assert resp.ok and resp.data['content'] == 'An answer.'
-    assert wire.last.method == 'POST'
-    assert wire.last.url.path == '/api/v1/ask/V1'
-    assert wire.body() == {'message': 'hi', 'language': 'es'}
-    timeout = client.config.ASK_TIMEOUT
-    assert wire.last.extensions['timeout'] == {'connect': timeout, 'read': timeout, 'write': timeout, 'pool': timeout}
-    # Conversational append — no dedupe key, not even the SDK's random one.
-    assert 'idempotency-key' not in wire.last.headers
-
-
 def test_sync_tool_read_timeouts_clear_the_observed_backend_ceiling():
     """A read timeout at or below what the backend actually takes turns a slow-
     but-healthy request into a false "Couldn't reach the Lenz API" for the user
     — the API would finish the work, and we would have stopped listening.
 
-    Both ceilings leave real headroom above the slowest expected responses of
-    /assess and /ask, not a value that merely matches them.
+    Leaves real headroom above the slowest expected responses of /assess.
     """
     assert config.ASSESS_TIMEOUT >= 50, 'the assess timeout lost its headroom'
-    assert config.ASK_TIMEOUT >= 45, 'the ask timeout lost its headroom'
-    # Both must stay well under any request timeout in front of the server,
-    # so a stuck upstream still returns a clean tool error.
-    assert max(config.ASSESS_TIMEOUT, config.ASK_TIMEOUT) <= 120
+    assert config.ASSESS_TIMEOUT <= 120
 
 
 # ── outbound HTTP headers ────────────────────────────────────────────
@@ -1949,7 +1883,6 @@ def test_protocol_all_tools_registered():
         'start_verification_widget',
         'select_claims_widget',
         'check_usage',
-        'ask_followup',
         'list_verifications',
         'check_citations',
         'get_citation_check',
@@ -1959,11 +1892,9 @@ def test_protocol_all_tools_registered():
 # Every tool's four hints, spelled out: (readOnly, destructive, idempotent, openWorld).
 # A tool is read-only only if it changes nothing in the user's Lenz account, so the
 # lookups below are the only True entries: assess_claim and the deep checks debit
-# credits, and ask_followup appends to the check's follow-up thread and debits a
-# credit. Idempotent means a repeat has no extra effect, with no time limit:
+# credits. Idempotent means a repeat has no extra effect, with no time limit:
 # assess_claim, verify_claim and the card's start tool are replayed for 24 hours
-# and then start a new charged check, and ask_followup sends no Idempotency-Key, so
-# none of them is idempotent; the select tools are (a resolved selection stays resolved).
+# and then start a new charged check; the select tools are (a resolved selection stays resolved).
 # Open world: the tool reaches the public web, not just stored check evidence or
 # the user's own account data.
 _EXPECTED_HINTS = {
@@ -1976,7 +1907,6 @@ _EXPECTED_HINTS = {
     'select_claims_widget': (False, False, True, True),
     'check_usage': (True, False, True, False),
     'list_verifications': (True, False, True, False),
-    'ask_followup': (False, False, False, False),
     # A citation check debits a credit for every citation it checks and reads the cited
     # sources on the public web; the same input is replayed for a day and then starts a
     # new charged check, so it is not idempotent. Reading one back changes nothing.
@@ -2043,7 +1973,7 @@ def test_protocol_language_is_a_closed_enum_on_every_tool_that_takes_it():
     takes_language = {n for n, t in tools.items() if 'language' in (t.input_schema or {}).get('properties', {})}
     # `start_verification_widget` is the card's own tool (hidden from the model):
     # it passes the quick check's language code back, so it takes the same enum.
-    assert takes_language == {'assess_claim', 'verify_claim', 'ask_followup', 'start_verification_widget'}
+    assert takes_language == {'assess_claim', 'verify_claim', 'start_verification_widget'}
 
     for name in sorted(takes_language):
         schema = tools[name].input_schema
@@ -2051,22 +1981,6 @@ def test_protocol_language_is_a_closed_enum_on_every_tool_that_takes_it():
         assert language['enum'] == ['', *SUPPORTED_LANGUAGES], name
         assert language['default'] == '', name
         assert 'language' not in schema.get('required', []), name
-
-
-def test_protocol_ask_followup_question_declares_the_api_length_cap():
-    """The `question` bound is advertised in the schema, and it is the SAME
-    number the API enforces.
-
-    The connector mirrors the API's cap (`config.ASK_MESSAGE_MAX_CHARS`, which
-    must equal the limit the API enforces), so this fails only if someone
-    reintroduces a literal in the schema. Undeclared, the bound costs a whole
-    tool call to discover: an over-long question would come back as a 422.
-    """
-    tools = {t.name: t for t in _run(server.mcp.list_tools())}
-    question = tools['ask_followup'].input_schema['properties']['question']
-
-    assert question['maxLength'] == config.ASK_MESSAGE_MAX_CHARS
-    assert str(config.ASK_MESSAGE_MAX_CHARS) in question['description']
 
 
 def test_protocol_unsupported_language_never_reaches_the_api(monkeypatch):
@@ -2099,7 +2013,7 @@ def test_protocol_language_description_does_not_invite_the_clients_locale():
     that nobody asked for, silently and at no error.
     """
     tools = {t.name: t for t in _run(server.mcp.list_tools())}
-    for name in ('assess_claim', 'verify_claim', 'ask_followup'):
+    for name in ('assess_claim', 'verify_claim'):
         description = tools[name].input_schema['properties']['language']['description']
         assert 'ISO 639-1' not in description, name
         assert 'unset' in description.lower(), name
@@ -2347,7 +2261,6 @@ def test_all_tools_gate_on_an_unsendable_key():
     assert _run(server.get_verification('tid', _ctx(auth=bad)))['status'] == 'auth_required'
     assert _run(server.select_claims('tid', ['a'], _ctx(auth=bad)))['status'] == 'auth_required'
     assert _run(server.check_usage(_ctx(auth=bad)))['status'] == 'auth_required'
-    assert _run(server.ask_followup('vid', 'q', _ctx(auth=bad)))['status'] == 'auth_required'
     assert _run(server.assess_claim('x', _ctx(auth=bad)))['status'] == 'auth_required'
 
 
@@ -2358,14 +2271,12 @@ def test_ids_that_cannot_ride_a_url_path_are_rejected(monkeypatch, ident):
     None of them reaches the API."""
     monkeypatch.setattr(client, 'verify_status', _unreachable)
     monkeypatch.setattr(client, 'select', _unreachable)
-    monkeypatch.setattr(client, 'ask', _unreachable)
     monkeypatch.setattr(client, 'verification_detail', _unreachable)
 
     for out in (
         _run(server.get_verification(ident, _ctx())),
         _run(server.get_verification_widget(ident, _ctx())),
         _run(server.select_claims(ident, ['a'], _ctx())),
-        _run(server.ask_followup(ident, 'q', _ctx())),
     ):
         assert out['status'] == 'invalid_request', out
 
