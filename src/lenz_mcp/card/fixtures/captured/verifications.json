@@ -8,13 +8,6 @@
       "claim": "Annual inspections report no structural faults in the main trusses.",
       "visibility": "public",
       "depth": "standard",
-      "domain": "Health",
-      "entities": [
-        {
-          "name": "Marrow Creek Footbridge",
-          "qid": null
-        }
-      ],
       "presumed_intent": "Check what is recorded about the Marrow Creek footbridge.",
       "verdict": "True",
       "confidence": "high",
@@ -240,21 +233,6 @@
       "claim": "It now counts about ninety member farms across three valleys.",
       "visibility": "public",
       "depth": "standard",
-      "domain": "Health",
-      "entities": [
-        {
-          "name": "Harlow Valley Orchard Cooperative",
-          "qid": null
-        },
-        {
-          "name": "Harlow Valley",
-          "qid": null
-        },
-        {
-          "name": "Local records office",
-          "qid": null
-        }
-      ],
       "presumed_intent": "Check what is recorded about the Harlow Valley orchard cooperative.",
       "verdict": "False",
       "confidence": "high",
@@ -515,17 +493,6 @@
       "claim": "Lake Orvell covers about eleven square kilometres and is fed by four streams.",
       "visibility": "public",
       "depth": "standard",
-      "domain": "General",
-      "entities": [
-        {
-          "name": "Lake Orvell",
-          "qid": null
-        },
-        {
-          "name": "the Orvell uplands",
-          "qid": null
-        }
-      ],
       "presumed_intent": "Check what is recorded about Lake Orvell.",
       "verdict": "True",
       "confidence": "high",

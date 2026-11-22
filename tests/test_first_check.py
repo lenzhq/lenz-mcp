@@ -154,8 +154,6 @@ _RESULT = {
     'claim': 'GDPR requires consent for any processing of personal data.',
     'visibility': 'private',
     'depth': 'standard',
-    'domain': 'law',
-    'entities': [{'name': 'GDPR', 'qid': 'Q1172506'}],
     'presumed_intent': '',
     'verdict': 'False',
     'confidence': 'high',
@@ -201,8 +199,6 @@ _LISTING = {
         {
             'verification_id': 'a1b2c3d4',
             'claim': 'GDPR requires consent for any processing of personal data.',
-            'domain': 'law',
-            'entities': [{'name': 'GDPR', 'qid': 'Q1172506'}],
             'verdict': 'False',
             'confidence': 'high',
             'lenz_score': 2,

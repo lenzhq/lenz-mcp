@@ -434,12 +434,10 @@
    "reason": "multi_claim",
    "claims": [
     {
-     "claim": "The Earth is round.",
-     "domain": "Science"
+     "claim": "The Earth is round."
     },
     {
-     "claim": "Water boils at 100C at sea level.",
-     "domain": "Science"
+     "claim": "Water boils at 100C at sea level."
     }
    ],
    "hint": "The text holds several distinct claims. Send the ones to check to POST /verify/{task_id}/select."
@@ -456,13 +454,6 @@
     "claim": "The Earth is round.",
     "visibility": "private",
     "depth": "standard",
-    "domain": "Science",
-    "entities": [
-     {
-      "name": "Earth",
-      "qid": null
-     }
-    ],
     "presumed_intent": "Verify a basic scientific fact",
     "verdict": "True",
     "confidence": "high",
@@ -924,8 +915,6 @@
     {
      "verification_id": "68ca4aaf",
      "claim": "The Earth is round.",
-     "domain": "Science",
-     "entities": [],
      "verdict": "True",
      "confidence": "high",
      "lenz_score": 9,
@@ -939,8 +928,6 @@
     {
      "verification_id": "7c83247c",
      "claim": "The Earth is round.",
-     "domain": "Science",
-     "entities": [],
      "verdict": "True",
      "confidence": "high",
      "lenz_score": 9,
@@ -1063,8 +1050,7 @@
    "claims": [
     {
      "text": null,
-     "claim": "X is Y.",
-     "domain": "Science"
+     "claim": "X is Y."
     }
    ],
    "hint": "h"

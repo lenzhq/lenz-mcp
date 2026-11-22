@@ -80,7 +80,7 @@ _MULTI_CLAIM = ApiResponse(
     data={
         'status': 'needs_input',
         'reason': 'multi_claim',
-        'claims': [{'claim': 'claim A', 'domain': 'science'}, {'claim': 'claim B', 'domain': ''}],
+        'claims': [{'claim': 'claim A'}, {'claim': 'claim B'}],
         'hint': 'Pick one.',
     },
 )
