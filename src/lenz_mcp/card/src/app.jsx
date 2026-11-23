@@ -94,7 +94,8 @@ const PAGES_SHOWN = 5;
 
 function Pages({ pages, host, id }) {
   const [all, setAll] = useState(false);
-  const list = all ? pages : pages.slice(0, PAGES_SHOWN);
+  const hidden = pages.length > PAGES_SHOWN + 1 ? pages.length - PAGES_SHOWN : 0;
+  const list = all || hidden === 0 ? pages : pages.slice(0, PAGES_SHOWN);
   const canOpen = host.capabilities.openLinks;
   return (
     <details class="lz-pages">
@@ -120,7 +121,7 @@ function Pages({ pages, host, id }) {
           </li>
         ))}
       </ul>
-      {pages.length > PAGES_SHOWN && !all ? (
+      {hidden > 0 && !all ? (
         <button type="button" class="lz-link" aria-controls={id} onClick={() => setAll(true)}>
           {copy.showAllPages(pages.length)}
         </button>
@@ -272,8 +273,8 @@ function Stamp({ result }) {
 function Caveats({ warnings }) {
   const [open, setOpen] = useState(false);
   if (!warnings.length) return null;
-  const shown = open ? warnings : warnings.slice(0, CAVEATS_SHOWN);
-  const hidden = warnings.length - CAVEATS_SHOWN;
+  const hidden = warnings.length > CAVEATS_SHOWN + 1 ? warnings.length - CAVEATS_SHOWN : 0;
+  const shown = open || hidden === 0 ? warnings : warnings.slice(0, CAVEATS_SHOWN);
   return (
     <div class="lz-region">
       <h2 class="lz-label">{copy.CAVEATS}</h2>
@@ -298,8 +299,8 @@ const SOURCES_SHOWN = 3;
 function Sources({ result, host }) {
   const [open, setOpen] = useState(false);
   const all = result.sources;
-  const list = open ? all : all.slice(0, SOURCES_SHOWN);
-  const hidden = all.length - SOURCES_SHOWN;
+  const hidden = all.length > SOURCES_SHOWN + 1 ? all.length - SOURCES_SHOWN : 0;
+  const list = open || hidden === 0 ? all : all.slice(0, SOURCES_SHOWN);
   // No Public Record already says nothing public records the claim: no "could not be read" line.
   if (!all.length && verdictKey(result.verdict) === 'no-record') return null;
   if (!all.length) {
@@ -893,8 +894,10 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
   }, [buckets, showOk]);
   // "Show N more" counts the rows a press reveals: those in the cap order past
   // the cap. A row with no cap position (folded Checks out) is never counted.
-  const hidden = capOrder(buckets, showOk).length - LIST_ROWS_SHOWN;
-  const pastCap = (i) => !allRows && displayRank.get(i) >= LIST_ROWS_SHOWN;
+  const capCount = capOrder(buckets, showOk).length;
+  const hidden = capCount > LIST_ROWS_SHOWN + 1 ? capCount - LIST_ROWS_SHOWN : 0;
+  const capped = !allRows && hidden > 0;
+  const pastCap = (i) => capped && displayRank.get(i) >= LIST_ROWS_SHOWN;
 
   const itemNumbers = useMemo(() => {
     const claimNums = new Map();
@@ -952,7 +955,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
                   const after = bucketRows(rows, verdicts, confidences, openKey(i));
                   const okOpen = showOk || after.ok.includes(i);
                   if (!showOk && okOpen) setShowOk(true);
-                  if (!allRows && capOrder(after, okOpen).indexOf(i) >= LIST_ROWS_SHOWN) setAllRows(true);
+                  if (!allRows && capOrder(after, okOpen).length > LIST_ROWS_SHOWN + 1 && capOrder(after, okOpen).indexOf(i) >= LIST_ROWS_SHOWN) setAllRows(true);
                   setOpenId(openKey(i));
                   setTimeout(() => {
                     const el = globalThis.document?.getElementById(`mcp-row-${i}`);
@@ -975,7 +978,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
 
       <div class="lz-region lz-rows-region">
         <ol class="lz-list lz-rows">
-          {(buckets.bad.length > 0 && buckets.bad.some((i) => allRows || displayRank.get(i) < LIST_ROWS_SHOWN)) || citeBuckets.bad.length > 0 ? (
+          {(buckets.bad.length > 0 && buckets.bad.some((i) => !pastCap(i))) || citeBuckets.bad.length > 0 ? (
             <li key="header-bad" class="lz-bucket-head">
               {copy.BUCKET_BAD}
             </li>
@@ -1025,7 +1028,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
             />
           ))}
 
-          {(buckets.look.length > 0 && buckets.look.some((i) => allRows || displayRank.get(i) < LIST_ROWS_SHOWN)) || citeBuckets.look.length > 0 ? (
+          {(buckets.look.length > 0 && buckets.look.some((i) => !pastCap(i))) || citeBuckets.look.length > 0 ? (
             <li key="header-look" class="lz-bucket-head">
               {copy.BUCKET_LOOK}
             </li>
@@ -1106,7 +1109,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
               ))
             : null}
 
-          {(buckets.none.length > 0 && buckets.none.some((i) => allRows || displayRank.get(i) < LIST_ROWS_SHOWN)) || citeBuckets.none.length > 0 ? (
+          {(buckets.none.length > 0 && buckets.none.some((i) => !pastCap(i))) || citeBuckets.none.length > 0 ? (
             <li key="header-none" class="lz-bucket-head">
               {copy.BUCKET_NONE}
             </li>
@@ -1265,7 +1268,7 @@ function Picker({ route, host, announce, registerCompleted, reportState }) {
 
   const locked = pending.length > 0;
   const atCap = chosen.length >= PICKER_MAX_SELECTED;
-  const hidden = route.claims.length - PICKER_CLAIMS_SHOWN;
+  const hidden = route.claims.length > PICKER_CLAIMS_SHOWN + 1 ? route.claims.length - PICKER_CLAIMS_SHOWN : 0;
   const toggle = (claim) => {
     if (locked) return;
     setChosen((prev) => (prev.includes(claim) ? prev.filter((c) => c !== claim) : atCap ? prev : [...prev, claim]));
@@ -1308,7 +1311,7 @@ function Picker({ route, host, announce, registerCompleted, reportState }) {
           {route.claims.map((claim, i) => {
             const on = chosen.includes(claim);
             return (
-              <li key={claim} hidden={!all && i >= PICKER_CLAIMS_SHOWN}>
+              <li key={claim} hidden={!all && hidden > 0 && i >= PICKER_CLAIMS_SHOWN}>
                 <label class="lz-pick">
                   <input
                     type="checkbox"
