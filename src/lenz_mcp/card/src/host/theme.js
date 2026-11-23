@@ -6,8 +6,10 @@ export const THEME_SLOTS = ['--lz-bg', '--lz-ink', '--lz-meta', '--lz-hair'];
 
 // Claude's MCP Apps variables (measured, probe run 1-2, 2026-09-17). They are
 // `light-dark()` values, which is why the root's color-scheme follows the theme.
+// Ground (`--lz-bg`) is intentionally NOT mapped to `--color-background-primary`:
+// when a host states its theme, `--lz-bg` stays `transparent` so the card sits
+// directly on the host's chat canvas instead of painting a contrasting box.
 const MCP_APPS_SLOTS = {
-  '--lz-bg': '--color-background-primary',
   '--lz-ink': '--color-text-primary',
   '--lz-meta': '--color-text-secondary',
   '--lz-hair': '--color-border-tertiary',
