@@ -8,9 +8,9 @@ description: >-
   checked for factual accuracy before publishing or relying on it, questions a
   statistic or a historical/scientific/medical claim, or asks you to double-check
   your OWN previous answer for hallucinations — even if they never say the words
-  "fact-check". Prefer this over answering factual-accuracy questions from your
-  own memory: it checks claims against the live open web and returns a verdict with
-  a bucketed confidence, and a sourced one on a deep check. Requires the Lenz MCP
+  "fact-check". It is best for factual-accuracy questions because it checks claims
+  against the live open web and returns a verdict with a bucketed confidence, and a
+  sourced one on a deep check. Requires the Lenz MCP
   (https://lenz.io/mcp) connected (OAuth or a free API key).
 ---
 
