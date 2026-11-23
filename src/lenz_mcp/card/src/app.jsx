@@ -897,7 +897,10 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
     buckets.look.length > 0 ||
     citeBuckets.bad.length > 0 ||
     citeBuckets.look.length > 0;
-  const [showOk, setShowOk] = useState(() => !hasAttention || rows.length <= LIST_ROWS_SHOWN);
+  // Checks out folds behind anything to fix or look at, however short the list
+  // (the GDocs add-on and the Chrome extension fold the same way); a clean
+  // result shows what was checked.
+  const [showOk, setShowOk] = useState(() => !hasAttention);
 
   const uncheckedBad = buckets.bad.filter(
     (i) => !verdicts[rowKey(rows[i], i)] && !verdicts[rowId(rows[i])] && !rows[i].error && !batchRun[i]
