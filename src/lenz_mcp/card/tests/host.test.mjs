@@ -958,6 +958,85 @@ test('display-order pagination keeps flagged claims visible even past index 10',
   await page.context().close();
 });
 
+// "Show N more" counts exactly the rows a press will reveal: the 8-row cap
+// applies to rows that are not folded away, so a folded Checks out group has no
+// cap position and the link never promises rows the fold keeps hidden.
+const visibleRows = (frame) => frame.locator('.lz-rows > li:not([hidden]):has(.lz-row-head)');
+const openChecksOut = async (frame, count) => {
+  const toggle = frame.getByRole('button', { name: new RegExp(`Checks out \\(${count}\\)`) });
+  await toggle.waitFor();
+  await toggle.click();
+};
+
+test('Show N more: 2 False + 10 True shows no link until Checks out is open, then counts what a press reveals', async () => {
+  const { page, errors } = await harness.page();
+  const claims = [
+    ...Array.from({ length: 2 }, (_, i) => ({ claim: `Wrong claim ${i + 1}`, verdict: 'False', confidence: 'high' })),
+    ...Array.from({ length: 10 }, (_, i) => ({ claim: `Right claim ${i + 1}`, verdict: 'True', confidence: 'high' })),
+  ];
+  await page.evaluate((c) => window.startCard('cap-12', c), config({ toolResult: { status: 'ok', claims }, tools: {} }));
+  const frame = await frameOf(page, 'cap-12');
+  await frame.locator('.lz-rows').waitFor();
+
+  assert.equal(await visibleRows(frame).count(), 2);
+  assert.equal(await frame.locator('.lz-row-toggle').count(), 0, 'nothing a press could reveal, so no link');
+
+  await openChecksOut(frame, 10);
+  assert.equal(await visibleRows(frame).count(), 8);
+  const toggle = frame.locator('.lz-row-toggle');
+  assert.equal(await toggle.textContent(), 'Show 4 more');
+  await toggle.click();
+  assert.equal(await visibleRows(frame).count(), 12);
+  assert.equal(await toggle.textContent(), 'Show less');
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('Show N more: the 20-claim fixture shows 6 rows and no link, 8 and "Show 12 more" once Checks out is open', async () => {
+  const { page, errors } = await harness.page();
+  await page.evaluate((c) => window.startCard('cap-20', c), config({ toolResult: FIXTURES.quick['list-20'].toolResult, tools: {} }));
+  const frame = await frameOf(page, 'cap-20');
+  await frame.locator('.lz-rows').waitFor();
+
+  assert.equal(await visibleRows(frame).count(), 6);
+  assert.equal(await frame.locator('.lz-row-toggle').count(), 0);
+
+  await openChecksOut(frame, 14);
+  assert.equal(await visibleRows(frame).count(), 8);
+  const toggle = frame.locator('.lz-row-toggle');
+  assert.equal(await toggle.textContent(), 'Show 12 more');
+  await toggle.click();
+  assert.equal(await visibleRows(frame).count(), 20);
+  assert.equal(await toggle.textContent(), 'Show less');
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('Show N more: a strip square past the cap inside the folded Checks out group opens that row and shows it', async () => {
+  const { page, errors } = await harness.page();
+  const claims = [
+    ...Array.from({ length: 2 }, (_, i) => ({ claim: `Wrong claim ${i + 1}`, verdict: 'False', confidence: 'high' })),
+    ...Array.from({ length: 10 }, (_, i) => ({ claim: `Right claim ${i + 1}`, verdict: 'True', confidence: 'high' })),
+  ];
+  await page.evaluate((c) => window.startCard('cap-strip', c), config({ toolResult: { status: 'ok', claims }, tools: {} }));
+  const frame = await frameOf(page, 'cap-strip');
+  await frame.locator('.lz-rows').waitFor();
+
+  // The last claim sits at position 11 once the group is open: both folded and past the cap.
+  await frame.locator('.claim-strip .strip-cell').nth(11).click();
+  const row = frame.locator('#mcp-row-11');
+  await row.waitFor();
+  assert.equal(await row.getAttribute('hidden'), null);
+  assert.equal(await frame.locator('#mcp-row-11 .lz-row-head').getAttribute('aria-expanded'), 'true');
+  assert.equal(await visibleRows(frame).count(), 12);
+  assert.equal(await frame.getByRole('button', { name: /Checks out \(10\)/ }).getAttribute('aria-expanded'), 'true');
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
 test('CitecheckCard renders 4 severity buckets and overview strip when multiple citations', async () => {
   const { page, errors } = await harness.page();
   const citePayload = {

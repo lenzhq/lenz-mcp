@@ -776,6 +776,36 @@ const openKey = (i) => `row-${i}`;
 const rowKey = (row, i) => `${i}\u0000${rowId(row)}`;
 const SEV = { bad: 0, look: 1, ok: 2, none: 3 };
 
+// The order the 8-row cap counts in: To fix, Closer look, Checks out only while
+// that group is open, then Unchecked. A folded Checks out group has no cap
+// position; the fold alone hides it.
+const capOrder = (b, okOpen) => [...b.bad, ...b.look, ...(okOpen ? b.ok : []), ...b.none];
+
+// Asymmetric bucket promotion: severity upgrades move immediately,
+// severity downgrades stay pinned while the card is open so an open card
+// never vanishes into collapsed Holds up.
+function bucketRows(rows, verdicts, confidences, openId) {
+  const b = { bad: [], look: [], ok: [], none: [] };
+  rows.forEach((row, i) => {
+    const v = verdicts[rowKey(row, i)] || verdicts[rowId(row)] || row.verdict;
+    const c = confidences[rowKey(row, i)] || confidences[rowId(row)] || row.confidence;
+    const initialBucket = bucketOf(row.verdict, row.confidence, row.error);
+    const liveBucket = bucketOf(v, c, row.error);
+    if (SEV[liveBucket] < SEV[initialBucket]) {
+      b[liveBucket].push(i);
+    } else if (SEV[liveBucket] > SEV[initialBucket]) {
+      if (openId === openKey(i)) {
+        b[initialBucket].push(i);
+      } else {
+        b[liveBucket].push(i);
+      }
+    } else {
+      b[liveBucket].push(i);
+    }
+  });
+  return b;
+}
+
 function ListCard({ rows, citations = [], host, announce, registerCompleted, reportState }) {
   const [allRows, setAllRows] = useState(false);
   const [openId, setOpenId] = useState('');
@@ -816,7 +846,6 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
     }
   };
 
-  const hidden = rows.length - LIST_ROWS_SHOWN;
   const counted = rows.map((row, i) => {
     const deep = verdicts[rowKey(row, i)] || verdicts[rowId(row)];
     return deep ? { ...row, verdict: deep, error: '' } : row;
@@ -840,39 +869,32 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
       ? copy.itemsHeading(rows.length + normCitations.length)
       : copy.listHeading(rows.length);
 
-  // Asymmetric bucket promotion: severity upgrades move immediately,
-  // severity downgrades stay pinned while the card is open so an open card
-  // never vanishes into collapsed Holds up.
-  const buckets = useMemo(() => {
-    const b = { bad: [], look: [], ok: [], none: [] };
-    rows.forEach((row, i) => {
-      const v = verdicts[rowKey(row, i)] || verdicts[rowId(row)] || row.verdict;
-      const c = confidences[rowKey(row, i)] || confidences[rowId(row)] || row.confidence;
-      const initialBucket = bucketOf(row.verdict, row.confidence, row.error);
-      const liveBucket = bucketOf(v, c, row.error);
-      if (SEV[liveBucket] < SEV[initialBucket]) {
-        b[liveBucket].push(i);
-      } else if (SEV[liveBucket] > SEV[initialBucket]) {
-        if (openId === openKey(i)) {
-          b[initialBucket].push(i);
-        } else {
-          b[liveBucket].push(i);
-        }
-      } else {
-        b[liveBucket].push(i);
-      }
-    });
-    return b;
-  }, [rows, verdicts, confidences, openId]);
+  const buckets = useMemo(
+    () => bucketRows(rows, verdicts, confidences, openId),
+    [rows, verdicts, confidences, openId]
+  );
+
+  const hasAttention =
+    buckets.bad.length > 0 ||
+    buckets.look.length > 0 ||
+    citeBuckets.bad.length > 0 ||
+    citeBuckets.look.length > 0;
+  // Checks out folds behind anything to fix or look at, however short the list
+  // (the GDocs add-on and the Chrome extension fold the same way); a clean
+  // result shows what was checked.
+  const [showOk, setShowOk] = useState(() => !hasAttention);
 
   const displayRank = useMemo(() => {
     const map = new Map();
-    const ordered = [...buckets.bad, ...buckets.look, ...buckets.ok, ...buckets.none];
-    ordered.forEach((idx, rank) => {
+    capOrder(buckets, showOk).forEach((idx, rank) => {
       map.set(idx, rank);
     });
     return map;
-  }, [buckets]);
+  }, [buckets, showOk]);
+  // "Show N more" counts the rows a press reveals: those in the cap order past
+  // the cap. A row with no cap position (folded Checks out) is never counted.
+  const hidden = capOrder(buckets, showOk).length - LIST_ROWS_SHOWN;
+  const pastCap = (i) => !allRows && displayRank.get(i) >= LIST_ROWS_SHOWN;
 
   const itemNumbers = useMemo(() => {
     const claimNums = new Map();
@@ -891,16 +913,6 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
     }
     return { claimNums, citeNums };
   }, [buckets, citeBuckets, normCitations.length]);
-
-  const hasAttention =
-    buckets.bad.length > 0 ||
-    buckets.look.length > 0 ||
-    citeBuckets.bad.length > 0 ||
-    citeBuckets.look.length > 0;
-  // Checks out folds behind anything to fix or look at, however short the list
-  // (the GDocs add-on and the Chrome extension fold the same way); a clean
-  // result shows what was checked.
-  const [showOk, setShowOk] = useState(() => !hasAttention);
 
   const uncheckedBad = buckets.bad.filter(
     (i) => !verdicts[rowKey(rows[i], i)] && !verdicts[rowId(rows[i])] && !rows[i].error && !batchRun[i]
@@ -935,8 +947,12 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
                 title={`Claim ${i + 1} (${vLabel}): ${r.claim}`}
                 aria-label={`Claim ${i + 1}: ${vLabel}`}
                 onClick={() => {
-                  if (!allRows && displayRank.get(i) >= LIST_ROWS_SHOWN) setAllRows(true);
-                  if (buckets.ok.includes(i) && !showOk) setShowOk(true);
+                  // Judge against the order as it will be after this click: the
+                  // row open (it may leave a pinned bucket) and its group open.
+                  const after = bucketRows(rows, verdicts, confidences, openKey(i));
+                  const okOpen = showOk || after.ok.includes(i);
+                  if (!showOk && okOpen) setShowOk(true);
+                  if (!allRows && capOrder(after, okOpen).indexOf(i) >= LIST_ROWS_SHOWN) setAllRows(true);
                   setOpenId(openKey(i));
                   setTimeout(() => {
                     const el = globalThis.document?.getElementById(`mcp-row-${i}`);
@@ -988,7 +1004,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
               displayNumber={itemNumbers.claimNums.get(i)}
               row={rows[i]}
               host={host}
-              hidden={!allRows && displayRank.get(i) >= LIST_ROWS_SHOWN}
+              hidden={pastCap(i)}
               open={openId === openKey(i)}
               onToggle={() => setOpenId(openId === openKey(i) ? '' : openKey(i))}
               announce={announce}
@@ -1021,7 +1037,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
               displayNumber={itemNumbers.claimNums.get(i)}
               row={rows[i]}
               host={host}
-              hidden={!allRows && displayRank.get(i) >= LIST_ROWS_SHOWN}
+              hidden={pastCap(i)}
               open={openId === openKey(i)}
               onToggle={() => setOpenId(openId === openKey(i) ? '' : openKey(i))}
               announce={announce}
@@ -1042,7 +1058,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
             />
           ))}
 
-          {(buckets.ok.length > 0 && (allRows || buckets.ok.some((i) => displayRank.get(i) < LIST_ROWS_SHOWN))) || citeBuckets.ok.length > 0 ? (
+          {buckets.ok.length > 0 || citeBuckets.ok.length > 0 ? (
             <li key="header-ok" class="lz-bucket-head">
               <button
                 type="button"
@@ -1067,7 +1083,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
               displayNumber={itemNumbers.claimNums.get(i)}
               row={rows[i]}
               host={host}
-              hidden={!showOk || (!allRows && displayRank.get(i) >= LIST_ROWS_SHOWN)}
+              hidden={!showOk || pastCap(i)}
               open={openId === openKey(i)}
               onToggle={() => setOpenId(openId === openKey(i) ? '' : openKey(i))}
               announce={announce}
@@ -1102,7 +1118,7 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
               displayNumber={itemNumbers.claimNums.get(i)}
               row={rows[i]}
               host={host}
-              hidden={!allRows && displayRank.get(i) >= LIST_ROWS_SHOWN}
+              hidden={pastCap(i)}
               open={openId === openKey(i)}
               onToggle={() => setOpenId(openId === openKey(i) ? '' : openKey(i))}
               announce={announce}
