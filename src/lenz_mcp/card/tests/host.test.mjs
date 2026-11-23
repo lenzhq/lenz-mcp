@@ -1024,6 +1024,14 @@ test('combined claims + citations payload renders unified items heading, tally a
   assert.ok(await frame.locator('.lz-bucket-head', { hasText: 'To fix' }).isVisible());
   assert.ok(await frame.locator('.lz-bucket-head', { hasText: 'Closer look' }).isVisible());
 
+  // Checks out starts folded behind its count, even on a short list.
+  const okToggle = frame.getByRole('button', { name: /Checks out \(1\)/ });
+  assert.equal(await okToggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(await frame.getByText('Claim ok').isVisible(), false);
+  await okToggle.click();
+  assert.equal(await okToggle.getAttribute('aria-expanded'), 'true');
+  assert.ok(await frame.getByText('Claim ok').isVisible());
+
   assert.deepEqual(errors, []);
   await page.context().close();
 });
@@ -1037,6 +1045,8 @@ test('two rows checked in one card push ONE cumulative snapshot of both', async 
     tools: { start_verification_widget: [SUBMITTED, { status: 'submitted', task_id: 'b'.repeat(32) }], get_verification_widget: [first, second] },
   }));
   const frame = await frameOf(page, 'l3');
+  // Rows 0 and 1 are True / high: open the folded Checks out section first.
+  await frame.getByRole('button', { name: /Checks out \(/ }).click();
   for (const n of [0, 1]) {
     await frame.locator('.lz-row-head').nth(n).click();
     await frame.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).click();
@@ -1102,6 +1112,8 @@ test('a reopened card with every row recovered tells the model nothing new', asy
   };
   await page.evaluate((c) => window.startCard('r1', c), config(cfg));
   let frame = await frameOf(page, 'r1');
+  // Rows 0 and 1 are True / high: open the folded Checks out section first.
+  await frame.getByRole('button', { name: /Checks out \(/ }).click();
   for (const n of [0, 1]) {
     await frame.locator('.lz-row-head').nth(n).click();
     await frame.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).click();
@@ -1134,6 +1146,8 @@ test('a card that recovers only one of two checks does not shrink what the model
   };
   await page.evaluate((c) => window.startCard('s1', c), config(cfg));
   let frame = await frameOf(page, 's1');
+  // Rows 0 and 1 are True / high: open the folded Checks out section first.
+  await frame.getByRole('button', { name: /Checks out \(/ }).click();
   for (const n of [0, 1]) {
     await frame.locator('.lz-row-head').nth(n).click();
     await frame.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).click();
