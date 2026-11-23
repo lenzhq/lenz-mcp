@@ -129,6 +129,13 @@ body { font-family: var(--lz-font); color: var(--lz-ink); -webkit-font-smoothing
 .lz-body, .lz-finding, .lz-quote, .lz-note, .lz-caveats, .lz-conf { max-width: var(--lz-measure); }
 .lz-body + .lz-body { margin-top: 10px; }
 .lz-clamp { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.lz-clamp-4 { -webkit-line-clamp: 4; }
+.lz-clamp-2 { -webkit-line-clamp: 2; }
+/* The reviewers' note: its label sits on the text, closer to it than to the
+   confidence line above; the dissent's lead-in names it in medium weight, the
+   same ink. */
+.lz-reasoning > h2.lz-label { margin: 0 0 4px; }
+.lz-lead { font-weight: 500; }
 .lz-label { font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--lz-meta); margin: 8px 0 0; }
 h2.lz-label { margin: 0 0 10px; }
 .lz-rewrite-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 0 10px; }
