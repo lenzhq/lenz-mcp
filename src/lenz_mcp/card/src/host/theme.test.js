@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { THEME_SLOTS, mcpAppsTheme } from './theme.js';
+import { mcpAppsTheme } from './theme.js';
 
 test('the MCP Apps adapter maps only the slots the host actually published', () => {
   assert.deepEqual(mcpAppsTheme(undefined), {});
@@ -15,6 +15,7 @@ test('the MCP Apps adapter maps only the slots the host actually published', () 
     '--color-border-tertiary': 'x',
     '--color-unrelated': 'x',
   });
-  assert.deepEqual(Object.keys(all).sort(), [...THEME_SLOTS].sort());
+  assert.deepEqual(Object.keys(all).sort(), ['--lz-hair', '--lz-ink', '--lz-meta']);
+  assert.equal(all['--lz-bg'], undefined, 'ground stays transparent instead of painting --color-background-primary');
   assert.deepEqual(mcpAppsTheme({ '--color-text-primary': '' }), {}, 'an empty value is not a slot');
 });
