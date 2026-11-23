@@ -57,3 +57,33 @@ test('a quick check no longer says it shows no sources', () => {
   assert.equal(copy.CONFIDENCE_LINE.high, 'Confidence: high · a first read');
   assert.equal(copy.CONFIDENCE_LINE.medium, 'Confidence: medium · a first read');
 });
+
+// The heading is the one line a reader takes away from a citation check, so it
+// may never say more than the rows under it: "all check out" needs every
+// citation checked and supported.
+test('the citation heading says "all check out" only when every citation was checked and supported', () => {
+  assert.equal(copy.citecheckSummary({ total: 2, checked: 2 }), '2 citations checked · all check out');
+  assert.equal(copy.citecheckSummary({ total: 1, checked: 1 }), '1 citation checked · it checks out');
+});
+
+test('a citation check that read nothing says so, and never that the citations check out', () => {
+  assert.equal(copy.citecheckSummary({ total: 2, checked: 0 }), 'No citations could be checked');
+  assert.equal(copy.citecheckSummary({ total: 1, checked: 0 }), 'The citation could not be checked');
+});
+
+test('the citation heading names what is left: unchecked, a closer look, or issues, most serious first', () => {
+  assert.equal(copy.citecheckSummary({ total: 2, checked: 1 }), '1 of 2 citations checked · 1 could not be checked');
+  assert.equal(copy.citecheckSummary({ total: 5, checked: 2 }), '2 of 5 citations checked · 3 could not be checked');
+  assert.equal(copy.citecheckSummary({ total: 2, checked: 2, look: 1 }), '2 citations checked · 1 needs a closer look');
+  assert.equal(copy.citecheckSummary({ total: 4, checked: 4, look: 2 }), '4 citations checked · 2 need a closer look');
+  assert.equal(copy.citecheckSummary({ total: 7, checked: 5, issues: 2, look: 1 }), '5 of 7 citations checked · 2 need attention');
+  assert.equal(copy.citecheckSummary({ total: 3, checked: 3, issues: 1 }), '3 citations checked · 1 needs attention');
+  // An issue found without reading the page (a DOI that is not registered) is still an issue.
+  assert.equal(copy.citecheckSummary({ total: 1, checked: 0, issues: 1 }), '1 citation checked · 1 needs attention');
+});
+
+test('no citation heading says "hold up": the group under it is called Checks out', () => {
+  for (const args of [{ total: 2, checked: 2 }, { total: 2, checked: 0 }, { total: 2, checked: 1 }, { total: 2, checked: 2, look: 1 }, { total: 2, checked: 2, issues: 1 }]) {
+    assert.doesNotMatch(copy.citecheckSummary(args), /hold/i);
+  }
+});

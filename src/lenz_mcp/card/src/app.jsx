@@ -1822,15 +1822,25 @@ function CitecheckCard({ payload: initialPayload, host }) {
   const unchecked = allItems.filter((c) => c.bucket === 'none');
   const supports = allItems.filter((c) => c.bucket === 'ok');
 
-  const checkedCount =
-    data.summary?.citation_checks?.checked ??
-    data.summary?.checked ??
-    (bad.length + look.length + supports.length);
-  const issuesCount = data.summary?.issues ?? data.summary?.citation_issues ?? (bad.length + look.length);
+  // The heading counts the rows the reader sees, so it can never disagree with
+  // the groups under it. The summary's own numbers are the fallback for a
+  // payload that lists only its issues.
+  const listed = citations.length > 0;
+  const summaryChecked = data.summary?.citation_checks?.checked ?? data.summary?.checked;
+  const summaryCounts = {
+    total: data.summary?.citations_selected ?? summaryChecked,
+    checked: summaryChecked,
+    issues: data.summary?.issues ?? data.summary?.citation_issues ?? bad.length,
+    look: look.length,
+  };
+  const rowCounts = {
+    total: allItems.length,
+    checked: allItems.length - unchecked.length,
+    issues: bad.length,
+    look: look.length,
+  };
 
-  const heading = isRunning
-    ? copy.CITECHECK_CHECKING
-    : copy.citecheckSummary(checkedCount, issuesCount);
+  const heading = isRunning ? copy.CITECHECK_CHECKING : copy.citecheckSummary(listed ? rowCounts : summaryCounts);
 
   const progDone = data.progress?.citation_checks?.done ?? data.progress?.done;
   const progTotal = data.progress?.citations ?? data.progress?.total;

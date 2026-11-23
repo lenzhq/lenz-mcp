@@ -994,6 +994,45 @@ test('CitecheckCard renders 4 severity buckets and overview strip when multiple 
   await page.context().close();
 });
 
+// The heading must agree with the groups under it. Rows are in the shape the
+// server sends (finding, finding_label, is_issue); the summary block is the
+// server's too, and says issues: 0 in every case but the last.
+const citeRow = (finding, extra = {}) => ({
+  reference: `https://${finding}.example/page`,
+  statement: `A statement that cites a ${finding} source.`,
+  finding,
+  finding_label: finding,
+  is_issue: finding === 'contradicted',
+  ...extra,
+});
+for (const [name, rows, summary, heading] of [
+  ['nothing could be read', [citeRow('unchecked'), citeRow('unchecked')], { checked: 0, unchecked: 2, issues: 0 }, 'No citations could be checked'],
+  ['one checked, one failed', [citeRow('supported'), citeRow('failed')], { checked: 1, failed: 1, issues: 0 }, '1 of 2 citations checked · 1 could not be checked'],
+  ['one partly supported', [citeRow('partly_supported'), citeRow('supported')], { checked: 2, issues: 0 }, '2 citations checked · 1 needs a closer look'],
+  ['all supported', [citeRow('supported'), citeRow('supported')], { checked: 2, issues: 0 }, '2 citations checked · all check out'],
+  [
+    'issues beside unchecked rows',
+    [citeRow('contradicted'), citeRow('partly_supported'), citeRow('unchecked'), citeRow('supported')],
+    { checked: 3, unchecked: 1, issues: 1 },
+    '3 of 4 citations checked · 1 needs attention',
+  ],
+]) {
+  test(`CitecheckCard heading, ${name}: ${heading}`, async () => {
+    const { page, errors } = await harness.page();
+    await page.evaluate(
+      (c) => window.startCard('cite-heading', c),
+      config({ toolResult: { citation_check_id: 'cite-heading-1', status: 'completed', summary, citations: rows, source: 'Lenz citation check' }, tools: {} }),
+    );
+    const frame = await frameOf(page, 'cite-heading');
+    // The frame exists before the host has delivered the result: wait for the
+    // citation card itself, not the "Checking with Lenz" frame before it.
+    await frame.locator('.citecheck-card h1').waitFor();
+    assert.equal(await frame.locator('.citecheck-card h1').textContent(), heading);
+    assert.deepEqual(errors, []);
+    await page.context().close();
+  });
+}
+
 test('combined claims + citations payload renders unified items heading, tally and strip', async () => {
   const { page, errors } = await harness.page();
   const combinedPayload = {
