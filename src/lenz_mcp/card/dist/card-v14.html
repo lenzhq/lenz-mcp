@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-M6/qvf8hg6tqfPfUSvtLP9M61GvSaNuyFube2K3lW2w='; style-src 'sha256-DctGIORW4ox/ZTAxABRkcz4wgQBMngYZTTlWCG9gXFg='; img-src 'none'; font-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-M6/qvf8hg6tqfPfUSvtLP9M61GvSaNuyFube2K3lW2w='; style-src 'sha256-qEbs+x6YXqBcQGvBqcI0dASAymRghGaO51RkaRJcOSY='; img-src 'none'; font-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="lenz-card" content="v14">
 <title>Lenz result</title>
 <style>
@@ -218,6 +218,8 @@ a.lz-link { display: inline-block; }
 }
 .lz-row-head:hover .row-claim { text-decoration: underline; text-underline-offset: 3px; }
 .lz-row-head .row-claim { grid-column: 1; }
+/* An open row's claim is its title: medium weight, so it reads apart from the text under it. */
+.lz-row-head[aria-expanded='true'] .row-claim { font-weight: 500; }
 /* The known labels fit on one line; an unknown long one wraps inside a bounded
    column rather than push the row past the frame's edge. */
 .lz-row-head .row-line { grid-column: 2; grid-row: 1; text-align: right; max-width: 16em; }

@@ -238,6 +238,8 @@ a.lz-link { display: inline-block; }
 }
 .lz-row-head:hover .row-claim { text-decoration: underline; text-underline-offset: 3px; }
 .lz-row-head .row-claim { grid-column: 1; }
+/* An open row's claim is its title: medium weight, so it reads apart from the text under it. */
+.lz-row-head[aria-expanded='true'] .row-claim { font-weight: 500; }
 /* The known labels fit on one line; an unknown long one wraps inside a bounded
    column rather than push the row past the frame's edge. */
 .lz-row-head .row-line { grid-column: 2; grid-row: 1; text-align: right; max-width: 16em; }

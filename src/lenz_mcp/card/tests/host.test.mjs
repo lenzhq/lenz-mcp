@@ -1037,6 +1037,37 @@ test('Show N more: a strip square past the cap inside the folded Checks out grou
   await page.context().close();
 });
 
+// An open row's claim is its title: medium weight while open, regular when closed,
+// and the size never moves.
+test('an open list row sets its claim in medium weight, a closed one in regular', async () => {
+  const { page, errors } = await harness.page();
+  await page.evaluate((c) => window.startCard('weight', c), config({ toolResult: FIXTURES.quick['list-8-with-errors'].toolResult, tools: {} }));
+  const frame = await frameOf(page, 'weight');
+  await frame.locator('.lz-rows').waitFor();
+
+  const style = (row) => row.locator('.row-claim').evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { weight: cs.fontWeight, size: cs.fontSize };
+  });
+  const first = visibleRows(frame).nth(0);
+  const second = visibleRows(frame).nth(1);
+
+  assert.deepEqual(await style(first), { weight: '400', size: '15px' });
+  assert.deepEqual(await style(second), { weight: '400', size: '15px' });
+
+  await first.locator('.lz-row-head').click();
+  assert.equal(await first.locator('.lz-row-head').getAttribute('aria-expanded'), 'true');
+  assert.deepEqual(await style(first), { weight: '500', size: '15px' });
+  assert.deepEqual(await style(second), { weight: '400', size: '15px' });
+
+  await first.locator('.lz-row-head').click();
+  assert.equal(await first.locator('.lz-row-head').getAttribute('aria-expanded'), 'false');
+  assert.deepEqual(await style(first), { weight: '400', size: '15px' });
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
 test('CitecheckCard renders 4 severity buckets and overview strip when multiple citations', async () => {
   const { page, errors } = await harness.page();
   const citePayload = {
