@@ -154,6 +154,10 @@ a.lz-link { display: inline-block; }
 @media (pointer: coarse) { .lz-link { min-height: 44px; } }
 .lz [tabindex='-1']:focus { outline: none; }
 .lz-actions { margin-top: 16px; }
+/* Under the reviewers' note and the pages, the action is its own section: the
+   full hairline that separates the card's sections closes the block above, so
+   an open list never reads as running into the action. */
+.lz-reviewers + .lz-actions { padding-top: 16px; border-top: 1px solid var(--lz-hair); }
 .lz-actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .lz-button {
   appearance: none; font: inherit; font-size: 15px; font-weight: 500; cursor: pointer;
@@ -222,6 +226,18 @@ a.lz-link { display: inline-block; }
 @media (pointer: coarse) { .lz-pages > summary { min-height: 44px; display: flex; align-items: center; } }
 .lz-pages-list { margin-top: 6px; }
 .lz-pages-list > li { overflow-wrap: anywhere; }
+/* A page row is a reference: the title in the card's link blue, underlined
+   like every other link, the site under it in secondary ink. No dotted rule
+   between rows (the gap groups them). Where the host cannot open links the
+   title is plain text in the text ink. */
+.lz-pages-list > li + li { margin-top: 4px; padding-top: 0; border-top: 0; }
+.lz-page { display: block; padding: 6px 0; color: var(--lz-ink); text-decoration: none; }
+.lz-page-title { font-size: 15px; line-height: 1.5; }
+a.lz-page .lz-page-title { color: var(--lz-primary); text-decoration: underline; text-underline-offset: 4px; }
+.lz-page-site { display: block; margin-top: 2px; font-size: 13px; line-height: 1.4; color: var(--lz-meta); }
+@media (pointer: coarse) { .lz-page { min-height: 44px; } }
+/* An open list keeps some space under it, before the rule that closes it. */
+.lz-pages[open] { padding-bottom: 8px; }
 .lz-pages > .lz-link { margin-top: 8px; }
 .lz-quote { margin-top: 6px; font-size: 15px; line-height: 1.6; text-indent: 0; }
 /* A non-English quote's language, before it: the quote no longer starts the
