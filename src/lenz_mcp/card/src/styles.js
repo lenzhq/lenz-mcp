@@ -8,10 +8,11 @@
 //
 // The ground: a host that says which theme it is in has its own surface behind
 // the card, so the card paints none and the host's shows through; the inks are
-// that theme's. A host that publishes a ground variable still wins (the slot is
-// set inline on the root). Only a host that states no theme at all gets the
-// Ledger ground, because inks over a surface of unknown lightness can land on
-// the wrong side of it.
+// that theme's. The MCP Apps adapter intentionally leaves `--lz-bg` unset so
+// the card blends into the host's chat canvas instead of painting a contrasting
+// box (a future adapter can still set the slot inline on the root if needed).
+// Only a host that states no theme at all gets the Ledger ground, because inks
+// over a surface of unknown lightness can land on the wrong side of it.
 //
 // Rules: a hairline frame, radius 10 (top and bottom rules only on a full-bleed
 // frame), no shadow, no pills, no animation; the

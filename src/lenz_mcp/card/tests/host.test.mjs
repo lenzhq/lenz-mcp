@@ -1064,7 +1064,9 @@ test('the card paints with the host\'s own palette variables, through the theme 
     const card = document.querySelector('.lz');
     return [getComputedStyle(card).backgroundColor, getComputedStyle(card).color];
   });
-  assert.deepEqual(painted, ['rgb(1, 2, 3)', 'rgb(4, 5, 6)']);
+  // Ground stays transparent when the host declares a theme even if it publishes
+  // --color-background-primary, so the card blends into the host's canvas.
+  assert.deepEqual(painted, ['rgba(0, 0, 0, 0)', 'rgb(4, 5, 6)']);
   // A slot the host does not publish keeps the card's own value.
   const meta = await frame.evaluate(() => getComputedStyle(document.querySelector('.lz-meta')).color);
   assert.equal(meta, 'rgb(99, 94, 89)');
