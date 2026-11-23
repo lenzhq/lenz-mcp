@@ -75,15 +75,40 @@ export const CITECHECK_EYEBROW = 'Citation check';
 export const CITECHECK_CHECKING = 'Checking citations…';
 export const CITECHECK_NO_CITATIONS = 'Lenz found no checkable citations in this text.';
 export const citecheckProgress = (done, total) => `${done} of ${total} citations checked`;
-export const citecheckSummary = (checked, issues) => {
-  const cWord = checked === 1 ? '1 citation checked' : `${checked} citations checked`;
-  const iWord =
-    issues === 0
-      ? 'all hold up'
-      : issues === 1
+// The heading of a finished citation check: how many were checked, then the
+// most serious thing left, in the order issues, a closer look, not checked.
+// "all check out" (the group under it is "Checks out") needs every citation
+// checked and supported: zero issues is also what a check that read nothing
+// reports, and the heading must never say more than the rows under it.
+// `total` is every citation in the list; `checked` the ones with a finding;
+// `issues` and `look` the rows under "To fix" and "Closer look".
+const wholeCount = (value) => (Number.isInteger(value) && value > 0 ? value : 0);
+export const citecheckSummary = (counts) => {
+  const c = counts && typeof counts === 'object' ? counts : {};
+  const issues = wholeCount(c.issues);
+  const look = wholeCount(c.look);
+  // A row with an issue or a closer look was checked, whatever a count beside it says.
+  const checked = Math.max(wholeCount(c.checked), issues + look);
+  const total = Math.max(wholeCount(c.total), checked);
+  if (checked === 0) return total === 1 ? 'The citation could not be checked' : 'No citations could be checked';
+  const noun = total === 1 ? 'citation' : 'citations';
+  const head = checked === total ? `${total} ${noun} checked` : `${checked} of ${total} ${noun} checked`;
+  const unchecked = total - checked;
+  const rest =
+    issues > 0
+      ? issues === 1
         ? '1 needs attention'
-        : `${issues} need attention`;
-  return `${cWord} · ${iWord}`;
+        : `${issues} need attention`
+      : look > 0
+        ? look === 1
+          ? '1 needs a closer look'
+          : `${look} need a closer look`
+        : unchecked > 0
+          ? `${unchecked} could not be checked`
+          : total === 1
+            ? 'it checks out'
+            : 'all check out';
+  return `${head} · ${rest}`;
 };
 export const CITECHECK_ISSUES_HEADING = 'Issues';
 export const citecheckHoldsUpToggle = (n) => `Checks out (${n})`;
