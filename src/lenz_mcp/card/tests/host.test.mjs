@@ -194,6 +194,17 @@ test('pages: a row with pages and no reviewers note still shows the disclosure; 
   await page.context().close();
 });
 
+test('pages: 6 pages (limit + 1) shows all pages and no Show all button', async () => {
+  const { page } = await harness.page();
+  const row = PAGES_ROW({ rationale: null, dissent: null, searched_pages: sevenPages.slice(0, 6) });
+  await page.evaluate((c) => window.startCard('p2-6', c), config({ toolResult: row }));
+  const frame = await frameOf(page, 'p2-6');
+  await frame.getByText('Pages the reviewers looked at (6)', { exact: true }).click();
+  assert.equal(await frame.locator('ul.lz-pages-list a').count(), 6);
+  assert.equal(await frame.getByRole('button', { name: /Show all/ }).count(), 0);
+  await page.context().close();
+});
+
 test('pages: a host that cannot open links shows titles as plain text', async () => {
   const { page } = await harness.page();
   const { openLinks: _omit, ...capabilities } = CAPABILITIES;
@@ -825,6 +836,63 @@ test('a result shows three sources, then a full-row disclosure for the rest; the
   await page.context().close();
 });
 
+test('sources and caveats: 4 sources or caveats (limit + 1) show all with no disclosure; 5 (limit + 2) collapse', async () => {
+  const { page } = await harness.page();
+  const base = F.deep['deep-28-sources-3-warnings'].result;
+  const fourSources = {
+    ...base,
+    sources: base.sources.slice(0, 4),
+    sources_total: 4,
+    warnings: [
+      'Warning 1',
+      'Warning 2',
+      'Warning 3',
+      'Warning 4',
+    ],
+  };
+  await page.evaluate((c) => window.startCard('src-4', c), config({
+    toolResult: F.quick['quick-low'].toolResult,
+    tools: { start_verification_widget: [SUBMITTED], get_verification_widget: [fourSources] },
+  }));
+  const frame = await frameOf(page, 'src-4');
+  await frame.getByRole('button', { name: /Check against sources/ }).click();
+  const card = frame.locator('.lz');
+  await card.getByText('Claim checked').waitFor({ timeout: 10000 });
+
+  // 4 sources (3 + 1): all 4 shown, no "Show more sources" button
+  assert.equal(await card.locator('.lz-sources > li').count(), 4);
+  assert.equal(await frame.getByRole('button', { name: /more source/ }).count(), 0);
+
+  // 4 caveats (3 + 1): all 4 shown, no "Show more caveats" button
+  assert.equal(await card.locator('.lz-caveats > li').count(), 4);
+  assert.equal(await frame.getByRole('button', { name: /more caveat/ }).count(), 0);
+
+  await page.context().close();
+});
+
+test('caveats: 5 caveats (limit + 2) collapse to 3 with Show 2 more caveats button', async () => {
+  const { page } = await harness.page();
+  const fiveWarnings = F.deep['deep-5-warnings'].result;
+  await page.evaluate((c) => window.startCard('cav-5', c), config({
+    toolResult: F.quick['quick-low'].toolResult,
+    tools: { start_verification_widget: [SUBMITTED], get_verification_widget: [fiveWarnings] },
+  }));
+  const frame = await frameOf(page, 'cav-5');
+  await frame.getByRole('button', { name: /Check against sources/ }).click();
+  const card = frame.locator('.lz');
+  await card.getByText('Claim checked').waitFor({ timeout: 10000 });
+
+  // 5 caveats (3 + 2): 3 shown initially, button says "Show 2 more caveats"
+  assert.equal(await card.locator('.lz-caveats > li').count(), 3);
+  const more = frame.getByRole('button', { name: 'Show 2 more caveats' });
+  await more.waitFor();
+  await more.click();
+  assert.equal(await card.locator('.lz-caveats > li').count(), 5);
+  assert.equal(await frame.getByRole('button', { name: 'Show less' }).count(), 1);
+
+  await page.context().close();
+});
+
 // ── The list card ────────────────────────────────────────────
 
 test('a list opens one row at a time, and its rows carry only what is unusual about them', async () => {
@@ -1032,6 +1100,47 @@ test('Show N more: a strip square past the cap inside the folded Checks out grou
   assert.equal(await frame.locator('#mcp-row-11 .lz-row-head').getAttribute('aria-expanded'), 'true');
   assert.equal(await visibleRows(frame).count(), 12);
   assert.equal(await frame.getByRole('button', { name: /Checks out \(10\)/ }).getAttribute('aria-expanded'), 'true');
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('Show N more: 9 claims (limit + 1) shows all rows and no Show more link', async () => {
+  const { page, errors } = await harness.page();
+  const claims = Array.from({ length: 9 }, (_, i) => ({
+    claim: `Flagged claim ${i + 1}`,
+    verdict: 'False',
+    confidence: 'high',
+  }));
+  await page.evaluate((c) => window.startCard('cap-9', c), config({ toolResult: { status: 'ok', claims }, tools: {} }));
+  const frame = await frameOf(page, 'cap-9');
+  await frame.locator('.lz-rows').waitFor();
+
+  assert.equal(await visibleRows(frame).count(), 9);
+  assert.equal(await frame.locator('.lz-row-toggle').count(), 0, '9 claims <= limit + 1: no button, all visible');
+
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('Show N more: 10 claims (limit + 2) collapses to 8 with Show 2 more button', async () => {
+  const { page, errors } = await harness.page();
+  const claims = Array.from({ length: 10 }, (_, i) => ({
+    claim: `Flagged claim ${i + 1}`,
+    verdict: 'False',
+    confidence: 'high',
+  }));
+  await page.evaluate((c) => window.startCard('cap-10', c), config({ toolResult: { status: 'ok', claims }, tools: {} }));
+  const frame = await frameOf(page, 'cap-10');
+  await frame.locator('.lz-rows').waitFor();
+
+  assert.equal(await visibleRows(frame).count(), 8);
+  const toggle = frame.locator('.lz-row-toggle');
+  assert.equal(await toggle.count(), 1);
+  assert.equal(await toggle.textContent(), 'Show 2 more');
+  await toggle.click();
+  assert.equal(await visibleRows(frame).count(), 10);
+  assert.equal(await toggle.textContent(), 'Show less');
 
   assert.deepEqual(errors, []);
   await page.context().close();
@@ -1533,6 +1642,38 @@ test('five is the cap: the rest go quiet and the button counts what is chosen', 
   await boxes.nth(0).uncheck();
   assert.equal(await boxes.nth(5).isDisabled(), false);
   assert.ok(await frame.getByRole('button', { name: 'Check 4 claims' }).isVisible());
+  await page.context().close();
+});
+
+test('picker: 9 claims (limit + 1) shows all claims and no Show more button', async () => {
+  const { page } = await harness.page();
+  const pickerNine = {
+    ...PICKER(),
+    claims: PICKER().claims.slice(0, 9),
+  };
+  await page.evaluate((c) => window.startCard('k-9', c), config({ toolResult: pickerNine, tools: {} }));
+  const frame = await readyFrame(page, 'k-9');
+  await frame.locator('.lz').getByText('This text makes several claims').waitFor();
+  assert.equal(await frame.getByRole('checkbox').count(), 9);
+  assert.equal(await frame.getByRole('button', { name: /Show \d+ more/ }).count(), 0);
+  await page.context().close();
+});
+
+test('picker: 10 claims (limit + 2) collapses to 8 with Show 2 more button', async () => {
+  const { page } = await harness.page();
+  const pickerTen = {
+    ...PICKER(),
+    claims: PICKER().claims.slice(0, 10),
+  };
+  await page.evaluate((c) => window.startCard('k-10', c), config({ toolResult: pickerTen, tools: {} }));
+  const frame = await readyFrame(page, 'k-10');
+  await frame.locator('.lz').getByText('This text makes several claims').waitFor();
+  assert.equal(await frame.getByRole('checkbox').count(), 8);
+  const more = frame.getByRole('button', { name: 'Show 2 more' });
+  assert.equal(await more.count(), 1);
+  await more.click();
+  assert.equal(await frame.getByRole('checkbox').count(), 10);
+  assert.equal(await frame.getByRole('button', { name: 'Show less' }).count(), 1);
   await page.context().close();
 });
 
