@@ -5,6 +5,7 @@
 // error envelope (`auth_required`, `quota_exhausted`, `rate_limited`,
 // `service_unavailable`, `invalid_request`, `error`, …).
 
+import { creditFacts } from './credits.js';
 import { confidenceBucket, languageCode, searchedPages, stageLabel, text, verdictKey } from './format.js';
 
 // A task id we can send back: the card never invents one, and an unsendable one
@@ -182,7 +183,7 @@ export function routeQuick(payload) {
     case 'rate_limited':
       return { view: 'outage', retryAfter: wholeSeconds(payload.retry_after_seconds) };
     case 'quota_exhausted':
-      return { view: 'quota' };
+      return { view: 'quota', ...creditFacts(payload) };
     case 'in_progress':
       return { view: 'in-progress' };
     // The picker's parent was resolved by someone else (the model, another card).

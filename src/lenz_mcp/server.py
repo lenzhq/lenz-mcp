@@ -959,6 +959,27 @@ def _quota_exhausted(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _card_quota_facts(data: dict[str, Any]) -> dict[str, Any]:
+    """The part of a 402 body a card-only tool hands the card: what the call needs, the balance, the reset.
+
+    The same fields and names ``_quota_exhausted`` forwards to the model, and
+    ``cost`` is the figure ``_quota_message`` calls "this call costs". A number
+    is kept only as a whole, non-negative number, and ``resets_at`` only as the
+    non-empty string ``_quota_exhausted`` keeps; anything else is left out, so a
+    body with no usable fact gives exactly ``{}``. No ``manage_url``, no
+    ``cost_per_citation`` (a price per citation is not what a call needs) and
+    no ``message``: the card shows no link and words its own sentences.
+    """
+    facts: dict[str, Any] = {}
+    for key in ('cost', 'credits_remaining'):
+        value = _int(data.get(key))
+        if value is not None and value >= 0:
+            facts[key] = value
+    if isinstance(data.get('resets_at'), str) and data['resets_at']:
+        facts['resets_at'] = data['resets_at']
+    return facts
+
+
 # The order an out-of-credits result's own fields are given in: the facts, then
 # what to do. Anything else a tool adds (a check's id, what was not checked) follows.
 _QUOTA_KEY_ORDER = (
@@ -2475,10 +2496,14 @@ async def _start_verification_for_card(claim: str, ctx: Context, retry_of: str, 
     # 409: the same submission is in flight right now; its task_id is the answer.
     already_running = resp.status == 409 and bool(resp.data.get('task_id'))
     if resp.status == 402:
-        # The card says "out of credits" or "not enough credits" and never a
-        # number or a link, so it gets only which of the two this is.
+        # Which of the two this is, and the facts the card puts in its sentence,
+        # read from the 402 body as `_quota_exhausted` reads them. Never a link.
         remaining = resp.data.get('credits_remaining')
-        return {'status': 'quota_exhausted', 'balance_empty': not (isinstance(remaining, int) and remaining > 0)}
+        return {
+            'status': 'quota_exhausted',
+            'balance_empty': not (isinstance(remaining, int) and remaining > 0),
+            **_card_quota_facts(resp.data),
+        }
     if not already_running and not resp.ok:
         return _error_result(resp)
     task_id = resp.data.get('task_id') or resp.data.get('id')
