@@ -70,7 +70,10 @@ async function settle(page, state) {
     }
   }
   if (state.openRow != null) {
-    await frame.locator('.lz-row-head').nth(state.openRow).click();
+    const head = frame.locator('.lz-row-head').nth(state.openRow);
+    // A row in a folded Checks out section opens it first.
+    if (!(await head.isVisible())) await frame.getByRole('button', { name: /Checks out \(/ }).click();
+    await head.click();
     await page.waitForTimeout(100);
   }
   // A model-started card adopts its run on mount: give its first poll time.
