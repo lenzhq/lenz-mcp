@@ -1566,6 +1566,47 @@ for (const [name, rows, summary, heading] of [
   });
 }
 
+// A citation check that did not finish says what happened, per case, in the
+// card's own sentences: never the server's message, and never "ask for it to
+// run again" (the same input replays the failed check for a day).
+const NO_RERUN = 'Ask for it to run again.';
+for (const [name, heading, lines] of [
+  ['cite-failed-no-citations', 'No citations found in this text', ['Lenz can check links, DOIs and numbered references. Nothing was charged.']],
+  ['cite-failed-upstream', 'Lenz could not check these citations', ['Nothing was charged. Try again in a few minutes.']],
+  [
+    'cite-failed-internal-charged',
+    'This check did not finish.',
+    ['Something went wrong on our side.', 'Asking again with the same text gives this same result for up to a day.'],
+  ],
+  ['cite-invalid-request', 'This text could not be checked as sent', ['Ask again with the full text, including its links or references.']],
+  ['cite-not-found', 'Lenz could not open this citation check', ['Ask to check the citations again.']],
+  [
+    'cite-gone',
+    'This citation check is no longer available',
+    ['Checks on this account are removed after a set period.', 'Ask to check the citations again.'],
+  ],
+  ['cite-read-error', 'Lenz could not open this citation check', ['Ask to check the citations again.']],
+]) {
+  test(`a citation check that did not finish, ${name}: ${heading}`, async () => {
+    const { page, errors } = await harness.page();
+    const fixture = F.citechecks[name];
+    await page.evaluate((c) => window.startCard('cite-failed', c), config({ toolResult: fixture.toolResult, tools: {} }));
+    const frame = await frameOf(page, 'cite-failed');
+    // The frame exists before the result is delivered: wait for this frame's heading.
+    await frame.getByRole('heading', { name: heading, exact: true }).waitFor();
+    assert.equal(await frame.locator('.lz-eyebrow').first().textContent(), 'Citation check');
+    assert.deepEqual(await frame.locator('p.lz-body').allTextContents(), lines);
+    // The card's own region: the page's inline script holds every string.
+    const body = await frame.locator('.lz').first().innerText();
+    assert.ok(!body.includes(NO_RERUN), 'never asks for the same input to run again');
+    for (const serverText of [fixture.toolResult.message, fixture.toolResult.next_step].filter(Boolean)) {
+      assert.ok(!body.includes(serverText), `never shows the server's text: ${serverText.slice(0, 40)}`);
+    }
+    assert.deepEqual(errors, []);
+    await page.context().close();
+  });
+}
+
 test('combined claims + citations payload renders unified items heading, tally and strip', async () => {
   const { page, errors } = await harness.page();
   const combinedPayload = {

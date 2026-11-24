@@ -7,6 +7,7 @@ import { Component } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 
 import * as copy from './copy.js';
+import { citecheckFailure } from './logic/citecheck-failure.js';
 import { quotaWords } from './logic/credits.js';
 import { createDeepCheck } from './logic/deep-check.js';
 import { domainOf, formatElapsed, isWebUrl, languageName, text, verdictKey } from './logic/format.js';
@@ -1827,18 +1828,8 @@ function CitecheckCard({ payload: initialPayload, host }) {
   }, [isRunning, citationCheckId, host]);
 
   if (isFailed) {
-    const code = text(data.failure?.code || data.error_code || data.code);
-    const line =
-      code === 'no_checkable_citations' || code === 'no_citations'
-        ? copy.CITECHECK_NO_CITATIONS
-        : copy.FAILED_DEFAULT;
-    return (
-      <Frame
-        eyebrow={copy.CITECHECK_EYEBROW}
-        heading={copy.FAILED_HEADING}
-        lines={[line, copy.ASK_AGAIN]}
-      />
-    );
+    const { heading, lines } = citecheckFailure(data);
+    return <Frame eyebrow={copy.CITECHECK_EYEBROW} heading={heading} lines={lines} />;
   }
 
   const citations = (Array.isArray(data.citations) ? data.citations : []).map(normalizeCitation);

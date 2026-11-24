@@ -74,7 +74,35 @@ export const auditCounts = (searched, kept) => {
 // Citation check card
 export const CITECHECK_EYEBROW = 'Citation check';
 export const CITECHECK_CHECKING = 'Checking citations…';
-export const CITECHECK_NO_CITATIONS = 'Lenz found no checkable citations in this text.';
+// A citation check that did not finish (logic/citecheck-failure.js picks the
+// frame). Never "ask for it to run again": the connector sends the same input
+// with the same idempotency key, and the API replays a key's first answer for a
+// day, a failed check included, so the same text gets the same failure back.
+// The one exception is CITECHECK_RETRY_LATER's case (see there).
+// No citations: one line, with the charge only where the record says 0.
+export const CITECHECK_NO_CITATIONS_HEADING = 'No citations found in this text';
+export const CITECHECK_WHAT_COUNTS = 'Lenz can check links, DOIs and numbered references.';
+export const CITECHECK_WHAT_COUNTS_UNCHARGED = 'Lenz can check links, DOIs and numbered references. Nothing was charged.';
+// A failure on Lenz's side that can pass (`upstream_unavailable`, `retryable`).
+// "A few minutes" holds only once the API stops replaying such a failure to the
+// same request for a day; release this card after that API change is deployed.
+export const CITECHECK_RETRY_HEADING = 'Lenz could not check these citations';
+export const CITECHECK_RETRY_LATER = 'Try again in a few minutes.';
+export const CITECHECK_RETRY_LATER_UNCHARGED = 'Nothing was charged. Try again in a few minutes.';
+export const CITECHECK_SAME_RESULT = 'Asking again with the same text gives this same result for up to a day.';
+export const CITECHECK_OUR_SIDE = 'Something went wrong on our side.';
+export const CITECHECK_INVALID_HEADING = 'This text could not be checked as sent';
+export const CITECHECK_SEND_FULL_TEXT = 'Ask again with the full text, including its links or references.';
+// A check the card holds an id for but cannot read: not found under this
+// connection, or a read that failed. It may have finished, so not "did not finish".
+export const CITECHECK_UNREADABLE_HEADING = 'Lenz could not open this citation check';
+export const CITECHECK_GONE_HEADING = 'This citation check is no longer available';
+export const CITECHECK_GONE_BODY = 'Checks on this account are removed after a set period.';
+export const CITECHECK_ASK_AGAIN = 'Ask to check the citations again.';
+// Shown only beside a FAILED check whose own record says it charged 0
+// (`credits_charged`, the net of the ledger when it was read): never on a read
+// that failed, which says nothing about the charge (see OUTAGE_BODY).
+export const NOTHING_CHARGED = 'Nothing was charged for it.';
 export const citecheckProgress = (done, total) => `${done} of ${total} citations checked`;
 // The heading of a finished citation check: how many were checked, then the
 // most serious thing left, in the order issues, a closer look, not checked.
