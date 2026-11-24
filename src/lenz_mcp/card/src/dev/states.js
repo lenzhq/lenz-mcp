@@ -112,6 +112,30 @@ export function buildStates(fixtures) {
     tools: { start_verification_widget: [submitted], get_verification_widget: [listDone] },
   });
 
+  // "Check all 2 flagged against sources" pressed: the status line where the
+  // button was, and each checking row's quick verdict named as such over its step.
+  // Each row has its own task (starts keyed by claim, polls by task id).
+  const flagged = (i) => listQuick.claims[i].claim;
+  const batchStarts = { [flagged(4)]: { ...submitted, task_id: 'task-4' }, [flagged(5)]: { ...submitted, task_id: 'task-5' } };
+  const batchTrue = { ...listDone, claim: flagged(4), verification_id: 'aaaa0004' };
+  const batchFalse = { ...deep['deep-3-sources'].result, claim: flagged(5), verdict: 'False', lenz_score: 2, confidence: 'high', verification_id: 'aaaa0005' };
+  states.push({
+    name: 'list-batch-mid',
+    group: 'Interim list',
+    provenance: `${quick['list-8-with-errors'].provenance}; both flagged rows started, one back (True), one at step 3`,
+    toolResult: listQuick,
+    pressBatch: true,
+    tools: { start_verification_widget: batchStarts, get_verification_widget: { 'task-4': batchTrue, 'task-5': polls['running-debate'].result } },
+  });
+  states.push({
+    name: 'list-batch-done',
+    group: 'Interim list',
+    provenance: `${quick['list-8-with-errors'].provenance}; both flagged rows back (True, False)`,
+    toolResult: listQuick,
+    pressBatch: true,
+    tools: { start_verification_widget: batchStarts, get_verification_widget: { 'task-4': batchTrue, 'task-5': batchFalse, aaaa0004: batchTrue } },
+  });
+
   // A deep check the model ran: its own card.
   const { payloads } = fixtures;
   states.push({

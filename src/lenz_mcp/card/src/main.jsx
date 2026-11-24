@@ -235,6 +235,7 @@ function Root({ host, dev }) {
           announce={setMessage}
           registerCompleted={registerCompleted}
           reportState={reportState}
+          cardStore={cardStore}
         />
       </Boundary>
       <p class="lz-sr" role="status" aria-live="polite">

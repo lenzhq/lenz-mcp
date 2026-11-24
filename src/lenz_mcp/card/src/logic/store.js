@@ -151,6 +151,25 @@ export function createCardStore(storage, { rows, callId = '', now = () => Date.n
         return 0;
       }
     },
+    // The rows a "Check all flagged" press started, by position in this row set,
+    // so a reopened card shows the same status line. Positions only: each row's
+    // own record holds its check. Same record and lifetime as the count above.
+    loadBatch() {
+      if (!available) return null;
+      const raw = read();
+      if (!Array.isArray(raw.batch) || now() - (Number.isFinite(raw.savedAt) ? raw.savedAt : 0) > VERIFICATION_RECORD_TTL_MS) return null;
+      return raw.batch.filter((i) => Number.isInteger(i) && i >= 0);
+    },
+    saveBatch(positions) {
+      if (!available || !Array.isArray(positions)) return;
+      const batch = positions.filter((i) => Number.isInteger(i) && i >= 0);
+      if (!batch.length) return;
+      try {
+        storage.setItem(key, JSON.stringify({ ...read(), batch, rows: joined, callId: call, savedAt: now() }));
+      } catch (_e) {
+        /* best effort */
+      }
+    },
     save(pushedVersion) {
       if (!available || !Number.isInteger(pushedVersion) || pushedVersion <= 0) return;
       try {

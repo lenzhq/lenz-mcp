@@ -185,8 +185,9 @@ export function createDeepCheck({ claim, language = '', host, store, clock, onCh
   // not after. The caller counts outstanding checks, and the poll can resolve
   // inside this call: a signal sent afterwards would arrive after the
   // completion and leave the card waiting for a check that had already landed.
-  // A card with nothing to recover never fires it.
-  async function recover({ onAdopted } = {}) {
+  // A card with nothing to recover never fires it; it fires `onNothing` instead,
+  // so a list that expected this row to have a check (a reopened batch) can let go.
+  async function recover({ onAdopted, onNothing } = {}) {
     if (disposed || state.kind !== 'idle' || !store) return;
     let rec = null;
     try {
@@ -194,12 +195,12 @@ export function createDeepCheck({ claim, language = '', host, store, clock, onCh
     } catch (_e) {
       rec = null;
     }
-    if (!rec) return;
-    if (typeof rec.verificationId === 'string' && /^[0-9a-f]{8}$/.test(rec.verificationId)) {
+    if (rec && typeof rec.verificationId === 'string' && /^[0-9a-f]{8}$/.test(rec.verificationId)) {
       set(running(rec.verificationId, { recovering: true, storedTaskId: rec.taskId || null }));
-    } else if (typeof rec.taskId === 'string' && rec.taskId) {
+    } else if (rec && typeof rec.taskId === 'string' && rec.taskId) {
       set(running(rec.taskId));
     } else {
+      if (onNothing) onNothing();
       return;
     }
     if (onAdopted) onAdopted();

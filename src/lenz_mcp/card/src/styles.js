@@ -496,5 +496,18 @@ a.lz-page .lz-page-title { color: var(--lz-primary); text-decoration: underline;
   color: var(--lz-meta);
 }
 
+/* The batch's status, where its button was: the running block's heading size. */
+.lz-batch-status { font-size: 15px; font-weight: 500; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.lz-batch-status.done { font-weight: 400; }
+.lz-batch-status:focus { outline: none; }
+.lz-batch-actions .lz-note { margin-top: 2px; }
+
+/* While its check runs, a row's first read sits under the claim, above the progress line. */
+.lz-row-head .row-line.checking { grid-column: 1; grid-row: auto; text-align: left; max-width: none; }
+
+.lz-row-panel .lz-row-note { margin-top: 0; }
+/* A checking row in a batch has nothing more to show open: opening it moves nothing. */
+.lz-row-panel:empty { padding-bottom: 0; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 `;
