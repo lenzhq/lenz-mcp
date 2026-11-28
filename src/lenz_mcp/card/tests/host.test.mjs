@@ -261,6 +261,100 @@ test('pages: a list card shows each row\'s own pages, and a row without any show
   await page.context().close();
 });
 
+// The pages list reads as one group, and the action under it as its own section.
+const ruleAbove = (locator) =>
+  locator.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return `${cs.borderTopStyle} ${cs.borderTopWidth} ${cs.paddingTop}`;
+  });
+
+test('pages: the action sits under a full rule at every strength, and only below a note or pages', async () => {
+  const cases = [
+    ['quiet', PAGES_ROW({ confidence: 'high', dissent: null, recommend_verify: false, searched_pages: sevenPages.slice(0, 2) }), /lz-link/],
+    ['outlined', PAGES_ROW({ confidence: 'medium', dissent: null, recommend_verify: false, searched_pages: sevenPages.slice(0, 2) }), /outlined/],
+    ['filled', PAGES_ROW({ searched_pages: sevenPages.slice(0, 2) }), /filled/],
+  ];
+  for (const [strength, toolResult, cls] of cases) {
+    const { page } = await harness.page();
+    await page.evaluate((c) => window.startCard('r', c), config({ toolResult }));
+    const frame = await frameOf(page, 'r');
+    const button = frame.getByRole('button', { name: 'Check against sources' });
+    await button.waitFor();
+    assert.match(await button.getAttribute('class'), cls, strength);
+    await frame.getByText('Pages the reviewers looked at (2)', { exact: true }).click();
+    assert.equal(await ruleAbove(frame.locator('.lz-actions')), 'solid 1px 16px', `${strength}: a full rule above the action`);
+    await page.context().close();
+  }
+  // No note and no pages: nothing to close off, so no rule under the confidence line.
+  const { page } = await harness.page();
+  await page.evaluate((c) => window.startCard('r0', c), config({ toolResult: PAGES_ROW({ rationale: null, dissent: null }) }));
+  const frame = await frameOf(page, 'r0');
+  await frame.getByRole('button', { name: 'Check against sources' }).waitFor();
+  assert.match(await ruleAbove(frame.locator('.lz-actions')), /^none /);
+  await page.context().close();
+});
+
+test('pages: a row is a reference, title and site, the whole row one link, with no dotted rule between rows', async () => {
+  const { page, errors } = await harness.page();
+  await page.evaluate((c) => window.startCard('rr', c), config({ toolResult: PAGES_ROW({ searched_pages: sevenPages }) }));
+  const frame = await frameOf(page, 'rr');
+  await frame.getByText('Pages the reviewers looked at (7)', { exact: true }).click();
+  const rows = frame.locator('ul.lz-pages-list > li');
+  assert.equal(await rows.count(), 5);
+  assert.deepEqual(await rows.evaluateAll((lis) => [...new Set(lis.slice(1).map((li) => getComputedStyle(li).borderTopStyle))]), ['none']);
+  const link = rows.nth(1).locator('a');
+  assert.equal(await link.count(), 1, 'one link per row');
+  assert.deepEqual(
+    await link.evaluate((a) => [...a.children].map((c) => c.textContent)),
+    ['Page number 2', 'pages.example.org'],
+  );
+  // The title is a link like the card's others: the link blue, underlined, not the text ink.
+  const look = await link.evaluate((a) => {
+    const title = a.firstElementChild;
+    const colorOf = (sel) => getComputedStyle(document.querySelector(sel)).color;
+    return {
+      linkBlue: getComputedStyle(title).color === colorOf('.lz-pages > .lz-link'),
+      ink: getComputedStyle(title).color === colorOf('.lz-claim'),
+      underline: getComputedStyle(title).textDecorationLine,
+    };
+  });
+  assert.deepEqual(look, { linkBlue: true, ink: false, underline: 'underline' });
+  // The site name is part of the link: pressing it asks the host to open the page.
+  await rows.nth(1).getByText('pages.example.org').click();
+  await page.waitForFunction(() => window.log.some((e) => e.method === 'ui/open-link'));
+  assert.equal((await log(page)).find((e) => e.method === 'ui/open-link').params.url, 'https://pages.example.org/2');
+  await frame.getByRole('button', { name: 'Show all 7' }).click();
+  assert.equal(await frame.locator('ul.lz-pages-list a.lz-page').count(), 7);
+  assert.deepEqual(errors.filter((e) => !/Content Security Policy/.test(e)), []);
+  await page.context().close();
+});
+
+test('pages: where the host cannot open links, a row is the same title and site as plain text', async () => {
+  const { page } = await harness.page();
+  const { openLinks: _omit, ...capabilities } = CAPABILITIES;
+  await page.evaluate((c) => window.startCard('rp', c), config({ capabilities, toolResult: PAGES_ROW({ searched_pages: sevenPages.slice(0, 2) }) }));
+  const frame = await frameOf(page, 'rp');
+  await frame.getByText('Pages the reviewers looked at (2)', { exact: true }).click();
+  assert.equal(await frame.locator('ul.lz-pages-list a').count(), 0);
+  assert.deepEqual(
+    await frame.locator('ul.lz-pages-list > li').first().evaluate((li) => [...li.firstElementChild.children].map((c) => c.textContent)),
+    ['Page number 1', 'pages.example.org'],
+  );
+  await page.context().close();
+});
+
+test('pages: on a touch screen every page row is at least 44 px tall', async () => {
+  const { page } = await harness.page({ width: 390, phone: true });
+  await page.evaluate((c) => window.startCard('rt', c), config({ toolResult: PAGES_ROW({ searched_pages: sevenPages.slice(0, 3) }) }));
+  const frame = await frameOf(page, 'rt');
+  await frame.getByText('Pages the reviewers looked at (3)', { exact: true }).click();
+  assert.ok(await frame.evaluate(() => matchMedia('(pointer: coarse)').matches), 'a coarse pointer');
+  const heights = await frame.locator('ul.lz-pages-list a').evaluateAll((as) => as.map((a) => a.getBoundingClientRect().height));
+  assert.equal(heights.length, 3);
+  for (const h of heights) assert.ok(h >= 44, `row is ${h}px`);
+  await page.context().close();
+});
+
 test('two cards in one chat each push their own snapshot', async () => {
   const { page } = await harness.page();
   const second = { ...QUICK_LOW, claims: [{ ...QUICK_LOW.claims[0], claim: 'The Eiffel Tower is 330 metres tall.', verdict: 'True', confidence: 'medium' }] };

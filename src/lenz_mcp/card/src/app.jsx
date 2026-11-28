@@ -102,9 +102,11 @@ function ReviewersNote({ rationale, dissent, id }) {
 }
 
 // The pages the reviewers looked at: a disclosure, closed until the reader opens
-// it, under the reviewers' note. Five titles, then "Show all N". Titles are text
-// nodes; a link opens through the host, or is plain text where the host cannot
-// open links. Opening it, or a link, calls no tool and sends no message.
+// it, under the reviewers' note. Five titles, then "Show all N". A row is a
+// reference, not an action: the title and, under it, the site, the whole row one
+// link that opens through the host, or plain text where the host cannot open
+// links. Titles are text nodes. Opening it, or a link, calls no tool and sends
+// no message.
 const PAGES_SHOWN = 5;
 
 function Pages({ pages, host, id }) {
@@ -116,25 +118,34 @@ function Pages({ pages, host, id }) {
     <details class="lz-pages">
       <summary class="lz-pages-summary">{copy.pagesSummary(pages.length)}</summary>
       <ul class="lz-list lz-pages-list" id={id}>
-        {list.map((page, i) => (
-          <li key={i}>
-            {canOpen && isWebUrl(page.url) ? (
-              <a
-                class="lz-link"
-                href={page.url}
-                rel="noopener noreferrer nofollow ugc"
-                onClick={(event) => {
-                  event.preventDefault();
-                  host.openLink(page.url).catch(() => {});
-                }}
-              >
-                {page.title}
-              </a>
-            ) : (
-              <p class="lz-body">{page.title}</p>
-            )}
-          </li>
-        ))}
+        {list.map((page, i) => {
+          const site = isWebUrl(page.url) ? domainOf(page.url) : '';
+          const row = (
+            <>
+              <span class="lz-page-title">{page.title}</span>
+              {site ? <span class="lz-page-site">{site}</span> : null}
+            </>
+          );
+          return (
+            <li key={i}>
+              {canOpen && isWebUrl(page.url) ? (
+                <a
+                  class="lz-page"
+                  href={page.url}
+                  rel="noopener noreferrer nofollow ugc"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    host.openLink(page.url).catch(() => {});
+                  }}
+                >
+                  {row}
+                </a>
+              ) : (
+                <p class="lz-page">{row}</p>
+              )}
+            </li>
+          );
+        })}
       </ul>
       {hidden > 0 && !all ? (
         <button type="button" class="lz-link" aria-controls={id} onClick={() => setAll(true)}>
@@ -155,7 +166,7 @@ function Reasoning({ row, host, idSuffix = '' }) {
   if (!row.rationale && !row.dissent && !pages.length) return null;
   const hasNote = Boolean(row.rationale || row.dissent);
   return (
-    <div class="lz-region first">
+    <div class="lz-region first lz-reviewers">
       {hasNote ? <ReviewersNote rationale={row.rationale} dissent={row.dissent} id={`lz-reasoning${idSuffix}`} /> : null}
       {pages.length ? (
         <div class={hasNote ? 'lz-pages-block' : ''}>
