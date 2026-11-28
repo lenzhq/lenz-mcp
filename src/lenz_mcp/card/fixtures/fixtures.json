@@ -1,4 +1,115 @@
 {
+ "citechecks": {
+  "cite-failed-internal-charged": {
+   "provenance": "hand-built (failed citation check body, part charged)",
+   "toolResult": {
+    "citation_issues": [],
+    "citations": [],
+    "citecheck_id": "c1e0c4ec",
+    "credits_charged": 2,
+    "failure_class": "internal",
+    "failure_reason": "internal",
+    "message": "The citation check could not be completed.",
+    "next_step": "Tell the user what happened, in the words of the message. The same input sent again returns this same result for a day, so change the input (the text, the links or the number of citations) before trying again. Do not mention tool names to the user.",
+    "outcome": "unchecked",
+    "retryable": false,
+    "source": "Lenz citation check",
+    "status": "failed",
+    "summary": {
+     "checked": 0,
+     "citation_limit": 20,
+     "citations_found": 3,
+     "citations_selected": 3,
+     "failed": 3,
+     "issues": 0,
+     "limit_reached": false,
+     "unchecked": 0
+    }
+   }
+  },
+  "cite-failed-no-citations": {
+   "provenance": "hand-built (failed citation check body)",
+   "toolResult": {
+    "citation_issues": [],
+    "citations": [],
+    "citecheck_id": "c1e0c4ec",
+    "credits_charged": 0,
+    "failure_class": "invalid_input",
+    "failure_reason": "no_citations",
+    "message": "The text has no citation to check: no link, DOI or numbered reference with one.",
+    "next_step": "Tell the user what happened, in the words of the message. The same input sent again returns this same result for a day, so change the input (the text, the links or the number of citations) before trying again. Do not mention tool names to the user.",
+    "outcome": "unchecked",
+    "retryable": false,
+    "source": "Lenz citation check",
+    "status": "failed",
+    "summary": {
+     "citation_limit": 20,
+     "issues": 0
+    }
+   }
+  },
+  "cite-failed-upstream": {
+   "provenance": "hand-built (failed citation check body)",
+   "toolResult": {
+    "citation_issues": [],
+    "citations": [],
+    "citecheck_id": "c1e0c4ec",
+    "credits_charged": 0,
+    "failure_class": "upstream_unavailable",
+    "failure_reason": "upstream_unavailable",
+    "message": "Lenz could not reach the sources it needed to check this just now.",
+    "next_step": "Tell the user what happened, in the words of the message. The same input sent again returns this same result for a day, so change the input (the text, the links or the number of citations) before trying again. Do not mention tool names to the user.",
+    "outcome": "unchecked",
+    "retryable": true,
+    "source": "Lenz citation check",
+    "status": "failed",
+    "summary": {
+     "checked": 0,
+     "citation_limit": 20,
+     "citations_found": 3,
+     "citations_selected": 3,
+     "failed": 3,
+     "issues": 0,
+     "limit_reached": false,
+     "unchecked": 0
+    }
+   }
+  },
+  "cite-gone": {
+   "provenance": "hand-built (API 410)",
+   "toolResult": {
+    "citecheck_id": "c1e0c4ec",
+    "gone": true,
+    "message": "That citation check is no longer available: the account removes content after a set period. Start a new check if the user still wants it.",
+    "status": "not_found"
+   }
+  },
+  "cite-invalid-request": {
+   "provenance": "hand-built (API 422)",
+   "toolResult": {
+    "code": "url_input",
+    "message": "Send the page's text, with its links, to check the sources it cites.",
+    "source": "Lenz citation check",
+    "status": "invalid_request"
+   }
+  },
+  "cite-not-found": {
+   "provenance": "hand-built (API 404)",
+   "toolResult": {
+    "citecheck_id": "c1e0c4ec",
+    "message": "No citation check with that citecheck_id can be read with this connection. Pass the citecheck_id exactly as the check returned it. If it is lost, start the check again.",
+    "status": "not_found"
+   }
+  },
+  "cite-read-error": {
+   "provenance": "hand-built (API 400)",
+   "toolResult": {
+    "citecheck_id": "c1e0c4ec",
+    "message": "Bad request.",
+    "status": "error"
+   }
+  }
+ },
  "deep": {
   "deep-2-warnings": {
    "provenance": "synthetic (long-quote)",

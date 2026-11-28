@@ -568,7 +568,118 @@ def build() -> dict[str, Any]:
         },
         'start-error': {'provenance': 'hand-built (API 503)', 'result': start({'detail': 'Service unavailable'}, 503)},
     }
-    return {'quick': quick, 'deep': deep, 'polls': polls, 'starts': starts, 'payloads': payloads}
+
+    # A citation check that did not finish, as check_citations answers it: the
+    # start (202) stubbed, then the one read of the check its wait makes.
+    cite_id = 'c1e0c4ec'
+
+    def citecheck(body: dict[str, Any], status: int = 200) -> dict[str, Any]:
+        return run(
+            lambda: server.check_citations('A draft with no sources in it.', _Ctx()),
+            citecheck=ApiResponse(status=202, data={'citecheck_id': cite_id, 'status': 'queued'}),
+            citecheck_status=ApiResponse(status=status, data=body),
+        )
+
+    def failed_check(code: str, failure_class: str, *, detail: str, hint: str | None = None, charged: int = 0):
+        read = code != 'no_citations'  # no citations: failed before the draft was read
+        return citecheck(
+            {
+                'citecheck_id': cite_id,
+                'status': 'failed',
+                'outcome': 'unchecked',
+                'created_at': '2026-11-20T10:00:00Z',
+                'completed_at': '2026-11-20T10:00:04Z',
+                'language': 'en',
+                'poll_after_seconds': None,
+                'policy': {'max_citations': 20},
+                'summary': {
+                    'citations_found': 3 if read else None,
+                    'citations_selected': 3 if read else None,
+                    'citation_limit': 20,
+                    'citation_limit_exceeded': False if read else None,
+                    'citation_checks': {'checked': 0, 'unchecked': 0, 'failed': 3} if read else None,
+                    'citation_issues': 0,
+                },
+                'credits': {'charged': charged},
+                'citations': [],
+                'citation_issues': [],
+                'citation_failures': [],
+                'failure': {
+                    'code': code,
+                    'detail': detail,
+                    'hint': hint,
+                    'failure_class': failure_class,
+                    'retryable': failure_class == 'upstream_unavailable',
+                    'docs_url': f'https://lenz.io/docs/errors#{failure_class.replace("_", "-")}',
+                },
+                'more_citations': None,
+            }
+        )
+
+    citechecks = {
+        'cite-failed-no-citations': {
+            'provenance': 'hand-built (failed citation check body)',
+            'toolResult': failed_check(
+                'no_citations',
+                'invalid_input',
+                detail='The text holds no citation to check.',
+                hint='The text has no citation to check: no link, DOI or numbered reference with one.',
+            ),
+        },
+        'cite-failed-upstream': {
+            'provenance': 'hand-built (failed citation check body)',
+            'toolResult': failed_check(
+                'upstream_unavailable',
+                'upstream_unavailable',
+                detail='A service the check depends on was unavailable.',
+            ),
+        },
+        'cite-failed-internal-charged': {
+            'provenance': 'hand-built (failed citation check body, part charged)',
+            'toolResult': failed_check('internal', 'internal', detail='The check failed on our side.', charged=2),
+        },
+        'cite-invalid-request': {
+            'provenance': 'hand-built (API 422)',
+            'toolResult': run(
+                lambda: server.check_citations('https://example.org/article', _Ctx()),
+                citecheck=ApiResponse(
+                    status=422,
+                    data={
+                        'detail': "Send the page's text, with its links, to check the sources it cites.",
+                        'code': 'url_input',
+                        'errors': [],
+                    },
+                ),
+            ),
+        },
+        'cite-not-found': {
+            'provenance': 'hand-built (API 404)',
+            'toolResult': citecheck({'detail': 'Citation check not found.', 'code': 'not_found'}, status=404),
+        },
+        'cite-gone': {
+            'provenance': 'hand-built (API 410)',
+            'toolResult': citecheck(
+                {
+                    'detail': 'This check is no longer available: its account removes content after a set period.',
+                    'code': 'purged',
+                    'purged_at': '2026-11-20T10:00:00Z',
+                },
+                status=410,
+            ),
+        },
+        'cite-read-error': {
+            'provenance': 'hand-built (API 400)',
+            'toolResult': citecheck({'detail': 'Bad request.'}, status=400),
+        },
+    }
+    return {
+        'quick': quick,
+        'deep': deep,
+        'polls': polls,
+        'starts': starts,
+        'payloads': payloads,
+        'citechecks': citechecks,
+    }
 
 
 def render(data: dict[str, Any]) -> str:
