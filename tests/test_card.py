@@ -430,25 +430,78 @@ def test_start_joins_a_check_already_running(monkeypatch, authed):
     }
 
 
-def test_start_maps_an_api_error(monkeypatch, authed):
+def _refused_start(monkeypatch, body):
     async def _verify(authorization, **kwargs):
-        return ApiResponse(status=402, data={'cost': 10, 'credits_remaining': 0})
+        return ApiResponse(status=402, data=body)
 
     monkeypatch.setattr(client, 'verify', _verify)
-    out = _shape(_run(server.start_verification_widget('The claim.', _Ctx())))
-    # No numbers and no link reach the card.
-    assert out == {'status': 'quota_exhausted', 'balance_empty': True}
+    return _shape(_run(server.start_verification_widget('The claim.', _Ctx())))
+
+
+RESETS = '2026-12-01T00:00:00+00:00'
+
+
+def test_start_says_when_the_balance_is_empty_and_what_the_check_needs(monkeypatch, authed):
+    out = _refused_start(monkeypatch, {'cost': 10, 'credits_remaining': 0, 'resets_at': RESETS})
+    assert out == {
+        'status': 'quota_exhausted',
+        'balance_empty': True,
+        'cost': 10,
+        'credits_remaining': 0,
+        'resets_at': RESETS,
+    }
 
 
 def test_start_says_when_the_balance_is_short_but_not_empty(monkeypatch, authed):
-    async def _verify(authorization, **kwargs):
-        return ApiResponse(status=402, data={'cost': 10, 'credits_remaining': 3})
-
-    monkeypatch.setattr(client, 'verify', _verify)
-    assert _shape(_run(server.start_verification_widget('The claim.', _Ctx()))) == {
+    out = _refused_start(monkeypatch, {'cost': 10, 'credits_remaining': 7, 'resets_at': RESETS})
+    assert out == {
         'status': 'quota_exhausted',
         'balance_empty': False,
+        'cost': 10,
+        'credits_remaining': 7,
+        'resets_at': RESETS,
     }
+
+
+def test_start_passes_the_numbers_without_a_date_when_the_body_has_none(monkeypatch, authed):
+    out = _refused_start(monkeypatch, {'cost': 5, 'credits_remaining': 4})
+    assert out == {'status': 'quota_exhausted', 'balance_empty': False, 'cost': 5, 'credits_remaining': 4}
+
+
+def test_start_with_a_body_that_has_no_numbers_is_what_it_always_was(monkeypatch, authed):
+    # No numbers and no link reach the card: only which of the two refusals this is.
+    out = _refused_start(monkeypatch, {'detail': 'Out of credits.', 'upgrade_url': 'https://lenz.example/plans'})
+    assert out == {'status': 'quota_exhausted', 'balance_empty': True}
+
+
+def test_start_drops_a_number_that_is_not_a_whole_non_negative_number(monkeypatch, authed):
+    out = _refused_start(monkeypatch, {'cost': '10', 'credits_remaining': -3, 'resets_at': 20261201})
+    assert out == {'status': 'quota_exhausted', 'balance_empty': True}
+    for bad in (10.0, 7.5, True, None, [10], -1):
+        out = _refused_start(monkeypatch, {'cost': bad, 'credits_remaining': bad, 'resets_at': ''})
+        assert 'cost' not in out and 'credits_remaining' not in out and 'resets_at' not in out, bad
+
+
+def test_start_keeps_the_good_facts_beside_a_bad_one(monkeypatch, authed):
+    out = _refused_start(monkeypatch, {'cost': 10, 'credits_remaining': 2.5, 'resets_at': RESETS})
+    assert out == {'status': 'quota_exhausted', 'balance_empty': True, 'cost': 10, 'resets_at': RESETS}
+
+
+def test_start_never_gives_the_card_a_link_or_a_per_citation_price(monkeypatch, authed):
+    out = _refused_start(
+        monkeypatch,
+        {
+            'cost': 10,
+            'cost_per_citation': 1,
+            'requested': 3,
+            'credits_remaining': 7,
+            'upgrade_url': 'https://lenz.example/plans',
+            'manage_url': 'https://lenz.example/plans',
+            'next_step': 'x',
+            'message': 'y',
+        },
+    )
+    assert set(out) == {'status', 'balance_empty', 'cost', 'credits_remaining'}
 
 
 def test_the_card_poll_tool_recovers_a_finished_check_by_verification_id(monkeypatch, authed):

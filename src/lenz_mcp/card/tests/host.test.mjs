@@ -828,8 +828,21 @@ test('an answer that lands after teardown changes nothing and pushes nothing', a
   await page.context().close();
 });
 
-test('quota: no number and no link on either refusal', async () => {
-  for (const [name, expected] of [['quota-empty', /out of Lenz credits/], ['quota-short', /Not enough Lenz credits/]]) {
+const waitForStatus = (frame, expected) =>
+  frame.waitForFunction(
+    (want) => {
+      const el = document.querySelector('[role=status]');
+      return el && el.textContent === want;
+    },
+    expected,
+    { timeout: 3000 },
+  );
+
+test('quota: a check the card started and the API refused says what it needs and what the reader has, and offers no link', async () => {
+  for (const [name, sentence] of [
+    ['quota-empty', 'A deep check needs 10 credits and you have 0.'],
+    ['quota-short', 'A deep check needs 10 credits and you have 4.'],
+  ]) {
     const { page } = await harness.page();
     await page.evaluate((c) => window.startCard('q', c), config({
       toolResult: F.quick['quick-low'].toolResult,
@@ -837,11 +850,111 @@ test('quota: no number and no link on either refusal', async () => {
     }));
     const frame = await frameOf(page, 'q');
     await frame.getByRole('button', { name: /Check against sources/ }).click();
-    await frame.getByText(expected).first().waitFor({ timeout: 3000 });
-    // The claim itself may carry numbers; the refusal may not.
-    const refusal = await frame.locator('.lz-region', { hasText: expected }).innerText();
-    assert.doesNotMatch(refusal, /\d/);
+    await frame.getByText(sentence).first().waitFor({ timeout: 3000 });
+    const refusal = await frame.locator('.lz-region', { hasText: sentence }).innerText();
+    assert.equal(refusal.trim(), sentence, `${name}: the sentence alone, no question asking for the number`);
+    assert.doesNotMatch(refusal, /how many/i);
     assert.equal(await frame.locator('a').count(), 0);
+    await waitForStatus(frame, sentence);
+    await page.context().close();
+  }
+});
+
+// A reset date that is a few months off, as the connector sends it, and the
+// same day as a reader in this time zone reads it.
+const RESET_ISO = (() => {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 2, 15, 12)).toISOString();
+})();
+const RESET_LINE = `Your credits reset on ${new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' }).format(new Date(RESET_ISO))}.`;
+
+const waitForLz = async (frame, text) => {
+  // The first paint is the waiting frame: wait for the answer, not the frame.
+  await frame.locator('.lz').getByText(text).first().waitFor({ timeout: 5000 });
+  return frame.locator('.lz').innerText();
+};
+
+test('quota, a whole call the model made: the sentence is the heading, then the reset date, with no question and no link', async () => {
+  const { page } = await harness.page();
+  const result = {
+    status: 'quota_exhausted',
+    message: 'Not enough Lenz credits: this call costs 3 (1 for each of 3 claims) and the account has 0.',
+    cost: 3,
+    requested: 3,
+    credits_remaining: 0,
+    resets_at: RESET_ISO,
+    manage_url: 'https://lenz.io/plans',
+    next_step: 'Tell the user what was not checked.',
+  };
+  await page.evaluate(([n, c]) => window.startCard(n, c), ['a', config({ toolResult: result, tools: {} })]);
+  const frame = await readyFrame(page, 'a');
+  const text = await waitForLz(frame, 'This check needs 3 credits and you have 0.');
+  assert.equal(await frame.locator('h1').innerText(), 'This check needs 3 credits and you have 0.');
+  assert.match(text, new RegExp(RESET_LINE.replace('.', '\\.')));
+  assert.doesNotMatch(text, /Ask how many/);
+  assert.doesNotMatch(text, /Tell the user|plans/);
+  assert.equal(await frame.getByRole('link').count(), 0);
+  assert.equal(await frame.getByRole('button').count(), 0);
+  await page.context().close();
+});
+
+test('quota, a whole call on an empty balance with no numbers: the heading stands alone', async () => {
+  const { page } = await harness.page();
+  const result = { status: 'quota_exhausted', message: 'Out of Lenz credits for this call.', credits_remaining: 0, manage_url: 'https://lenz.io/plans' };
+  await page.evaluate(([n, c]) => window.startCard(n, c), ['b', config({ toolResult: result, tools: {} })]);
+  const frame = await readyFrame(page, 'b');
+  const text = await waitForLz(frame, 'You are out of Lenz credits.');
+  assert.equal(text.trim(), 'You are out of Lenz credits.');
+  assert.doesNotMatch(text, /Ask how many/);
+  assert.equal(await frame.getByRole('link').count(), 0);
+  await page.context().close();
+});
+
+test('quota, a whole call: numbers the card cannot trust are not shown', async () => {
+  const { page } = await harness.page();
+  const result = { status: 'quota_exhausted', cost: '3', credits_remaining: -4, resets_at: 'soon <b>x</b>' };
+  await page.evaluate(([n, c]) => window.startCard(n, c), ['h', config({ toolResult: result, tools: {} })]);
+  const frame = await readyFrame(page, 'h');
+  const text = await waitForLz(frame, 'You are out of Lenz credits.');
+  assert.match(text, /Ask how many Lenz credits you have left\./);
+  assert.doesNotMatch(text, /needs|reset|soon|-4/);
+  await page.context().close();
+});
+
+test('quota, a check the card started on a short balance: the sentence, the reset date, no question, and the status line says the same', async () => {
+  const { page } = await harness.page();
+  const refusal = { status: 'quota_exhausted', balance_empty: false, cost: 10, credits_remaining: 7, resets_at: RESET_ISO };
+  await page.evaluate((c) => window.startCard('s', c), config({
+    toolResult: F.quick['quick-low'].toolResult,
+    tools: { start_verification_widget: [refusal] },
+  }));
+  const frame = await frameOf(page, 's');
+  await frame.getByRole('button', { name: /Check against sources/ }).click();
+  await frame.getByText('A deep check needs 10 credits and you have 7.').first().waitFor({ timeout: 3000 });
+  const region = await frame.locator('.lz-region', { hasText: 'A deep check needs' }).innerText();
+  assert.equal(region.trim().split('\n').map((l) => l.trim()).filter(Boolean).join(' '), `A deep check needs 10 credits and you have 7. ${RESET_LINE}`);
+  assert.doesNotMatch(region, /Ask how many/);
+  await waitForStatus(frame, `A deep check needs 10 credits and you have 7. ${RESET_LINE}`);
+  assert.equal(await frame.locator('a').count(), 0);
+  await page.context().close();
+});
+
+test('quota, a check the card started with no numbers from the connector: the text it always had', async () => {
+  for (const [balance_empty, lines] of [
+    [false, ['Not enough Lenz credits for a deep check.', 'Ask how many Lenz credits you have left.']],
+    [true, ['You are out of Lenz credits.']],
+  ]) {
+    const { page } = await harness.page();
+    await page.evaluate((c) => window.startCard('n', c), config({
+      toolResult: F.quick['quick-low'].toolResult,
+      tools: { start_verification_widget: [{ status: 'quota_exhausted', balance_empty }] },
+    }));
+    const frame = await frameOf(page, 'n');
+    await frame.getByRole('button', { name: /Check against sources/ }).click();
+    await frame.getByText(lines[0]).first().waitFor({ timeout: 3000 });
+    const region = await frame.locator('.lz-region', { hasText: lines[0] }).innerText();
+    assert.deepEqual(region.trim().split('\n').map((l) => l.trim()).filter(Boolean), lines);
+    await waitForStatus(frame, lines.join(' '));
     await page.context().close();
   }
 });
@@ -857,7 +970,7 @@ test('dev bundle: the switcher plays a fixture state inside the card, with no ca
   await frame.getByText('Claim checked').waitFor({ timeout: 10000 });
   await select.selectOption('quota-short');
   await frame.getByRole('button', { name: /Check against sources/ }).click();
-  await frame.locator('.lz').getByText('Not enough Lenz credits for a deep check.').waitFor({ timeout: 5000 });
+  await frame.locator('.lz').getByText('A deep check needs 10 credits and you have 4.').waitFor({ timeout: 5000 });
   assert.equal((await calls(page, 'dev')).length, 0);
   assert.deepEqual(errors, []);
   await page.context().close();

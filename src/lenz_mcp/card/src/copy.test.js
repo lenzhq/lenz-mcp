@@ -87,3 +87,32 @@ test('no citation heading says "hold up": the group under it is called Checks ou
     assert.doesNotMatch(copy.citecheckSummary(args), /hold/i);
   }
 });
+
+// A refusal for lack of credits is the one place a credit number is the answer.
+test('the sentences a refused check says, plural and singular', () => {
+  assert.equal(copy.QUOTA_DEEP_NEEDS(10, 7), 'A deep check needs 10 credits and you have 7.');
+  assert.equal(copy.QUOTA_CALL_NEEDS(3, 0), 'This check needs 3 credits and you have 0.');
+  assert.equal(copy.QUOTA_DEEP_NEEDS(1, 0), 'A deep check needs 1 credit and you have 0.');
+  assert.equal(copy.QUOTA_CALL_NEEDS(5, 1), 'This check needs 5 credits and you have 1.');
+  assert.equal(copy.QUOTA_CALL_NEEDS(1, 1), 'This check needs 1 credit and you have 1.');
+  assert.equal(copy.QUOTA_DEEP_NEEDS(12000, 2500), 'A deep check needs 12,000 credits and you have 2,500.');
+});
+
+test('the reset line names the day then the month, in English, and the year only when it is far off', () => {
+  const now = new Date(2026, 10, 23, 12).getTime();
+  assert.equal(copy.quotaResets(new Date(2026, 11, 1).getTime(), now), 'Your credits reset on 1 December.');
+  assert.equal(copy.quotaResets(new Date(2027, 9, 22).getTime(), now), 'Your credits reset on 22 October.');
+  // More than eleven months away: the year says which one.
+  assert.equal(copy.quotaResets(new Date(2027, 11, 1).getTime(), now), 'Your credits reset on 1 December 2027.');
+  assert.equal(copy.quotaResets(new Date(2027, 9, 24).getTime(), now), 'Your credits reset on 24 October 2027.');
+});
+
+test('a reset date that is not a time says nothing', () => {
+  for (const bad of [NaN, Infinity, undefined, null, 'soon', {}]) assert.equal(copy.quotaResets(bad), '', String(bad));
+});
+
+test('the refusal lines are the old words, kept', () => {
+  assert.equal(copy.QUOTA_EMPTY, 'You are out of Lenz credits.');
+  assert.equal(copy.QUOTA_SHORT, 'Not enough Lenz credits for a deep check.');
+  assert.equal(copy.QUOTA_NEXT, 'Ask how many Lenz credits you have left.');
+});

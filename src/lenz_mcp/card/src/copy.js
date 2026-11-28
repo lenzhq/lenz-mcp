@@ -1,6 +1,7 @@
 // Every string the card shows a person, in one place. The reader is someone
 // using Lenz inside an assistant: the verb is "check", and there are no tool
-// names, no credit numbers and no links to plans. The same card runs in every
+// names, no links to plans, and credit numbers only when a check is refused for
+// lack of credits, where the number is the answer. The same card runs in every
 // host, so no string names an assistant: "ask for …", never "ask <name> …".
 // The host shows the app's name above the card, so the card does not repeat it
 // as a label; "Lenz" appears only inside a sentence.
@@ -141,6 +142,21 @@ export const FAILED_DEFAULT = 'Something went wrong on our side. Nothing was cha
 export const QUOTA_EMPTY = 'You are out of Lenz credits.';
 export const QUOTA_SHORT = 'Not enough Lenz credits for a deep check.';
 export const QUOTA_NEXT = 'Ask how many Lenz credits you have left.';
+// The refusal with its numbers, from the connector's own facts. The one place a
+// credit number is shown: it is the answer to why the check did not run.
+const creditCount = (n) => Number(n).toLocaleString('en-GB');
+const creditsOf = (n) => `${creditCount(n)} credit${n === 1 ? '' : 's'}`;
+export const QUOTA_DEEP_NEEDS = (needs, has) => `A deep check needs ${creditsOf(needs)} and you have ${creditCount(has)}.`;
+export const QUOTA_CALL_NEEDS = (needs, has) => `This check needs ${creditsOf(needs)} and you have ${creditCount(has)}.`;
+// The day then the month, in the reader's own time zone; the year only when the
+// date is more than eleven months off, so "1 December" never means two years.
+export const quotaResets = (ms, now = Date.now()) => {
+  if (!Number.isFinite(ms)) return '';
+  const limit = new Date(now);
+  limit.setMonth(limit.getMonth() + 11);
+  const options = ms > limit.getTime() ? { day: 'numeric', month: 'long', year: 'numeric' } : { day: 'numeric', month: 'long' };
+  return `Your credits reset on ${new Intl.DateTimeFormat('en-GB', options).format(new Date(ms))}.`;
+};
 
 // Deep check, completed
 export const DEEP_EYEBROW = 'Claim checked';

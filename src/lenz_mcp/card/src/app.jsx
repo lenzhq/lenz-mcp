@@ -7,6 +7,7 @@ import { Component } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 
 import * as copy from './copy.js';
+import { quotaWords } from './logic/credits.js';
 import { createDeepCheck } from './logic/deep-check.js';
 import { domainOf, formatElapsed, isWebUrl, languageName, text, verdictKey } from './logic/format.js';
 import { bucketOf, buttonStrength, changedFrom, deepResult, isSendableId, routePayload, tally } from './logic/route.js';
@@ -208,7 +209,10 @@ function CheckButton({ row, onPress, buttonRef }) {
 
 // What a check that did not finish says, as one sentence for the status region.
 export function notFinishedText(state) {
-  if (state.kind === 'quota') return `${state.empty ? copy.QUOTA_EMPTY : copy.QUOTA_SHORT} ${copy.QUOTA_NEXT}`;
+  if (state.kind === 'quota') {
+    const words = quotaWords({ ...state, scope: 'deep' });
+    return [words.heading, ...words.lines].join(' ');
+  }
   if (state.kind === 'unavailable') return copy.UNAVAILABLE;
   if (state.kind === 'unrecoverable') return copy.UNRECOVERABLE;
   if (state.retryable) return copy.OUTAGE;
@@ -217,10 +221,13 @@ export function notFinishedText(state) {
 
 function NotFinished({ state, onRetry, focusRef }) {
   if (state.kind === 'quota') {
+    const words = quotaWords({ ...state, scope: 'deep' });
     return (
       <div class="lz-region">
-        <p class="lz-body" tabIndex={-1} ref={focusRef}>{state.empty ? copy.QUOTA_EMPTY : copy.QUOTA_SHORT}</p>
-        <p class="lz-body">{copy.QUOTA_NEXT}</p>
+        <p class="lz-body" tabIndex={-1} ref={focusRef}>{words.heading}</p>
+        {words.lines.map((line) => (
+          <p key={line} class="lz-body">{line}</p>
+        ))}
       </div>
     );
   }
@@ -2080,8 +2087,10 @@ export function App({ host, payload, announce, registerCompleted, reportState })
     // to describe.
     case 'outage':
       return <Frame heading={copy.OUTAGE_HEADING} lines={[copy.OUTAGE_BODY, copy.retryIn(route.retryAfter)]} />;
-    case 'quota':
-      return <Frame heading={copy.QUOTA_EMPTY} lines={[copy.QUOTA_NEXT]} />;
+    case 'quota': {
+      const words = quotaWords({ ...route, scope: 'call' });
+      return <Frame heading={words.heading} lines={words.lines} />;
+    }
     case 'in-progress':
       return <Frame heading={copy.IN_PROGRESS_HEADING} lines={[copy.IN_PROGRESS_BODY]} />;
     case 'already-resolved':

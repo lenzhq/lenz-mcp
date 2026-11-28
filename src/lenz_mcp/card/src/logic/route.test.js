@@ -216,6 +216,12 @@ test('each whole-call failure routes to the frame that answers it', () => {
     assert.equal(routeQuick({ status: 'rate_limited', retry_after_seconds: bad }).retryAfter, 0);
   }
   assert.equal(routeQuick({ status: 'quota_exhausted' }).view, 'quota');
+  assert.deepEqual(routeQuick({ status: 'quota_exhausted' }), { view: 'quota', needs: null, has: null, resetsAt: null });
+  // The facts the model is told ride along, read defensively.
+  assert.deepEqual(
+    routeQuick({ status: 'quota_exhausted', cost: 3, credits_remaining: 0, resets_at: '2026-12-01T00:00:00+00:00', manage_url: 'https://x.test/plans' }),
+    { view: 'quota', needs: 3, has: 0, resetsAt: Date.parse('2026-12-01T00:00:00+00:00') },
+  );
   assert.equal(routeQuick({ status: 'in_progress' }).view, 'in-progress');
   assert.equal(routeQuick({ status: 'already_resolved' }).view, 'already-resolved');
   // Nothing actionable stays on the one honest frame.

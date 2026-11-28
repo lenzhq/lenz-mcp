@@ -252,6 +252,27 @@ test('out of credits and short of credits are told apart', async () => {
   }
 });
 
+test('a refused start keeps what the connector says the check needs, the balance and the reset', async () => {
+  const resets = '2026-12-01T00:00:00+00:00';
+  const { check } = make({
+    start_verification_widget: [
+      { status: 'quota_exhausted', balance_empty: false, cost: 10, credits_remaining: 7, resets_at: resets },
+    ],
+  });
+  await check.start();
+  assert.deepEqual(check.state(), { kind: 'quota', empty: false, needs: 10, has: 7, resetsAt: Date.parse(resets) });
+});
+
+test('a refused start keeps no number it cannot trust, and never the link', async () => {
+  const { check } = make({
+    start_verification_widget: [
+      { status: 'quota_exhausted', balance_empty: true, cost: '10', credits_remaining: -3, resets_at: 'soon', manage_url: 'https://x.test/plans' },
+    ],
+  });
+  await check.start();
+  assert.deepEqual(check.state(), { kind: 'quota', empty: true });
+});
+
 test('a submission the bridge lost is a retryable failure with no task to name', async () => {
   const { check } = make({ start_verification_widget: [new Error('bridge gone')] });
   await check.start();

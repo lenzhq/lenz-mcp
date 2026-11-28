@@ -1996,6 +1996,8 @@
      "deliver": "context"
     },
     "balance_empty": true,
+    "cost": 10,
+    "credits_remaining": 0,
     "status": "quota_exhausted"
    }
   },
@@ -2006,6 +2008,8 @@
      "deliver": "context"
     },
     "balance_empty": false,
+    "cost": 10,
+    "credits_remaining": 4,
     "status": "quota_exhausted"
    }
   },

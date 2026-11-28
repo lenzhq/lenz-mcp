@@ -12,6 +12,7 @@
 //   another task, or after dispose(), is dropped.
 // - A reopened card recovers by the ids it stored, never by claim text.
 
+import { creditFacts, quotaFactsOf } from './credits.js';
 import { stageLabel, text } from './format.js';
 
 export const POLL_MS = 3000;
@@ -174,7 +175,7 @@ export function createDeepCheck({ claim, language = '', host, store, clock, onCh
       return;
     }
     if (status === 'quota_exhausted') {
-      set({ kind: 'quota', empty: out.balance_empty !== false });
+      set({ kind: 'quota', empty: out.balance_empty !== false, ...quotaFactsOf(creditFacts(out)) });
       return;
     }
     set({ kind: 'failed', taskId: retryOf, failureClass: '', retryable: !out || RETRYABLE_START_STATUSES.has(status) });
