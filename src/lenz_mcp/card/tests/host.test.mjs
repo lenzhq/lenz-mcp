@@ -769,17 +769,124 @@ test('dev bundle: the switcher plays a fixture state inside the card, with no ca
   await page.context().close();
 });
 
-test('a long dissent clamps with its own Show more, apart from the rationale', async () => {
+test('a long dissent under a short rationale: one Show more for the whole note', async () => {
   const { page } = await harness.page();
   const long = { ...QUICK_LOW, claims: [{ ...QUICK_LOW.claims[0], rationale: 'Short rationale.', dissent: 'word '.repeat(120).trim() }] };
   await page.evaluate((c) => window.startCard('ld', c), config({ toolResult: long }));
   const frame = await frameOf(page, 'ld');
   const more = frame.getByRole('button', { name: 'Show more' });
   await more.waitFor();
-  assert.equal(await more.count(), 1, 'the short rationale gets no Show more');
-  assert.equal(await more.getAttribute('aria-controls'), 'lz-dissent');
+  assert.equal(await more.count(), 1, 'one control, not one per paragraph');
+  assert.equal(await more.getAttribute('aria-controls'), 'lz-reasoning');
   await more.click();
   assert.equal(await frame.getByRole('button', { name: 'Show less' }).getAttribute('aria-expanded'), 'true');
+  await page.context().close();
+});
+
+// ── The reviewers' note: one labelled block, one "Show more" ──
+const NOTE_LONG = 'word '.repeat(120).trim();
+const noteRow = (extra) => ({ ...QUICK_LOW, claims: [{ ...QUICK_LOW.claims[0], ...extra }] });
+// Each paragraph of the note: its line limit while closed, and whether it is cut.
+const noteParts = (frame, scope = '') =>
+  frame.locator(`${scope} .lz-reasoning > div > p`).evaluateAll((ps) =>
+    ps.map((p) => ({
+      text: p.textContent,
+      lines: getComputedStyle(p).webkitLineClamp,
+      cut: p.scrollHeight > p.clientHeight + 1,
+    })),
+  );
+
+test('reasoning: with a dissent, one label, both parts in view, and one Show more opens both', async () => {
+  const { page, errors } = await harness.page();
+  await page.evaluate((c) => window.startCard('n1', c), config({ toolResult: noteRow({ rationale: NOTE_LONG, dissent: NOTE_LONG }) }));
+  const frame = await frameOf(page, 'n1');
+  const label = frame.getByRole('heading', { name: "Reviewers' reasoning" });
+  await label.waitFor();
+  assert.equal(await label.count(), 1);
+  const parts = await noteParts(frame);
+  assert.equal(parts.length, 2);
+  assert.deepEqual(parts.map((p) => [p.lines, p.cut]), [['4', true], ['2', true]], 'closed: four lines of reasoning, two of the dissent');
+  assert.ok(parts[1].text.startsWith('One reviewer disagreed: word'));
+  assert.equal(await frame.locator('.lz-reasoning .lz-lead').evaluate((el) => [el.textContent, getComputedStyle(el).fontWeight].join('|')), 'One reviewer disagreed: |500');
+  const more = frame.getByRole('button', { name: 'Show more' });
+  await more.waitFor();
+  assert.equal(await more.count(), 1, 'one control for the whole note');
+  const id = await more.getAttribute('aria-controls');
+  assert.equal(id, 'lz-reasoning');
+  assert.equal(await more.getAttribute('aria-expanded'), 'false');
+  assert.equal(await frame.locator(`#${id} > p`).count(), 2, 'the control names the block that holds both parts');
+  await more.click();
+  const less = frame.getByRole('button', { name: 'Show less' });
+  assert.equal(await less.getAttribute('aria-expanded'), 'true');
+  assert.equal(await less.getAttribute('aria-controls'), id);
+  assert.deepEqual((await noteParts(frame)).map((p) => [p.lines, p.cut]), [['none', false], ['none', false]], 'open: both in full');
+  await less.click();
+  assert.equal(await frame.getByRole('button', { name: 'Show more' }).getAttribute('aria-expanded'), 'false');
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('reasoning: on its own it keeps six lines, under the same label, with no dissent line', async () => {
+  const { page } = await harness.page();
+  await page.evaluate((c) => window.startCard('n2', c), config({ toolResult: noteRow({ rationale: NOTE_LONG, dissent: null }) }));
+  const frame = await frameOf(page, 'n2');
+  await frame.getByRole('heading', { name: "Reviewers' reasoning" }).waitFor();
+  assert.deepEqual((await noteParts(frame)).map((p) => [p.lines, p.cut]), [['6', true]]);
+  assert.equal(await frame.getByText(/One reviewer disagreed/).count(), 0);
+  await frame.getByRole('button', { name: 'Show more' }).click();
+  assert.deepEqual((await noteParts(frame)).map((p) => p.cut), [false]);
+  await page.context().close();
+});
+
+test('reasoning: a dissent on its own keeps six lines, under the label, after its lead-in', async () => {
+  const { page } = await harness.page();
+  await page.evaluate((c) => window.startCard('n3', c), config({ toolResult: noteRow({ rationale: null, dissent: NOTE_LONG }) }));
+  const frame = await frameOf(page, 'n3');
+  await frame.getByRole('heading', { name: "Reviewers' reasoning" }).waitFor();
+  const parts = await noteParts(frame);
+  assert.deepEqual(parts.map((p) => [p.lines, p.cut]), [['6', true]]);
+  assert.ok(parts[0].text.startsWith('One reviewer disagreed: word'));
+  await frame.getByRole('button', { name: 'Show more' }).waitFor();
+  assert.equal(await frame.getByRole('button', { name: 'Show more' }).count(), 1);
+  await page.context().close();
+});
+
+test('reasoning: a short note that fits shows both parts whole and no Show more', async () => {
+  const { page } = await harness.page();
+  await page.evaluate((c) => window.startCard('n4', c), config());
+  const frame = await frameOf(page, 'n4');
+  await frame.getByRole('heading', { name: "Reviewers' reasoning" }).waitFor();
+  const parts = await noteParts(frame);
+  assert.deepEqual(parts.map((p) => p.cut), [false, false]);
+  assert.ok(parts[0].text.startsWith('Most startups survive'));
+  assert.ok(parts[1].text.startsWith('One reviewer disagreed: The figure depends'));
+  assert.equal(await frame.getByRole('button', { name: /Show (more|less)/ }).count(), 0);
+  await page.context().close();
+});
+
+test('reasoning: an open list row shows the same labelled note and one Show more', async () => {
+  const { page } = await harness.page();
+  const list = {
+    status: 'ok',
+    claims: [
+      { claim: 'First claim.', verdict: 'False', confidence: 'low', rationale: NOTE_LONG, dissent: NOTE_LONG },
+      { claim: 'Second claim.', verdict: 'True', confidence: 'high', rationale: 'Yes.' },
+    ],
+  };
+  await page.evaluate((c) => window.startCard('n5', c), config({ toolResult: list }));
+  const frame = await frameOf(page, 'n5');
+  await frame.getByRole('button', { name: /First claim/ }).click();
+  const panel = frame.locator('.lz-row-panel');
+  await panel.getByRole('heading', { name: "Reviewers' reasoning" }).waitFor();
+  assert.deepEqual((await noteParts(frame, '.lz-row-panel')).map((p) => [p.lines, p.cut]), [['4', true], ['2', true]]);
+  const more = panel.getByRole('button', { name: 'Show more' });
+  await more.waitFor();
+  assert.equal(await more.count(), 1);
+  const id = await more.getAttribute('aria-controls');
+  assert.match(id, /^lz-reasoning-\d+$/, 'a row\'s block carries the row in its id');
+  await more.click();
+  assert.equal(await panel.getByRole('button', { name: 'Show less' }).getAttribute('aria-expanded'), 'true');
+  assert.deepEqual((await noteParts(frame, '.lz-row-panel')).map((p) => p.cut), [false, false]);
   await page.context().close();
 });
 

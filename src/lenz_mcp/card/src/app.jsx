@@ -55,34 +55,49 @@ function Frame({ heading, lines = [], footer, eyebrow }) {
   );
 }
 
-// At most ~6 lines, then "Show more"; the rationale and the dissent each clamp
-// on their own. Whether the text overflows is measured, not guessed from its length:
-// the same text is four lines at 735 px and nine at 320.
-function Clamped({ id, children }) {
+// The reviewers' note: the reasoning and the dissent as ONE block under one
+// label, with one "Show more" that opens both. Closed, a note with both parts
+// shows four lines of the reasoning and two of the dissent, so the two are named
+// and both fit a phone screen; a part on its own keeps six. Whether anything is
+// cut is measured, not guessed from its length: the same text is four lines at
+// 735 px and nine at 320.
+// The classes that cut each part while closed (src/styles.js).
+const NOTE_CLAMP = { alone: 'lz-clamp', rationale: 'lz-clamp lz-clamp-4', dissent: 'lz-clamp lz-clamp-2' };
+
+function ReviewersNote({ rationale, dissent, id }) {
   const [open, setOpen] = useState(false);
   const [overflows, setOverflows] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
     const el = ref.current;
     if (!el || open) return undefined;
-    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    const measure = () => setOverflows([...el.children].some((p) => p.scrollHeight > p.clientHeight + 1));
     measure();
     if (!globalThis.ResizeObserver) return undefined;
     const observer = new globalThis.ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
   }, [open]);
+  const both = Boolean(rationale && dissent);
+  const clamp = (part) => (open ? '' : NOTE_CLAMP[both ? part : 'alone']);
   return (
-    <>
-      <p class={`lz-body ${open ? '' : 'lz-clamp'}`} id={id} ref={ref}>
-        {children}
-      </p>
+    <div class="lz-reasoning">
+      <h2 class="lz-label">{copy.REASONING_LABEL}</h2>
+      <div id={id} ref={ref}>
+        {rationale ? <p class={`lz-body ${clamp('rationale')}`}>{rationale}</p> : null}
+        {dissent ? (
+          <p class={`lz-body ${clamp('dissent')}`}>
+            <span class="lz-lead">{copy.DISSENT_PREFIX}</span>
+            {dissent}
+          </p>
+        ) : null}
+      </div>
       {open || overflows ? (
         <button type="button" class="lz-link" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
           {open ? copy.SHOW_LESS : copy.SHOW_MORE}
         </button>
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -141,21 +156,7 @@ function Reasoning({ row, host, idSuffix = '' }) {
   const hasNote = Boolean(row.rationale || row.dissent);
   return (
     <div class="lz-region first">
-      {row.rationale ? (
-        <div>
-          <Clamped id="lz-rationale">
-            {row.rationale}
-          </Clamped>
-        </div>
-      ) : null}
-      {row.dissent ? (
-        <div class={row.rationale ? 'lz-region' : ''}>
-          <Clamped id="lz-dissent">
-            {copy.DISSENT_PREFIX}
-            {row.dissent}
-          </Clamped>
-        </div>
-      ) : null}
+      {hasNote ? <ReviewersNote rationale={row.rationale} dissent={row.dissent} id={`lz-reasoning${idSuffix}`} /> : null}
       {pages.length ? (
         <div class={hasNote ? 'lz-pages-block' : ''}>
           <Pages pages={pages} host={host} id={`lz-pages${idSuffix}`} />
