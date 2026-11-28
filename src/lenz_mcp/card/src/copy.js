@@ -49,6 +49,10 @@ export const tallyLine = (counts) =>
 // A collapsed row says what is unusual about it, in words.
 export const ROW_NOT_SURE = 'not sure';
 export const ROW_SPLIT = 'reviewers split';
+// A row whose deep check is running keeps its quick verdict, named by the check
+// that gave it (the card's eyebrow, no new term), so it is not read as the result
+// of the check that is running.
+export const quickCheckVerdict = (verdict) => `${QUICK_EYEBROW}: ${verdict}`;
 export const rowSources = (n) => `Checked against ${n} ${n === 1 ? 'source' : 'sources'}`;
 export const SHOW_FULL_CHECK = 'Show the full check';
 export const HIDE_FULL_CHECK = 'Hide the full check';
@@ -61,6 +65,19 @@ export const BUCKET_OK = 'Checks out';
 export const BUCKET_NONE = 'Unchecked';
 export const bucketOkToggle = (n) => `Checks out (${n})`;
 export const checkAllFlagged = (n) => `Check all ${n} flagged against sources`;
+// After the press, in the button's place. The count of finished checks is the
+// progress: no bar, no percentage. The button starts two or more, but a reopened
+// card restores only the rows that still have a check, which can be one.
+export const batchRunning = (n, done) => {
+  const head = n === 1 ? 'Checking 1 claim against sources' : `Checking ${n} claims against sources`;
+  return done > 0 ? `${head} · ${done} of ${n} done` : head;
+};
+// When every check in the batch has stopped: what they found, in the tally's words,
+// so a claim that moved to "Checks out" is still accounted for here.
+export const batchDone = (counts) => {
+  const rest = tallyLine(counts);
+  return rest ? `Checked against sources · ${rest}` : 'Checked against sources';
+};
 
 // Mini-trace audit
 export const AUDIT_TRACE_SUMMARY = 'How Lenz reached this';

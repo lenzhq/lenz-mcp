@@ -1254,7 +1254,9 @@ test('a row keeps its deep verdict, its score and its source count, and the tall
   const row = frame.locator('#mcp-row-4 .lz-row-head');
   await row.click();
   await frame.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).click();
-  await frame.locator('.lz-row-panel').getByText('Checking against sources').waitFor();
+  // Running: the open row carries its progress in its head and, checked on its own, the usual time.
+  await frame.locator('#mcp-row-4 .lz-row-head').getByText('Checking against sources').waitFor();
+  await frame.locator('.lz-row-panel').getByText('Usually about a minute to a minute and a half').waitFor();
   await frame.getByText('Checked against 14 sources').waitFor({ timeout: 10000 });
   assert.match(await row.textContent(), /True\s*9\/10\s*· Checked against 14 sources/);
   assert.equal(await card.locator('.lz-tally').textContent(), '1 looks wrong · 5 hold up · 2 could not be checked');
@@ -1706,7 +1708,9 @@ test('a row whose check is running keeps running when the row is collapsed', asy
   const row = frame.locator('#mcp-row-4 .lz-row-head');
   await row.click();
   await frame.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).click();
-  await frame.locator('.lz-row-panel').getByText('Checking against sources').waitFor();
+  // Running: the open row carries its progress in its head and, checked on its own, the usual time.
+  await frame.locator('#mcp-row-4 .lz-row-head').getByText('Checking against sources').waitFor();
+  await frame.locator('.lz-row-panel').getByText('Usually about a minute to a minute and a half').waitFor();
   // Collapse it by opening another row: the check is not cancelled.
   await frame.locator('#mcp-row-5 .lz-row-head').click();
   await frame.getByText('Checked against 14 sources').waitFor({ timeout: 15000 });
@@ -1743,7 +1747,10 @@ test('a reopened card with every row recovered tells the model nothing new', asy
   // Reopen: both rows recover from storage, in whatever order they answer.
   await page.evaluate((c) => window.startCard('r2', c), config({ ...cfg, tools: { get_verification_widget: [first, second] } }));
   frame = await frameOf(page, 'r2');
-  await frame.getByText(/Checked against 14 sources/).nth(1).waitFor({ timeout: 10000 });
+  // Both rows have their result; one of them (True) sits in the folded Checks out group.
+  await frame.getByText(/Checked against 14 sources/).nth(1).waitFor({ state: 'attached', timeout: 10000 });
+  // Each row keeps its own answer: row 5 is True, not the other row's False.
+  assert.match(await frame.locator('#mcp-row-4 .lz-row-head').textContent(), /True\s*9\/10/);
   await page.waitForTimeout(600);
   const after = (await log(page)).slice(before);
   assert.deepEqual(after.filter((e) => e.method === 'ui/update-model-context'), [], 'the model is not told the same set again');
@@ -2798,5 +2805,298 @@ test('a non-English source quote is tagged with its language and marked with lan
   assert.equal(await card.locator('.lz-quote-lang').count(), 1);
   assert.equal(await frame.locator('img').count(), 0);
   assert.deepEqual(errors.filter((e) => !/Content Security Policy/.test(e)), []);
+  await page.context().close();
+});
+
+// "Check all N flagged against sources": what the card says while the checks run.
+// The list fixture flags rows 5 and 6 (indices 4 and 5): Mostly False, False.
+const FLAGGED = F.quick['list-8-with-errors'].toolResult;
+const claimAt = (i) => FLAGGED.claims[i].claim;
+const deepFor = (i, verdict, score, id) => ({ ...COMPLETED, claim: claimAt(i), verdict, lenz_score: score, verification_id: id });
+const TRUE_4 = deepFor(4, 'True', 9, 'aaaa0004');
+const FALSE_5 = deepFor(5, 'False', 2, 'aaaa0005');
+// Starts are keyed by the claim each row sends, polls by task id: each row gets its own answers.
+const batchConfig = (polls) =>
+  config({
+    toolResult: FLAGGED,
+    tools: {
+      start_verification_widget: {
+        [claimAt(4)]: { status: 'submitted', task_id: 'task-4' },
+        [claimAt(5)]: { status: 'submitted', task_id: 'task-5' },
+      },
+      get_verification_widget: polls,
+    },
+  });
+const startBatch = async (name, polls) => {
+  const { page, errors } = await harness.page();
+  await page.evaluate(([n, c]) => window.startCard(n, c), [name, batchConfig(polls)]);
+  const frame = await frameOf(page, name);
+  await frame.getByRole('button', { name: 'Check all 2 flagged against sources' }).click();
+  return { page, frame, errors };
+};
+const squashed = async (locator) => ((await locator.textContent()) || '').replace(/\s+/g, ' ').trim();
+const statusRegion = (frame) => squashed(frame.locator('[role=status]'));
+// The status line only: the status region can hold the same words.
+const statusLine = (frame, text) => frame.locator('.lz-batch-status').filter({ hasText: text });
+
+test('batch, just pressed: the button becomes a status line with the usual time, focus moves to it, and it is said', async () => {
+  // No poll is ever answered: nothing has come back yet.
+  const { page, frame, errors } = await startBatch('bp', {});
+  const line = frame.locator('.lz-batch-status');
+  await line.waitFor();
+  assert.equal(await squashed(line), 'Checking 2 claims against sources');
+  assert.equal(await squashed(frame.locator('.lz-batch-actions .lz-note')), 'Usually about a minute to a minute and a half');
+  assert.equal(await frame.getByRole('button', { name: /^Check all/ }).count(), 0);
+  await frame.waitForFunction(() => document.activeElement && document.activeElement.classList.contains('lz-batch-status'));
+  assert.equal(await statusRegion(frame), 'Checking 2 claims against sources');
+  // Each checking row: its quick verdict named as such, then where its check is.
+  await frame.locator('#mcp-row-4 .row-meta').getByText('Checking against sources').waitFor();
+  assert.equal(await squashed(frame.locator('#mcp-row-4 .row-verdict')), 'Quick check: Mostly False');
+  assert.equal(await squashed(frame.locator('#mcp-row-5 .row-verdict')), 'Quick check: False');
+  assert.match(await frame.locator('#mcp-row-5 .row-verdict').getAttribute('class'), /dimmed/);
+  assert.equal(await waitForCalls(page, 'bp', 'start_verification_widget', 2).then((c) => c.length), 2);
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('batch, mid-run: one done, the count says so, the finished row stays in To fix with its own result', async () => {
+  const { page, frame, errors } = await startBatch('bm', { 'task-4': [TRUE_4], 'task-5': [PROCESSING('debate', 3, 52)] });
+  const line = frame.locator('.lz-batch-status');
+  await statusLine(frame, 'Checking 2 claims against sources · 1 of 2 done').waitFor({ timeout: 8000 });
+  assert.equal(await squashed(line), 'Checking 2 claims against sources · 1 of 2 done');
+  await frame.locator('#mcp-row-5 .row-meta').getByText('Weighing both sides · step 3 of 5').waitFor({ timeout: 8000 });
+  // The finished row: its deep verdict, never the quick one beside nothing.
+  const finished = await squashed(frame.locator('#mcp-row-4 .lz-row-head'));
+  assert.match(finished, /True\s*9\/10\s*· Checked against 14 sources/);
+  assert.doesNotMatch(finished, /Quick check|Mostly False/);
+  assert.equal(await frame.locator('#mcp-row-4').isVisible(), true, 'pinned in To fix, not folded into Checks out');
+  assert.equal(await squashed(frame.locator('#mcp-row-5 .row-verdict')), 'Quick check: False');
+  // Opened, the finished row says what it replaced.
+  await frame.locator('#mcp-row-4 .lz-row-head').click();
+  await frame.locator('#mcp-row-4').getByText('Changed from the quick verdict: was Mostly False').waitFor();
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('batch, all done: the summary in the tally\'s words, said with the last result as one message; a row that leaves To fix stays counted', async () => {
+  const { page, frame, errors } = await startBatch('bd', {
+    'task-4': [TRUE_4],
+    'task-5': [PROCESSING('debate', 3, 52), FALSE_5],
+    // Were the row mounted afresh when it changes group, it would re-poll by its verification id.
+    aaaa0004: [TRUE_4],
+  });
+  const summary = 'Checked against sources · 1 looks wrong · 1 holds up';
+  await statusLine(frame, summary).waitFor({ timeout: 12000 });
+  assert.equal(await frame.locator('.lz-batch-actions .lz-note').count(), 0);
+  await page.waitForTimeout(500);
+  assert.equal(await statusRegion(frame), `Claim 6: Result: False, 2 out of 10, confidence high. ${summary}`);
+  // The batch has ended: the True row has left To fix for the folded Checks out group.
+  assert.equal(await frame.locator('#mcp-row-4').isVisible(), false);
+  // It was moved, not mounted afresh: no second poll, its result not said again,
+  // and the count never goes back.
+  await page.waitForTimeout(4000);
+  assert.equal(await squashed(frame.locator('.lz-batch-status')), summary);
+  assert.equal(await frame.locator('.lz-batch-status').filter({ hasText: /of 2 done/ }).count(), 0);
+  assert.equal((await calls(page, 'bd', 'get_verification_widget')).filter((e) => e.params.arguments.task_id === 'aaaa0004').length, 0);
+  assert.equal(await statusRegion(frame), `Claim 6: Result: False, 2 out of 10, confidence high. ${summary}`);
+  assert.match(await squashed(frame.locator('#mcp-row-5 .lz-row-head')), /False\s*2\/10\s*· Checked against 14 sources/);
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('batch, one did not finish: its quick verdict comes back with "did not finish", and the summary counts it', async () => {
+  const { page, frame, errors } = await startBatch('bf', { 'task-4': [TRUE_4], 'task-5': [F.polls['failed-not-retryable'].result] });
+  await statusLine(frame, 'Checked against sources · 1 holds up · 1 could not be checked').waitFor({ timeout: 8000 });
+  const head = frame.locator('#mcp-row-5 .lz-row-head');
+  assert.equal(await squashed(head.locator('.row-verdict')), 'False');
+  assert.match(await head.locator('.row-verdict').getAttribute('class'), /v-false/);
+  assert.match(await squashed(head), /did not finish/);
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('batch, "Try again" on a row that did not finish: the status line counts it as running again, then sums up', async () => {
+  const { page, frame, errors } = await startBatch('bt', {
+    'task-4': [TRUE_4],
+    'task-5': [F.polls['failed-retryable'].result, PROCESSING('research', 2, 9), FALSE_5],
+  });
+  await statusLine(frame, 'Checked against sources · 1 holds up · 1 could not be checked').waitFor({ timeout: 8000 });
+  await frame.locator('#mcp-row-5 .lz-row-head').click();
+  await frame.locator('#mcp-row-5 .lz-row-panel').getByRole('button', { name: 'Try again' }).click();
+  await statusLine(frame, 'Checking 2 claims against sources · 1 of 2 done').waitFor({ timeout: 8000 });
+  await statusLine(frame, 'Checked against sources · 1 looks wrong · 1 holds up').waitFor({ timeout: 12000 });
+  const retry = (await calls(page, 'bt', 'start_verification_widget')).at(-1);
+  assert.equal(retry.params.arguments.retry_of, 'task-5');
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('batch, pressed the moment the card appears: the rows\' mount-time reports do not lose the batch', async () => {
+  const { page, errors } = await harness.page();
+  // Inside the card's frame, press "Check all" the instant it is rendered: before
+  // the rows' first effects (their recovery, with nothing to recover) have run.
+  await page.addInitScript(() => {
+    if (!location.pathname.endsWith('/card.html')) return;
+    const pressFirst = new MutationObserver(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => /^Check all/.test(x.textContent));
+      if (!b) return;
+      pressFirst.disconnect();
+      b.click();
+    });
+    pressFirst.observe(document, { childList: true, subtree: true });
+  });
+  await page.evaluate((c) => window.startCard('be', c), batchConfig({ 'task-4': [PROCESSING('debate', 3, 52)], 'task-5': [PROCESSING('debate', 3, 52)] }));
+  const frame = await frameOf(page, 'be');
+  await waitForCalls(page, 'be', 'start_verification_widget', 2);
+  await page.waitForTimeout(1000);
+  assert.equal(await frame.locator('.lz-batch-status').count(), 1, 'the status line is there');
+  assert.equal(await squashed(frame.locator('.lz-batch-status')), 'Checking 2 claims against sources');
+  assert.equal(await frame.getByRole('button', { name: /^Check all/ }).count(), 0);
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('batch, past three minutes: the usual time gives way to "taking longer than usual"', async () => {
+  const { page, frame, errors } = await startBatch('bl', { 'task-4': [PROCESSING('adjudication', 4, 204)], 'task-5': [PROCESSING('adjudication', 4, 196)] });
+  await frame.getByText('This is taking longer than usual. It keeps running.').waitFor({ timeout: 8000 });
+  assert.equal(await squashed(frame.locator('.lz-batch-status')), 'Checking 2 claims against sources');
+  assert.equal(await squashed(frame.locator('#mcp-row-4 .row-meta')), '· Reviewing · step 4 of 5');
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('a single row\'s check, collapsed by opening another row, still shows its quick verdict as such and its step', async () => {
+  const { page, errors } = await harness.page();
+  await page.evaluate((c) => window.startCard('bs', c), batchConfig({ 'task-5': [PROCESSING('research', 2, 24)] }));
+  const frame = await frameOf(page, 'bs');
+  await frame.locator('#mcp-row-5 .lz-row-head').click();
+  await frame.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).click();
+  await frame.locator('#mcp-row-5 .lz-row-head').getByText('Finding sources · step 2 of 5 · 0:24').waitFor({ timeout: 8000 });
+  await frame.locator('#mcp-row-4 .lz-row-head').click();
+  const head = frame.locator('#mcp-row-5 .lz-row-head');
+  assert.equal(await head.getAttribute('aria-expanded'), 'false');
+  assert.equal(await squashed(head.locator('.row-verdict')), 'Quick check: False');
+  assert.equal(await squashed(head.locator('.row-meta')), '· Finding sources · step 2 of 5');
+  // Only a batch has a status line.
+  assert.equal(await frame.locator('.lz-batch-status').count(), 0);
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('an open row whose check is running says its quick read once: no marker, no confidence line; a check that stops brings them back', async () => {
+  const { page, errors } = await harness.page();
+  // As rendered: innerText keeps the line breaks between the lines.
+  const shown = async (loc) => (await loc.innerText()).replace(/\s+/g, ' ').trim();
+  await page.evaluate((c) => window.startCard('bo', c), batchConfig({ 'task-4': [PROCESSING('research', 2, 9), F.polls['failed-not-retryable'].result] }));
+  const frame = await frameOf(page, 'bo');
+  const li = frame.locator('#mcp-row-4');
+  // Row 5 is Mostly False on low confidence: before the check, its marker and its confidence line.
+  await li.locator('.lz-row-head').click();
+  assert.match(await shown(li.locator('.lz-row-head')), /Mostly False · not sure$/);
+  assert.match(await shown(li.locator('.lz-row-panel')), /Confidence: low · Lenz is not sure about this one/);
+  await li.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).click();
+  await li.locator('.lz-row-head').getByText('Finding sources · step 2 of 5 · 0:09').waitFor({ timeout: 8000 });
+  // The open row is the closed row plus the clock: no heading, no rule.
+  const head = await shown(li.locator('.lz-row-head'));
+  assert.equal(head, `${claimAt(4)} Quick check: Mostly False · Finding sources · step 2 of 5 · 0:09`);
+  // Focus after the row's own press is on its head, which carries the progress.
+  await frame.waitForFunction(() => document.activeElement && document.activeElement.closest('#mcp-row-4') && document.activeElement.classList.contains('lz-row-head'));
+  // A check started from its row: no batch line says the usual time, so the row does.
+  const panel = await shown(li.locator('.lz-row-panel'));
+  assert.equal(panel, 'Usually about a minute to a minute and a half');
+  assert.equal(await li.locator('.lz-running').count(), 0);
+  assert.equal((await shown(li)).split('Quick check').length - 1, 1, 'the quick read is said once');
+  // The check stops without a verdict: the quick read comes back as it was.
+  await li.getByText('This check did not finish.').waitFor({ timeout: 8000 });
+  assert.match(await shown(li.locator('.lz-row-head')), /Mostly False · not sure$/);
+  assert.doesNotMatch(await shown(li.locator('.lz-row-head')), /Quick check/);
+  assert.match(await shown(li.locator('.lz-row-panel')), /^Confidence: low · Lenz is not sure about this one/);
+  // Collapsed, it says it did not finish.
+  await frame.locator('#mcp-row-5 .lz-row-head').click();
+  assert.match(await shown(li.locator('.lz-row-head')), /Mostly False · did not finish$/);
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('batch, an open checking row is the closed row plus the clock: the usual time stays in the line at the top, and opening moves nothing', async () => {
+  const { page, frame, errors } = await startBatch('bk', { 'task-4': [TRUE_4], 'task-5': [PROCESSING('debate', 3, 52)] });
+  const shown = async (loc) => (await loc.innerText()).replace(/\s+/g, ' ').trim();
+  const li = frame.locator('#mcp-row-5');
+  await li.locator('.row-meta').getByText('Weighing both sides · step 3 of 5').waitFor({ timeout: 8000 });
+  const closedHeight = (await li.boundingBox()).height;
+  await li.locator('.lz-row-head').click();
+  await li.locator('.lz-row-head').getByText('Weighing both sides · step 3 of 5 · 0:52').waitFor();
+  assert.equal(await shown(li.locator('.lz-row-head')), `${claimAt(5)} Quick check: False · Weighing both sides · step 3 of 5 · 0:52`);
+  assert.equal(await shown(li.locator('.lz-row-panel')), '');
+  assert.doesNotMatch(await shown(li), /Usually|Checking against sources|Confidence/);
+  assert.equal((await li.boundingBox()).height, closedHeight, 'opening a checking row in a batch moves nothing');
+  assert.equal(await shown(frame.locator('.lz-batch-actions')), 'Checking 2 claims against sources · 1 of 2 done Usually about a minute to a minute and a half');
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('a single-row check past three minutes says so inside its open row', async () => {
+  const { page, errors } = await harness.page();
+  await page.evaluate((c) => window.startCard('bsl', c), batchConfig({ 'task-5': [PROCESSING('adjudication', 4, 204)] }));
+  const frame = await frameOf(page, 'bsl');
+  const li = frame.locator('#mcp-row-5');
+  await li.locator('.lz-row-head').click();
+  await li.locator('.lz-row-panel').getByRole('button', { name: /Check against sources/ }).click();
+  await li.getByText('This is taking longer than usual. It keeps running.').waitFor({ timeout: 8000 });
+  assert.match(await li.locator('.lz-row-head').innerText(), /Reviewing · step 4 of 5 · 3:24/);
+  assert.equal(await frame.locator('.lz-batch-status').count(), 0);
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('batch, reopened mid-run: the status line comes back with its count, and nothing starts again', async () => {
+  const polls = { 'task-4': [TRUE_4], 'task-5': [PROCESSING('debate', 3, 52)], aaaa0004: [TRUE_4] };
+  const { page, frame, errors } = await startBatch('br1', polls);
+  await statusLine(frame, 'Checking 2 claims against sources · 1 of 2 done').waitFor({ timeout: 8000 });
+  await page.evaluate(() => window.removeCard('br1'));
+  await page.evaluate((c) => window.startCard('br2', c), batchConfig(polls));
+  const again = await frameOf(page, 'br2');
+  await statusLine(again, 'Checking 2 claims against sources · 1 of 2 done').waitFor({ timeout: 8000 });
+  assert.equal(await again.getByRole('button', { name: /^Check all/ }).count(), 0);
+  assert.equal((await calls(page, 'br2', 'start_verification_widget')).length, 0);
+  assert.deepEqual(errors, []);
+  await page.context().close();
+});
+
+test('batch, reopened after it finished: no "Checking…" while the rows read their results back, the summary once they have, and it is not said again', async () => {
+  const polls = { 'task-4': [TRUE_4], 'task-5': [FALSE_5] };
+  const { page, frame } = await startBatch('bz1', polls);
+  const summary = 'Checked against sources · 1 looks wrong · 1 holds up';
+  await statusLine(frame, summary).waitFor({ timeout: 8000 });
+  await page.evaluate(() => window.removeCard('bz1'));
+  // Reopen: each row reads its finished check back by its verification id, slowly.
+  await page.evaluate((c) => window.startCard('bz2', c), batchConfig({ aaaa0004: { ...TRUE_4, __delay: 1500 }, aaaa0005: { ...FALSE_5, __delay: 1500 } }));
+  const again = await frameOf(page, 'bz2');
+  await again.locator('#mcp-row-5').waitFor();
+  await page.waitForTimeout(600);
+  assert.equal(await again.locator('.lz-batch-actions').count(), 0, 'no "Checking…" and no button while the results are read back');
+  await statusLine(again, summary).waitFor({ timeout: 8000 });
+  await page.waitForTimeout(800);
+  assert.doesNotMatch(await statusRegion(again), /Checked against sources/);
+  assert.equal((await calls(page, 'bz2', 'start_verification_widget')).length, 0);
+  await page.context().close();
+});
+
+test('batch, reopened after one row\'s record is gone: only the row with a check is restored, in the singular', async () => {
+  const polls = { 'task-4': [PROCESSING('debate', 3, 52)], 'task-5': [PROCESSING('debate', 3, 52)] };
+  const { page, frame } = await startBatch('bo1', polls);
+  await frame.locator('#mcp-row-5 .row-meta').getByText('Weighing both sides · step 3 of 5').waitFor({ timeout: 8000 });
+  // Row 5's record expires (or the reader's storage drops it); row 6's stays.
+  const dropped = await frame.evaluate((claim) => {
+    // A row's record, never the card's own (lenz-card:v1:card:…), which names every claim.
+    const key = Object.keys(localStorage).find((k) => k.startsWith('lenz-card:v1:') && !k.includes(':card:') && (localStorage.getItem(k) || '').includes(claim));
+    if (key) localStorage.removeItem(key);
+    return !!key;
+  }, claimAt(4));
+  assert.equal(dropped, true);
+  await page.evaluate(() => window.removeCard('bo1'));
+  await page.evaluate((c) => window.startCard('bo2', c), batchConfig(polls));
+  const again = await frameOf(page, 'bo2');
+  await statusLine(again, 'Checking 1 claim against sources').waitFor({ timeout: 8000 });
   await page.context().close();
 });

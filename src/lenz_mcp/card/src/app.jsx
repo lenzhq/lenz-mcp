@@ -7,9 +7,10 @@ import { Component } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 
 import * as copy from './copy.js';
+import { batchEndMessage, batchProgress, batchRows, isStopped, recordRun, restoreBatch, withoutRow } from './logic/batch.js';
 import { citecheckFailure } from './logic/citecheck-failure.js';
 import { quotaWords } from './logic/credits.js';
-import { createDeepCheck } from './logic/deep-check.js';
+import { createDeepCheck, LONG_RUN_SECONDS } from './logic/deep-check.js';
 import { domainOf, formatElapsed, isWebUrl, languageName, text, verdictKey } from './logic/format.js';
 import { bucketOf, buttonStrength, changedFrom, deepResult, isSendableId, routePayload, tally } from './logic/route.js';
 import { buildSnapshot } from './logic/snapshot.js';
@@ -519,7 +520,7 @@ const TERMINAL = new Set(['failed', 'quota', 'unavailable', 'unrecoverable']);
 
 // One row's deep check: its own stored ids, its own state machine, its own
 // announcements. The single card and every list row use this same hook.
-function useDeepCheck({ row, host, announce, registerCompleted, label = '', store: given, checkKey = '', order = 0, reportState }) {
+function useDeepCheck({ row, host, announce, registerCompleted, label = '', store: given, checkKey = '', order = 0, reportState, onNothing }) {
   const own = useMemo(
     () => (given === null ? null : createRowStore(safeStorage(), { claim: row.claim, quickVerdict: row.verdict, language: row.language })),
     [row.claim, row.verdict, row.language, given === null],
@@ -548,6 +549,7 @@ function useDeepCheck({ row, host, announce, registerCompleted, label = '', stor
       // a card with nothing to recover must not be counted as waiting, and a
       // signal sent after the poll could arrive after the result.
       onAdopted: () => reportState && checkKey && reportState(checkKey, 'running'),
+      onNothing,
     });
     return () => check.dispose();
   }, [row.claim, row.verdict, row.language]);
@@ -665,10 +667,14 @@ function SingleCard({ row, host, announce, registerCompleted, reportState }) {
 // confidence line and the reasoning the single card shows, plus the action — and
 // once its deep check has run, the deep verdict in place, with the full deep
 // check block behind one disclosure. One row is open at a time; the others stay usable.
-function Row({ index, displayNumber, row, host, open, hidden, onToggle, announce, registerCompleted, reportState, onVerdict, autoStart, completedResult }) {
+function Row({ index, displayNumber, row, host, open, hidden, onToggle, announce, registerCompleted, reportState, onVerdict, autoStart, completedResult, onRun, inBatch = false }) {
   const num = displayNumber != null ? displayNumber : index + 1;
   const label = copy.rowLabel(num);
-  const { state, start } = useDeepCheck({ row, host, announce, registerCompleted, label, checkKey: rowId(row), order: index, reportState });
+  // A row with nothing to recover says so once, so a reopened batch can let go of it.
+  const { state, start } = useDeepCheck({
+    row, host, announce, registerCompleted, label, checkKey: rowId(row), order: index, reportState,
+    onNothing: () => onRun && onRun(index, { kind: 'none' }),
+  });
   const [full, setFull] = useState(false);
   const panelId = `lz-row-${index}`;
   const headRef = useRef(null);
@@ -692,6 +698,12 @@ function Row({ index, displayNumber, row, host, open, hidden, onToggle, announce
   useEffect(() => {
     if (!open) setFull(false);
   }, [open]);
+  // The list counts a batch's finished checks from what each row reports
+  // (logic/batch.js keeps a stopped check counted until a newer attempt).
+  const attempts = useRef(0);
+  useEffect(() => {
+    if (onRun) onRun(index, { kind: state.kind, elapsed: state.kind === 'running' ? state.elapsed : 0, attempt: attempts.current });
+  }, [state.kind, state.elapsed]);
   useEffect(() => {
     if (autoStart && state.kind === 'idle' && !result && !completedResult && !row.error) start();
   }, [autoStart]);
@@ -715,6 +727,7 @@ function Row({ index, displayNumber, row, host, open, hidden, onToggle, announce
 
   const press = () => {
     focusFollows.current = true;
+    attempts.current += 1;
     start();
   };
 
@@ -728,14 +741,14 @@ function Row({ index, displayNumber, row, host, open, hidden, onToggle, announce
     <li id={`mcp-row-${index}`} hidden={hidden || undefined}>
       <span class="num">{num}</span>
       <div>
-        <button type="button" class="lz-row-head" ref={headRef} aria-expanded={open} aria-controls={panelId} onClick={onToggle}>
+        <button type="button" class="lz-row-head" ref={(el) => { headRef.current = el; runningHeading.current = el; }} aria-expanded={open} aria-controls={panelId} onClick={onToggle}>
           <span class="row-claim">{row.claim}</span>
           {row.error ? (
             <span class="lz-meta row-meta">{copy.ROW_ERROR[row.error] || copy.ROW_ERROR_DEFAULT}</span>
           ) : (
             <>
-              <span class="row-line">
-                <span class={`row-verdict ${busy ? 'dimmed' : `v-${verdictKey(verdict)}`}`}>{verdict}</span>
+              <span class={`row-line${busy ? ' checking' : ''}`}>
+                <span class={`row-verdict ${busy ? 'dimmed' : `v-${verdictKey(verdict)}`}`}>{busy ? copy.quickCheckVerdict(verdict) : verdict}</span>
                 {result && result.score != null ? <span class="lz-meta row-score">{`${result.score}/10`}</span> : null}
               </span>
               {/* The meta has its own line, but read aloud the row still runs "True 9/10 ·
@@ -746,7 +759,20 @@ function Row({ index, displayNumber, row, host, open, hidden, onToggle, announce
                   {copy.rowSources(result.sourcesTotal)}
                 </span>
               ) : null}
-              {!result && markers.length ? (
+              {/* A collapsed row whose deep check is running says so, as a picked row does;
+                  open, the running block in the panel says it. One that stopped says that. */}
+              {!result && busy ? (
+                <span class="lz-meta row-meta">
+                  <span class="lz-sr"> · </span>
+                  {(state.stage && state.index > 0 ? copy.stepLine(state.stage, state.index, state.total) : copy.RUNNING_HEADING) +
+                    (open && state.kind === 'running' && state.elapsed > 0 ? ` · ${formatElapsed(state.elapsed)}` : '')}
+                </span>
+              ) : !result && !open && TERMINAL.has(state.kind) ? (
+                <span class="lz-meta row-meta">
+                  <span class="lz-sr"> · </span>
+                  {copy.ROW_DID_NOT_FINISH}
+                </span>
+              ) : !result && !busy && markers.length ? (
                 <span class="lz-meta row-meta">
                   <span class="lz-sr"> · </span>
                   {markers.join(' · ')}
@@ -762,10 +788,13 @@ function Row({ index, displayNumber, row, host, open, hidden, onToggle, announce
             ) : null}
             {row.error ? <p class="lz-body">{row.hint}</p> : null}
             {/* The confidence belongs to the verdict the row is showing: the deep
-                check's once it has one, the quick read's until then. */}
+                check's once it has one, the quick read's until then. While the deep
+                check runs, the quick read is said once, in the row's head ("Quick
+                check: False"): no marker, no confidence line. A check that stops
+                without a verdict brings them back. */}
             {result ? <p class="lz-meta lz-conf">{copy.deepConfidence(result.confidence)}</p> : null}
             {result || row.error ? null : <NoRecordLine row={row} />}
-            {result || row.error ? null : <p class="lz-meta lz-conf">{copy.CONFIDENCE_LINE[row.confidence]}</p>}
+            {result || row.error || busy ? null : <p class="lz-meta lz-conf">{copy.CONFIDENCE_LINE[row.confidence]}</p>}
             {result ? (
               <>
                 <div class="lz-actions">
@@ -781,7 +810,9 @@ function Row({ index, displayNumber, row, host, open, hidden, onToggle, announce
                 {state.kind === 'idle' && !row.error && host.capabilities.serverTools ? (
                   <CheckButton row={row} onPress={press} />
                 ) : null}
-                {busy ? <Running state={state} headingRef={runningHeading} /> : null}
+                {/* The row's own line above says where the check is. The usual time is said
+                    here only when no batch line at the top says it already. */}
+                {busy && !inBatch ? <p class="lz-meta lz-row-note">{state.kind === 'running' && state.elapsed >= LONG_RUN_SECONDS ? copy.LONG_RUN : copy.USUALLY}</p> : null}
                 {TERMINAL.has(state.kind) ? <NotFinished state={state} onRetry={press} focusRef={terminalRef} /> : null}
               </>
             )}
@@ -805,7 +836,7 @@ const capOrder = (b, okOpen) => [...b.bad, ...b.look, ...(okOpen ? b.ok : []), .
 // Asymmetric bucket promotion: severity upgrades move immediately,
 // severity downgrades stay pinned while the card is open so an open card
 // never vanishes into collapsed Holds up.
-function bucketRows(rows, verdicts, confidences, openId) {
+function bucketRows(rows, verdicts, confidences, openId, pinned = null) {
   const b = { bad: [], look: [], ok: [], none: [] };
   rows.forEach((row, i) => {
     const v = verdicts[rowKey(row, i)] || verdicts[rowId(row)] || row.verdict;
@@ -815,7 +846,7 @@ function bucketRows(rows, verdicts, confidences, openId) {
     if (SEV[liveBucket] < SEV[initialBucket]) {
       b[liveBucket].push(i);
     } else if (SEV[liveBucket] > SEV[initialBucket]) {
-      if (openId === openKey(i)) {
+      if (openId === openKey(i) || (pinned && pinned.has(i))) {
         b[initialBucket].push(i);
       } else {
         b[liveBucket].push(i);
@@ -827,7 +858,7 @@ function bucketRows(rows, verdicts, confidences, openId) {
   return b;
 }
 
-function ListCard({ rows, citations = [], host, announce, registerCompleted, reportState }) {
+function ListCard({ rows, citations = [], host, announce, registerCompleted, reportState, cardStore = null }) {
   const [allRows, setAllRows] = useState(false);
   const [openId, setOpenId] = useState('');
   // A row's deep verdict replaces its quick one in the tally as well as in the
@@ -837,6 +868,57 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
   const [confidences, setConfidences] = useState({});
   const [deepResults, setDeepResults] = useState({});
   const [batchRun, setBatchRun] = useState({});
+  // The rows "Check all flagged" started (row positions), and what each row last
+  // reported. A reopened card restores the batch from the card's own record,
+  // keeping only rows whose own record still holds a check to recover.
+  const recordOf = (i) => createRowStore(safeStorage(), { claim: rows[i].claim, quickVerdict: rows[i].verdict, language: rows[i].language }).load();
+  const [batch, setBatch] = useState(() => restoreBatch(cardStore ? cardStore.loadBatch() : null, rows.length, (i) => !!recordOf(i)));
+  // A reopened batch whose every check had already finished (each record has its
+  // verification id) is not re-run on screen: no "Checking…" while the rows read
+  // their results back, and no summary said again. Its summary line shows once
+  // they all have.
+  const finishedAtMount = useRef(null);
+  if (finishedAtMount.current === null) {
+    finishedAtMount.current = !!batch && batch.every((i) => {
+      const rec = recordOf(i);
+      return !!(rec && rec.verificationId);
+    });
+  }
+  const [runs, setRuns] = useState({});
+  // Kept in step with `runs`, so a report can be judged against the one before it.
+  const runsRef = useRef({});
+  // Per row: the order of its last stop, and the last thing it said.
+  const stoppedAt = useRef({});
+  const stops = useRef(0);
+  const said = useRef({});
+  // Only a batch restored at mount can lose a row to "nothing to recover": the
+  // rows say so from their first effects, which can run after a press made the
+  // instant the card appeared, and a pressed batch's rows are starting their checks.
+  const restored = useRef(!!batch);
+  const onRun = (i, run) => {
+    if (run && run.kind === 'none') {
+      if (restored.current) setBatch((prev) => withoutRow(prev, i));
+      return;
+    }
+    const next = recordRun(runsRef.current, i, run);
+    if (next === runsRef.current) return;
+    if (isStopped(run)) {
+      stops.current += 1;
+      stoppedAt.current[i] = stops.current;
+    }
+    runsRef.current = next;
+    setRuns(next);
+  };
+  const batchRef = useRef(null);
+  const progress = batchProgress(batch, runs);
+  const batchRunning = progress.running;
+  // The rows speak through this, so the list knows what each said last: the
+  // status region holds one message at a time (main.jsx), and the batch summary
+  // is said with the result of the row that ended the batch (batchEndMessage).
+  const say = (i, text) => {
+    said.current[i] = text;
+    announce(text);
+  };
 
   const normCitations = useMemo(() => {
     return (Array.isArray(citations) ? citations : []).map(normalizeCitation);
@@ -890,9 +972,10 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
       ? copy.itemsHeading(rows.length + normCitations.length)
       : copy.listHeading(rows.length);
 
+  const pinned = batchRunning ? new Set(batch) : null;
   const buckets = useMemo(
-    () => bucketRows(rows, verdicts, confidences, openId),
-    [rows, verdicts, confidences, openId]
+    () => bucketRows(rows, verdicts, confidences, openId, pinned),
+    [rows, verdicts, confidences, openId, pinned ? [...pinned].join(',') : '']
   );
 
   const hasAttention =
@@ -941,6 +1024,19 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
     (i) => !verdicts[rowKey(rows[i], i)] && !verdicts[rowId(rows[i])] && !rows[i].error && !batchRun[i]
   );
   const showBatchBad = host?.capabilities?.serverTools && uncheckedBad.length >= 2 && uncheckedBad.length <= 5;
+  // What the batch found, in the tally's words.
+  const batchCounts = batch ? tally(batchRows(batch, runs, (i) => verdicts[rowKey(rows[i], i)] || verdicts[rowId(rows[i])] || '')) : null;
+  // Said once, when the batch ends. The stop that ends it is the last row's, and
+  // that row has just said its own result: a second message now would replace
+  // it before it is read, and no delay is long enough on every screen reader.
+  // So the summary is said WITH it, as one message, and nothing waits.
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (wasRunning.current && !batchRunning && batch && !finishedAtMount.current) {
+      announce(batchEndMessage(batch, said.current, stoppedAt.current, copy.batchDone(batchCounts)));
+    }
+    wasRunning.current = batchRunning;
+  }, [batchRunning]);
 
   return (
     <div class="lz">
@@ -998,169 +1094,195 @@ function ListCard({ rows, citations = [], host, announce, registerCompleted, rep
 
       <div class="lz-region lz-rows-region">
         <ol class="lz-list lz-rows">
-          {(buckets.bad.length > 0 && buckets.bad.some((i) => !pastCap(i))) || citeBuckets.bad.length > 0 ? (
-            <li key="header-bad" class="lz-bucket-head">
-              {copy.BUCKET_BAD}
-            </li>
-          ) : null}
-          {showBatchBad ? (
-            <li key="batch-bad" class="lz-batch-actions">
-              <button
-                type="button"
-                class="lz-button outlined"
-                onClick={() => {
-                  const next = { ...batchRun };
-                  uncheckedBad.forEach((idx) => {
-                    next[idx] = true;
-                  });
-                  setBatchRun(next);
-                }}
-              >
-                {copy.checkAllFlagged(uncheckedBad.length)}
-              </button>
-            </li>
-          ) : null}
-          {buckets.bad.map((i) => (
-            <Row
-              key={`${rowId(rows[i])}#${i}`}
-              index={i}
-              displayNumber={itemNumbers.claimNums.get(i)}
-              row={rows[i]}
-              host={host}
-              hidden={pastCap(i)}
-              open={openId === openKey(i)}
-              onToggle={() => setOpenId(openId === openKey(i) ? '' : openKey(i))}
-              announce={announce}
-              registerCompleted={registerCompleted}
-              reportState={reportState}
-              onVerdict={onVerdict}
-              autoStart={!!batchRun[i]}
-              completedResult={deepResults[rowKey(rows[i], i)] || deepResults[rowId(rows[i])]}
-            />
-          ))}
-          {citeBuckets.bad.map((c, idx) => (
-            <CitationRow
-              key={`cite-bad-${c.index ?? idx}`}
-              citation={c}
-              displayNumber={itemNumbers.citeNums.get(c)}
-              fallbackIndex={rows.length + idx}
-              host={host}
-            />
-          ))}
-
-          {(buckets.look.length > 0 && buckets.look.some((i) => !pastCap(i))) || citeBuckets.look.length > 0 ? (
-            <li key="header-look" class="lz-bucket-head">
-              {copy.BUCKET_LOOK}
-            </li>
-          ) : null}
-          {buckets.look.map((i) => (
-            <Row
-              key={`${rowId(rows[i])}#${i}`}
-              index={i}
-              displayNumber={itemNumbers.claimNums.get(i)}
-              row={rows[i]}
-              host={host}
-              hidden={pastCap(i)}
-              open={openId === openKey(i)}
-              onToggle={() => setOpenId(openId === openKey(i) ? '' : openKey(i))}
-              announce={announce}
-              registerCompleted={registerCompleted}
-              reportState={reportState}
-              onVerdict={onVerdict}
-              autoStart={!!batchRun[i]}
-              completedResult={deepResults[rowKey(rows[i], i)] || deepResults[rowId(rows[i])]}
-            />
-          ))}
-          {citeBuckets.look.map((c, idx) => (
-            <CitationRow
-              key={`cite-look-${c.index ?? idx}`}
-              citation={c}
-              displayNumber={itemNumbers.citeNums.get(c)}
-              fallbackIndex={rows.length + idx}
-              host={host}
-            />
-          ))}
-
-          {buckets.ok.length > 0 || citeBuckets.ok.length > 0 ? (
-            <li key="header-ok" class="lz-bucket-head">
-              <button
-                type="button"
-                class="lz-bucket-toggle"
-                aria-expanded={showOk}
-                onClick={() => {
-                  if (showOk && buckets.ok.some((idx) => openKey(idx) === openId)) {
-                    setOpenId('');
-                  }
-                  setShowOk(!showOk);
-                }}
-              >
-                <span>{copy.bucketOkToggle(buckets.ok.length + citeBuckets.ok.length)}</span>
-                <span aria-hidden="true">{showOk ? '▴' : '▾'}</span>
-              </button>
-            </li>
-          ) : null}
-          {buckets.ok.map((i) => (
-            <Row
-              key={`${rowId(rows[i])}#${i}`}
-              index={i}
-              displayNumber={itemNumbers.claimNums.get(i)}
-              row={rows[i]}
-              host={host}
-              hidden={!showOk || pastCap(i)}
-              open={openId === openKey(i)}
-              onToggle={() => setOpenId(openId === openKey(i) ? '' : openKey(i))}
-              announce={announce}
-              registerCompleted={registerCompleted}
-              reportState={reportState}
-              onVerdict={onVerdict}
-              autoStart={!!batchRun[i]}
-              completedResult={deepResults[rowKey(rows[i], i)] || deepResults[rowId(rows[i])]}
-            />
-          ))}
-          {showOk
-            ? citeBuckets.ok.map((c, idx) => (
-                <CitationRow
-                  key={`cite-ok-${c.index ?? idx}`}
-                  citation={c}
-                  displayNumber={itemNumbers.citeNums.get(c)}
-                  fallbackIndex={rows.length + idx}
-                  host={host}
-                />
-              ))
-            : null}
-
-          {(buckets.none.length > 0 && buckets.none.some((i) => !pastCap(i))) || citeBuckets.none.length > 0 ? (
-            <li key="header-none" class="lz-bucket-head">
-              {copy.BUCKET_NONE}
-            </li>
-          ) : null}
-          {buckets.none.map((i) => (
-            <Row
-              key={`${rowId(rows[i])}#${i}`}
-              index={i}
-              displayNumber={itemNumbers.claimNums.get(i)}
-              row={rows[i]}
-              host={host}
-              hidden={pastCap(i)}
-              open={openId === openKey(i)}
-              onToggle={() => setOpenId(openId === openKey(i) ? '' : openKey(i))}
-              announce={announce}
-              registerCompleted={registerCompleted}
-              reportState={reportState}
-              onVerdict={onVerdict}
-              autoStart={!!batchRun[i]}
-              completedResult={deepResults[rowKey(rows[i], i)] || deepResults[rowId(rows[i])]}
-            />
-          ))}
-          {citeBuckets.none.map((c, idx) => (
-            <CitationRow
-              key={`cite-none-${c.index ?? idx}`}
-              citation={c}
-              displayNumber={itemNumbers.citeNums.get(c)}
-              fallbackIndex={rows.length + idx}
-              host={host}
-            />
-          ))}
+          {/* ONE keyed array, not a sibling array per group: a row whose check moves it
+              to another group is moved, not mounted afresh. A fresh mount re-polls a
+              finished check and says its result again over whatever was said last. */}
+          {[
+            (buckets.bad.length > 0 && buckets.bad.some((i) => !pastCap(i))) || citeBuckets.bad.length > 0 ? (
+              <li key="header-bad" class="lz-bucket-head">
+                {copy.BUCKET_BAD}
+              </li>
+            ) : null,
+            batch && batchRunning && finishedAtMount.current ? null : batch ? (
+              <li key="batch-bad" class="lz-batch-actions">
+                <p class={`lz-batch-status${batchRunning ? '' : ' done'}`} ref={batchRef} tabIndex={-1}>
+                  {batchRunning ? copy.batchRunning(progress.total, progress.done) : copy.batchDone(batchCounts)}
+                </p>
+                {batchRunning ? <p class="lz-note">{progress.elapsed >= LONG_RUN_SECONDS ? copy.LONG_RUN : copy.USUALLY}</p> : null}
+              </li>
+            ) : showBatchBad ? (
+              <li key="batch-bad" class="lz-batch-actions">
+                <button
+                  type="button"
+                  class="lz-button outlined"
+                  onClick={() => {
+                    const next = { ...batchRun };
+                    uncheckedBad.forEach((idx) => {
+                      next[idx] = true;
+                    });
+                    setBatchRun(next);
+                    setBatch(uncheckedBad.slice());
+                    finishedAtMount.current = false;
+                    restored.current = false;
+                    if (cardStore) cardStore.saveBatch(uncheckedBad);
+                    announce(copy.batchRunning(uncheckedBad.length, 0));
+                    // The button is gone: focus goes to the line that replaced it.
+                    setTimeout(() => batchRef.current && batchRef.current.focus(), 0);
+                  }}
+                >
+                  {copy.checkAllFlagged(uncheckedBad.length)}
+                </button>
+              </li>
+            ) : null,
+            buckets.bad.map((i) => (
+              <Row
+                key={`${rowId(rows[i])}#${i}`}
+                index={i}
+                displayNumber={itemNumbers.claimNums.get(i)}
+                row={rows[i]}
+                host={host}
+                hidden={pastCap(i)}
+                open={openId === openKey(i)}
+                onToggle={() => setOpenId(openId === openKey(i) ? '' : openKey(i))}
+                announce={(text) => say(i, text)}
+                registerCompleted={registerCompleted}
+                reportState={reportState}
+                onVerdict={onVerdict}
+                autoStart={!!batchRun[i]}
+                onRun={onRun}
+                inBatch={!!batch && batch.includes(i)}
+                completedResult={deepResults[rowKey(rows[i], i)] || deepResults[rowId(rows[i])]}
+              />
+            )),
+            citeBuckets.bad.map((c, idx) => (
+              <CitationRow
+                key={`cite-bad-${c.index ?? idx}`}
+                citation={c}
+                displayNumber={itemNumbers.citeNums.get(c)}
+                fallbackIndex={rows.length + idx}
+                host={host}
+              />
+            )),
+            (buckets.look.length > 0 && buckets.look.some((i) => !pastCap(i))) || citeBuckets.look.length > 0 ? (
+              <li key="header-look" class="lz-bucket-head">
+                {copy.BUCKET_LOOK}
+              </li>
+            ) : null,
+            buckets.look.map((i) => (
+              <Row
+                key={`${rowId(rows[i])}#${i}`}
+                index={i}
+                displayNumber={itemNumbers.claimNums.get(i)}
+                row={rows[i]}
+                host={host}
+                hidden={pastCap(i)}
+                open={openId === openKey(i)}
+                onToggle={() => setOpenId(openId === openKey(i) ? '' : openKey(i))}
+                announce={(text) => say(i, text)}
+                registerCompleted={registerCompleted}
+                reportState={reportState}
+                onVerdict={onVerdict}
+                autoStart={!!batchRun[i]}
+                onRun={onRun}
+                inBatch={!!batch && batch.includes(i)}
+                completedResult={deepResults[rowKey(rows[i], i)] || deepResults[rowId(rows[i])]}
+              />
+            )),
+            citeBuckets.look.map((c, idx) => (
+              <CitationRow
+                key={`cite-look-${c.index ?? idx}`}
+                citation={c}
+                displayNumber={itemNumbers.citeNums.get(c)}
+                fallbackIndex={rows.length + idx}
+                host={host}
+              />
+            )),
+            buckets.ok.length > 0 || citeBuckets.ok.length > 0 ? (
+              <li key="header-ok" class="lz-bucket-head">
+                <button
+                  type="button"
+                  class="lz-bucket-toggle"
+                  aria-expanded={showOk}
+                  onClick={() => {
+                    if (showOk && buckets.ok.some((idx) => openKey(idx) === openId)) {
+                      setOpenId('');
+                    }
+                    setShowOk(!showOk);
+                  }}
+                >
+                  <span>{copy.bucketOkToggle(buckets.ok.length + citeBuckets.ok.length)}</span>
+                  <span aria-hidden="true">{showOk ? '▴' : '▾'}</span>
+                </button>
+              </li>
+            ) : null,
+            buckets.ok.map((i) => (
+              <Row
+                key={`${rowId(rows[i])}#${i}`}
+                index={i}
+                displayNumber={itemNumbers.claimNums.get(i)}
+                row={rows[i]}
+                host={host}
+                hidden={!showOk || pastCap(i)}
+                open={openId === openKey(i)}
+                onToggle={() => setOpenId(openId === openKey(i) ? '' : openKey(i))}
+                announce={(text) => say(i, text)}
+                registerCompleted={registerCompleted}
+                reportState={reportState}
+                onVerdict={onVerdict}
+                autoStart={!!batchRun[i]}
+                onRun={onRun}
+                inBatch={!!batch && batch.includes(i)}
+                completedResult={deepResults[rowKey(rows[i], i)] || deepResults[rowId(rows[i])]}
+              />
+            )),
+            showOk
+              ? citeBuckets.ok.map((c, idx) => (
+                  <CitationRow
+                    key={`cite-ok-${c.index ?? idx}`}
+                    citation={c}
+                    displayNumber={itemNumbers.citeNums.get(c)}
+                    fallbackIndex={rows.length + idx}
+                    host={host}
+                  />
+                ))
+              : null,
+            (buckets.none.length > 0 && buckets.none.some((i) => !pastCap(i))) || citeBuckets.none.length > 0 ? (
+              <li key="header-none" class="lz-bucket-head">
+                {copy.BUCKET_NONE}
+              </li>
+            ) : null,
+            buckets.none.map((i) => (
+              <Row
+                key={`${rowId(rows[i])}#${i}`}
+                index={i}
+                displayNumber={itemNumbers.claimNums.get(i)}
+                row={rows[i]}
+                host={host}
+                hidden={pastCap(i)}
+                open={openId === openKey(i)}
+                onToggle={() => setOpenId(openId === openKey(i) ? '' : openKey(i))}
+                announce={(text) => say(i, text)}
+                registerCompleted={registerCompleted}
+                reportState={reportState}
+                onVerdict={onVerdict}
+                autoStart={!!batchRun[i]}
+                onRun={onRun}
+                inBatch={!!batch && batch.includes(i)}
+                completedResult={deepResults[rowKey(rows[i], i)] || deepResults[rowId(rows[i])]}
+              />
+            )),
+            citeBuckets.none.map((c, idx) => (
+              <CitationRow
+                key={`cite-none-${c.index ?? idx}`}
+                citation={c}
+                displayNumber={itemNumbers.citeNums.get(c)}
+                fallbackIndex={rows.length + idx}
+                host={host}
+              />
+            )),
+          ]
+            .flat()
+            .filter(Boolean)}
         </ol>
         {hidden > 0 ? (
           <button type="button" class="lz-link lz-row-toggle" aria-expanded={allRows} onClick={() => setAllRows(!allRows)}>
@@ -2019,7 +2141,7 @@ function CitationRow({ citation, displayNumber, fallbackIndex, host }) {
   );
 }
 
-export function App({ host, payload, announce, registerCompleted, reportState }) {
+export function App({ host, payload, announce, registerCompleted, reportState, cardStore = null }) {
   const route = routePayload(payload);
   switch (route.view) {
     case 'citecheck':
@@ -2035,7 +2157,7 @@ export function App({ host, payload, announce, registerCompleted, reportState })
     case 'single':
       return <SingleCard key={`${route.row.claim}|${route.row.verdict}|${route.row.language}`} row={route.row} host={host} announce={announce} registerCompleted={registerCompleted} reportState={reportState} />;
     case 'list':
-      return <ListCard rows={route.rows} citations={route.citations} host={host} announce={announce} registerCompleted={registerCompleted} reportState={reportState} />;
+      return <ListCard rows={route.rows} citations={route.citations} host={host} announce={announce} registerCompleted={registerCompleted} reportState={reportState} cardStore={cardStore} />;
     case 'row-error':
       return (
         <Frame

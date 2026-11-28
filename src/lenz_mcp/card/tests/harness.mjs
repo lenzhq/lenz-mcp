@@ -42,12 +42,15 @@ window.addEventListener('message', (event) => {
   } else if (msg.method === 'tools/call') {
     const stub = (cfg.tools || {})[msg.params.name];
     // A stub may be a QUEUE (answers in order) or a MAP keyed by the argument
-    // that identifies the work — task_id. Several rows poll concurrently, and a
-    // queue would hand row 1 row 3's result, which the real server never does.
+    // that identifies the work — task_id, or the claim a start names. Several rows
+    // poll concurrently, and a queue would hand row 1 row 3's result, which the
+    // real server never does. A map entry may itself be a queue: that one
+    // check's answers in order, the last repeating.
     const byId = stub && !Array.isArray(stub) && typeof stub === 'object';
     const queue = byId ? [] : stub || [];
     const args = (msg.params && msg.params.arguments) || {};
-    const answer = byId ? stub[args.task_id || args.verification_id] : queue.length > 1 ? queue.shift() : queue[0];
+    let answer = byId ? stub[args.task_id || args.verification_id || args.claim] : queue.length > 1 ? queue.shift() : queue[0];
+    if (byId && Array.isArray(answer)) answer = answer.length > 1 ? answer.shift() : answer[0];
     if (answer === undefined) return; // never answer: a request that hangs
     if (answer && answer.__error) return fail(card.frame, msg.id, answer.__error);
     const delay = (answer && answer.__delay) || 0;

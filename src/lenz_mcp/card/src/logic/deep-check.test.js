@@ -289,6 +289,20 @@ test('reopen: recovers a finished check by its stored verification_id, never by 
   assert.deepEqual(host.calls, [{ name: 'get_verification_widget', args: { task_id: 'abcd1234' } }]);
 });
 
+test('reopen: nothing stored is said once through onNothing, and nothing is called', async () => {
+  const { check, host } = make({}, { store: memoryStore() });
+  let nothing = 0;
+  let adopted = 0;
+  await check.recover({ onNothing: () => (nothing += 1), onAdopted: () => (adopted += 1) });
+  assert.deepEqual([nothing, adopted, host.calls.length, check.state().kind], [1, 0, 0, 'idle']);
+  // A stored check is adopted, and onNothing stays silent.
+  const store = memoryStore();
+  store.save({ taskId: 't1' });
+  const other = make({ get_verification_widget: [processing('debate', 3)] }, { store });
+  await other.check.recover({ onNothing: () => (nothing += 1) });
+  assert.equal(nothing, 1);
+});
+
 test('reopen: resumes a running check by its stored task_id', async () => {
   const store = memoryStore();
   store.save({ taskId: 't1' });

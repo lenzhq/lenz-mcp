@@ -111,6 +111,30 @@ test('the card record counts what the model has been told, per row set', () => {
   assert.equal(createCardStore(storage, { rows: [] }).load(), 0, 'no rows, no record');
 });
 
+test('the card record keeps a batch beside the count, per row set and call, and lets it expire', () => {
+  const storage = fakeStorage();
+  let t = 1_000;
+  const rows = ['a\u0000False', 'b\u0000Mostly False', 'c\u0000True'];
+  const card = createCardStore(storage, { rows, callId: 'call-1', now: () => t });
+  assert.equal(card.loadBatch(), null);
+  card.save(1);
+  card.saveBatch([0, 1, 'x', -2, 1.5]);
+  assert.deepEqual(card.loadBatch(), [0, 1]);
+  // Saving one keeps the other.
+  assert.equal(card.load(), 1);
+  card.save(2);
+  assert.deepEqual(card.loadBatch(), [0, 1]);
+  // Another call or another row set never reads it.
+  assert.equal(createCardStore(storage, { rows, callId: 'call-2', now: () => t }).loadBatch(), null);
+  assert.equal(createCardStore(storage, { rows: rows.slice(1), callId: 'call-1', now: () => t }).loadBatch(), null);
+  // Nothing to save writes nothing; a storeless card has none.
+  card.saveBatch([]);
+  assert.deepEqual(card.loadBatch(), [0, 1]);
+  assert.equal(createCardStore(null, { rows }).loadBatch(), null);
+  t += 8 * 24 * 3600 * 1000;
+  assert.equal(card.loadBatch(), null);
+});
+
 // Asking whether storage works writes a probe key. A card with nothing to
 // remember must not make that write.
 test('a card store with no rows touches storage not at all', () => {

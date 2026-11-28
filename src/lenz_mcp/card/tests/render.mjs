@@ -83,6 +83,13 @@ async function settle(page, state) {
       await page.waitForTimeout(15);
     }
   }
+  if (state.pressBatch) {
+    await frame.getByRole('button', { name: /^Check all \d+ flagged against sources$/ }).click();
+    for (let t = 0; t < 4000; t += 200) {
+      await page.clock.runFor(200);
+      await page.waitForTimeout(15);
+    }
+  }
   if (!state.press) return;
   const scope = state.openRow != null ? frame.locator('.lz-row-panel') : frame;
   await scope.getByRole('button', { name: /Check against sources/ }).click();
